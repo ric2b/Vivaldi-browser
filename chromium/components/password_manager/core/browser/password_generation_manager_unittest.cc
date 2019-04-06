@@ -10,16 +10,20 @@
 
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/password_requirements_spec_fetcher.h"
+#include "components/autofill/core/browser/proto/password_requirements.pb.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/password_form_generation_data.h"
 #include "components/autofill/core/common/signatures_util.h"
 #include "components/password_manager/core/browser/password_autofill_manager.h"
 #include "components/password_manager/core/browser/password_manager.h"
+#include "components/password_manager/core/browser/password_requirements_service.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
 #include "components/password_manager/core/browser/stub_password_manager_driver.h"
 #include "components/password_manager/core/browser/test_password_store.h"
@@ -39,6 +43,13 @@ using testing::_;
 namespace password_manager {
 
 namespace {
+
+// Magic constants.
+// Host (suffix) of a server for which no domain wide requirements are given.
+constexpr char kNoServerResponse[] = "www.no_server_response.com";
+// Host (suffix) of a server for which the autofill requirements are overriden
+// via a domain wide spec.
+constexpr char kHasServerResponse[] = "www.has_server_response.com";
 
 class TestPasswordManagerDriver : public StubPasswordManagerDriver {
  public:
@@ -69,7 +80,6 @@ class TestPasswordManagerDriver : public StubPasswordManagerDriver {
   }
 
   MOCK_METHOD0(AllowToRunFormClassifier, void());
-  MOCK_METHOD0(MatchingBlacklistedFormFound, void());
 
  private:
   PasswordManager password_manager_;
@@ -79,21 +89,67 @@ class TestPasswordManagerDriver : public StubPasswordManagerDriver {
       found_forms_eligible_for_generation_;
 };
 
+autofill::PasswordRequirementsSpec GetDomainWideRequirements() {
+  autofill::PasswordRequirementsSpec spec;
+  spec.set_max_length(7);
+  spec.set_priority(20);
+  return spec;
+}
+
+autofill::PasswordRequirementsSpec GetFieldRequirements() {
+  autofill::PasswordRequirementsSpec spec;
+  spec.set_max_length(8);
+  spec.set_priority(10);
+  return spec;
+}
+
+class FakePasswordRequirementsSpecFetcher
+    : public autofill::PasswordRequirementsSpecFetcher {
+ public:
+  using FetchCallback =
+      autofill::PasswordRequirementsSpecFetcher::FetchCallback;
+
+  FakePasswordRequirementsSpecFetcher() = default;
+  ~FakePasswordRequirementsSpecFetcher() override = default;
+
+  void Fetch(GURL origin, FetchCallback callback) override {
+    if (origin.GetOrigin().host_piece().find(kNoServerResponse) !=
+        std::string::npos) {
+      std::move(callback).Run(autofill::PasswordRequirementsSpec());
+    } else if (origin.GetOrigin().host_piece().find(kHasServerResponse) !=
+               std::string::npos) {
+      std::move(callback).Run(GetDomainWideRequirements());
+    } else {
+      NOTREACHED();
+    }
+  }
+};
+
 class MockPasswordManagerClient : public StubPasswordManagerClient {
  public:
-  MOCK_CONST_METHOD0(GetPasswordSyncState, PasswordSyncState());
+  MOCK_CONST_METHOD0(GetPasswordSyncState, SyncState());
+  MOCK_CONST_METHOD0(GetHistorySyncState, SyncState());
   MOCK_CONST_METHOD0(IsSavingAndFillingEnabledForCurrentPage, bool());
   MOCK_CONST_METHOD0(IsIncognito, bool());
 
   explicit MockPasswordManagerClient(std::unique_ptr<PrefService> prefs)
       : prefs_(std::move(prefs)),
         store_(new TestPasswordStore),
-        driver_(this) {}
+        driver_(this),
+        password_requirements_service_(
+            std::make_unique<FakePasswordRequirementsSpecFetcher>()) {}
 
   ~MockPasswordManagerClient() override { store_->ShutdownOnUIThread(); }
 
   PasswordStore* GetPasswordStore() const override { return store_.get(); }
-  PrefService* GetPrefs() override { return prefs_.get(); }
+  PrefService* GetPrefs() const override { return prefs_.get(); }
+  PasswordRequirementsService* GetPasswordRequirementsService() override {
+    return &password_requirements_service_;
+  }
+  void SetLastCommittedEntryUrl(const GURL& url) { last_committed_url_ = url; }
+  const GURL& GetLastCommittedEntryURL() const override {
+    return last_committed_url_;
+  }
 
   TestPasswordManagerDriver* test_driver() { return &driver_; }
 
@@ -101,6 +157,8 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   std::unique_ptr<PrefService> prefs_;
   scoped_refptr<TestPasswordStore> store_;
   TestPasswordManagerDriver driver_;
+  PasswordRequirementsService password_requirements_service_;
+  GURL last_committed_url_;
 };
 
 }  // anonymous namespace
@@ -127,7 +185,7 @@ class PasswordGenerationManagerTest : public testing::Test {
   TestPasswordManagerDriver* GetTestDriver() { return client_->test_driver(); }
 
   bool IsGenerationEnabled() {
-    return GetGenerationManager()->IsGenerationEnabled();
+    return GetGenerationManager()->IsGenerationEnabled(true);
   }
 
   void DetectFormsEligibleForGeneration(
@@ -154,7 +212,7 @@ TEST_F(PasswordGenerationManagerTest, IsGenerationEnabled) {
 
   // Disabling password syncing should cause generation to be disabled.
   EXPECT_CALL(*client_, GetPasswordSyncState())
-      .WillRepeatedly(testing::Return(NOT_SYNCING_PASSWORDS));
+      .WillRepeatedly(testing::Return(NOT_SYNCING));
   EXPECT_FALSE(IsGenerationEnabled());
 
   // Disabling the PasswordManager should cause generation to be disabled even
@@ -168,6 +226,129 @@ TEST_F(PasswordGenerationManagerTest, IsGenerationEnabled) {
   EXPECT_CALL(*client_, GetPasswordSyncState())
       .WillRepeatedly(testing::Return(SYNCING_WITH_CUSTOM_PASSPHRASE));
   EXPECT_FALSE(IsGenerationEnabled());
+}
+
+// Verify that password requirements received from the autofill server are
+// stored and that domain-wide password requirements are fetched as well.
+TEST_F(PasswordGenerationManagerTest, ProcessPasswordRequirements) {
+  // Setup so that IsGenerationEnabled() returns true.
+  EXPECT_CALL(*client_, IsSavingAndFillingEnabledForCurrentPage())
+      .WillRepeatedly(testing::Return(true));
+  EXPECT_CALL(*client_, GetPasswordSyncState())
+      .WillRepeatedly(testing::Return(SYNCING_NORMAL_ENCRYPTION));
+  struct {
+    const char* name;
+    bool has_domain_wide_requirements = false;
+    bool has_field_requirements = false;
+    bool allowed_to_fetch_specs = true;
+    autofill::PasswordRequirementsSpec expected_spec;
+  } kTests[] = {
+      {
+          .name = "No known requirements",
+          .expected_spec = autofill::PasswordRequirementsSpec(),
+      },
+      {
+          .name = "Only domain wide requirements",
+          .has_domain_wide_requirements = true,
+          .expected_spec = GetDomainWideRequirements(),
+      },
+      {
+          .name = "Only field requirements",
+          .has_field_requirements = true,
+          .expected_spec = GetFieldRequirements(),
+      },
+      {
+          .name = "Domain wide requirements take precedence",
+          .has_domain_wide_requirements = true,
+          .has_field_requirements = true,
+          .expected_spec = GetDomainWideRequirements(),
+      },
+      {
+          .name = "Don't fetch spec if not allowed",
+          .has_domain_wide_requirements = true,
+          .allowed_to_fetch_specs = false,
+          // Default value is expected even though .has_domain_wide_requirements
+          // is true.
+          .expected_spec = autofill::PasswordRequirementsSpec(),
+      },
+  };
+
+  // The purpose of this counter is to generate unique URLs and field signatures
+  // so that no caching can happen between test runs. If this causes issues in
+  // the future, the test should be converted into a parameterized test that
+  // creates unqieue PasswordRequirementsService instances for each run.
+  int test_counter = 0;
+  for (const auto& test : kTests) {
+    SCOPED_TRACE(test.name);
+    ++test_counter;
+
+    autofill::FormFieldData username;
+    username.label = ASCIIToUTF16("username");
+    username.name = ASCIIToUTF16("login");
+    username.form_control_type = "text";
+
+    autofill::FormFieldData password;
+    password.label = ASCIIToUTF16("password");
+    password.name =
+        ASCIIToUTF16(base::StringPrintf("password%d", test_counter));
+    password.form_control_type = "password";
+
+    autofill::FormData account_creation_form;
+    account_creation_form.origin = GURL("http://accounts.yahoo.com/");
+    account_creation_form.action = GURL("http://accounts.yahoo.com/signup");
+    account_creation_form.name = ASCIIToUTF16("account_creation_form");
+    account_creation_form.fields.push_back(username);
+    account_creation_form.fields.push_back(password);
+
+    autofill::FormStructure form(account_creation_form);
+
+    std::vector<autofill::FormStructure*> forms = {&form};
+
+    // EMAIL_ADDRESS = 9
+    // ACCOUNT_CREATION_PASSWORD = 76
+    autofill::AutofillQueryResponseContents response;
+    response.add_field()->set_overall_type_prediction(9);
+    response.add_field()->set_overall_type_prediction(76);
+
+    if (test.has_field_requirements) {
+      *response.mutable_field(1)->mutable_password_requirements() =
+          GetFieldRequirements();
+    }
+    // Configure the last committed entry URL with some magic constants for
+    // which the FakePasswordRequirementsFetcher is configured to respond
+    // with a filled or empty response.
+    GURL origin(base::StringPrintf("https://%d-%s/", test_counter,
+                                   test.has_domain_wide_requirements
+                                       ? kHasServerResponse
+                                       : kNoServerResponse));
+    client_->SetLastCommittedEntryUrl(origin);
+
+    std::string response_string;
+    ASSERT_TRUE(response.SerializeToString(&response_string));
+    autofill::FormStructure::ParseQueryResponse(response_string, forms,
+                                                nullptr);
+
+    EXPECT_CALL(*client_, GetHistorySyncState())
+        .WillRepeatedly(testing::Return(test.allowed_to_fetch_specs
+                                            ? SYNCING_NORMAL_ENCRYPTION
+                                            : NOT_SYNCING));
+
+    // Processs the password requirements with expected side effects of
+    // either storing the requirements from the AutofillQueryResponseContents)
+    // in the PasswordRequirementsService or triggering a lookup for the
+    // domain that is stored in the PasswordRequirementsService.
+    GetGenerationManager()->ProcessPasswordRequirements(forms);
+
+    // Validate the result.
+    autofill::FormSignature form_signature =
+        autofill::CalculateFormSignature(account_creation_form);
+    autofill::FieldSignature field_signature =
+        autofill::CalculateFieldSignatureForField(password);
+    autofill::PasswordRequirementsSpec spec =
+        client_->GetPasswordRequirementsService()->GetSpec(
+            origin, form_signature, field_signature);
+    EXPECT_EQ(test.expected_spec.max_length(), spec.max_length());
+  }
 }
 
 TEST_F(PasswordGenerationManagerTest, DetectFormsEligibleForGeneration) {
@@ -245,7 +426,7 @@ TEST_F(PasswordGenerationManagerTest, DetectFormsEligibleForGeneration) {
 
   std::string response_string;
   ASSERT_TRUE(response.SerializeToString(&response_string));
-  autofill::FormStructure::ParseQueryResponse(response_string, forms);
+  autofill::FormStructure::ParseQueryResponse(response_string, forms, nullptr);
 
   DetectFormsEligibleForGeneration(forms);
   EXPECT_EQ(2u, GetTestDriver()->GetFoundEligibleForGenerationForms().size());
@@ -276,8 +457,9 @@ TEST_F(PasswordGenerationManagerTest, DetectFormsEligibleForGeneration) {
 
 TEST_F(PasswordGenerationManagerTest, UpdatePasswordSyncStateIncognito) {
   // Disable password manager by going incognito. Even though password
-  // syncing is enabled, generation should still
-  // be disabled.
+  // syncing is enabled, generation should still be disabled.
+  EXPECT_CALL(*client_, IsSavingAndFillingEnabledForCurrentPage())
+      .WillRepeatedly(testing::Return(false));
   EXPECT_CALL(*client_, IsIncognito()).WillRepeatedly(testing::Return(true));
   PrefService* prefs = client_->GetPrefs();
   prefs->SetBoolean(prefs::kCredentialsEnableService, true);
@@ -296,7 +478,7 @@ TEST_F(PasswordGenerationManagerTest, CheckIfFormClassifierShouldRun) {
     scoped_refptr<base::FieldTrial> field_trial;
     if (is_autofill_field_metadata_enabled) {
       field_trial_list.reset(new base::FieldTrialList(
-          std::make_unique<metrics::SHA1EntropyProvider>("foo")));
+          std::make_unique<variations::SHA1EntropyProvider>("foo")));
       field_trial = base::FieldTrialList::CreateFieldTrial(
           "AutofillFieldMetadata", "Enabled");
       EXPECT_CALL(*GetTestDriver(), AllowToRunFormClassifier())

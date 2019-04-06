@@ -5,7 +5,7 @@
 import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
-import("//extensions/features/features.gni")
+import("//extensions/buildflags/buildflags.gni")
 import("//tools/grit/repack.gni")
 
 assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
@@ -55,11 +55,13 @@ template("chrome_repack_locales") {
 
     if (is_chromeos) {
       source_patterns += [
+        "${root_gen_dir}/ash/components/strings/ash_components_strings_",
         "${root_gen_dir}/ash/strings/ash_strings_",
         "${root_gen_dir}/remoting/resources/",
         "${root_gen_dir}/ui/chromeos/strings/ui_chromeos_strings_",
       ]
       deps += [
+        "//ash/components/strings",
         "//ash/strings",
         "//remoting/resources",
         "//ui/chromeos/strings",
@@ -71,7 +73,7 @@ template("chrome_repack_locales") {
       deps += [ "//extensions/strings" ]
     }
 
-    if (is_chrome_branded || is_vivaldi) {
+    if (is_chrome_branded || (defined(is_vivaldi) && is_vivaldi)) {
       source_patterns += [
         "${root_gen_dir}/chrome/google_chrome_strings_",
         "${root_gen_dir}/components/strings/components_google_chrome_strings_",

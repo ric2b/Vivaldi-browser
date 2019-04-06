@@ -6,19 +6,20 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/time/time.h"
-#include "content/renderer/media/audio_device_factory.h"
+#include "content/renderer/media/audio/audio_device_factory.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "media/base/audio_timestamp_helper.h"
 #include "media/base/silent_sink_suspender.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
-#include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_view.h"
 
 using blink::WebAudioDevice;
 using blink::WebAudioLatencyHint;
@@ -88,13 +89,11 @@ int FrameIdFromCurrentContext() {
   return render_frame ? render_frame->GetRoutingID() : MSG_ROUTING_NONE;
 }
 
-media::AudioParameters GetOutputDeviceParameters(
-    int frame_id,
-    int session_id,
-    const std::string& device_id,
-    const url::Origin& security_origin) {
+media::AudioParameters GetOutputDeviceParameters(int frame_id,
+                                                 int session_id,
+                                                 const std::string& device_id) {
   return AudioDeviceFactory::GetOutputDeviceInfo(frame_id, session_id,
-                                                 device_id, security_origin)
+                                                 device_id)
       .output_params();
 }
 
@@ -105,11 +104,10 @@ std::unique_ptr<RendererWebAudioDeviceImpl> RendererWebAudioDeviceImpl::Create(
     int channels,
     const blink::WebAudioLatencyHint& latency_hint,
     WebAudioDevice::RenderCallback* callback,
-    int session_id,
-    const url::Origin& security_origin) {
+    int session_id) {
   return std::unique_ptr<RendererWebAudioDeviceImpl>(
       new RendererWebAudioDeviceImpl(layout, channels, latency_hint, callback,
-                                     session_id, security_origin,
+                                     session_id,
                                      base::Bind(&GetOutputDeviceParameters),
                                      base::Bind(&FrameIdFromCurrentContext)));
 }
@@ -120,19 +118,24 @@ RendererWebAudioDeviceImpl::RendererWebAudioDeviceImpl(
     const blink::WebAudioLatencyHint& latency_hint,
     WebAudioDevice::RenderCallback* callback,
     int session_id,
-    const url::Origin& security_origin,
     const OutputDeviceParamsCallback& device_params_cb,
     const RenderFrameIdCallback& render_frame_id_cb)
     : latency_hint_(latency_hint),
       client_callback_(callback),
       session_id_(session_id),
-      security_origin_(security_origin),
       frame_id_(render_frame_id_cb.Run()) {
   DCHECK(client_callback_);
   DCHECK_NE(frame_id_, MSG_ROUTING_NONE);
 
-  const media::AudioParameters hardware_params(device_params_cb.Run(
-      frame_id_, session_id_, std::string(), security_origin_));
+  media::AudioParameters hardware_params(
+      device_params_cb.Run(frame_id_, session_id_, std::string()));
+
+  // On systems without audio hardware the returned parameters may be invalid.
+  // In which case just choose whatever we want for the fake device.
+  if (!hardware_params.IsValid()) {
+    hardware_params.Reset(media::AudioParameters::AUDIO_FAKE,
+                          media::CHANNEL_LAYOUT_STEREO, 48000, 480);
+  }
 
   const media::AudioLatency::LatencyType latency =
       AudioDeviceFactory::GetSourceLatencyType(
@@ -142,8 +145,9 @@ RendererWebAudioDeviceImpl::RendererWebAudioDeviceImpl(
       GetOutputBufferSize(latency_hint_, latency, hardware_params);
   DCHECK_NE(0, output_buffer_size);
 
-  sink_params_.Reset(media::AudioParameters::AUDIO_PCM_LOW_LATENCY, layout,
-                     hardware_params.sample_rate(), 16, output_buffer_size);
+  sink_params_.Reset(hardware_params.format(), layout,
+                     hardware_params.sample_rate(), output_buffer_size);
+
   // Always set channels, this should be a no-op in all but the discrete case;
   // this call will fail if channels doesn't match the layout in other cases.
   sink_params_.set_channels_for_discrete(channels);
@@ -164,7 +168,7 @@ void RendererWebAudioDeviceImpl::Start() {
 
   sink_ = AudioDeviceFactory::NewAudioRendererSink(
       GetLatencyHintSourceType(latency_hint_.Category()), frame_id_,
-      session_id_, std::string(), security_origin_);
+      session_id_, std::string());
 
   // Use the media thread instead of the render thread for fake Render() calls
   // since it has special connotations for Blink and garbage collection. Timeout

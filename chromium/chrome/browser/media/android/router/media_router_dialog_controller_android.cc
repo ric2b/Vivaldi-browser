@@ -9,6 +9,7 @@
 #include "base/android/jni_string.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/media/android/router/media_router_android.h"
 #include "chrome/browser/media/router/media_router.h"
 #include "chrome/browser/media/router/media_router_factory.h"
@@ -20,8 +21,9 @@
 #include "content/public/browser/presentation_request.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "device/vr/features/features.h"
+#include "device/vr/buildflags/buildflags.h"
 #include "jni/ChromeMediaRouterDialogController_jni.h"
+#include "third_party/blink/public/platform/modules/presentation/presentation.mojom.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(
     media_router::MediaRouterDialogControllerAndroid);
@@ -113,8 +115,9 @@ void MediaRouterDialogControllerAndroid::OnMediaSourceNotSupported(
   if (!request)
     return;
 
-  request->InvokeErrorCallback(content::PresentationError(
-      content::PRESENTATION_ERROR_NO_AVAILABLE_SCREENS, "No screens found."));
+  request->InvokeErrorCallback(blink::mojom::PresentationError(
+      blink::mojom::PresentationErrorType::NO_AVAILABLE_SCREENS,
+      "No screens found."));
 }
 
 void MediaRouterDialogControllerAndroid::CancelPresentationRequest() {
@@ -122,8 +125,8 @@ void MediaRouterDialogControllerAndroid::CancelPresentationRequest() {
   if (!request)
     return;
 
-  request->InvokeErrorCallback(content::PresentationError(
-      content::PRESENTATION_ERROR_PRESENTATION_REQUEST_CANCELLED,
+  request->InvokeErrorCallback(blink::mojom::PresentationError(
+      blink::mojom::PresentationErrorType::PRESENTATION_REQUEST_CANCELLED,
       "Dialog closed."));
 }
 
@@ -140,7 +143,9 @@ MediaRouterDialogControllerAndroid::~MediaRouterDialogControllerAndroid() {
 
 void MediaRouterDialogControllerAndroid::CreateMediaRouterDialog() {
   // TODO(crbug.com/736568): Re-enable dialog in VR.
-  if (vr::VrTabHelper::IsInVr(initiator())) {
+  if (vr::VrTabHelper::IsUiSuppressedInVr(
+          initiator(),
+          vr::UiSuppressedElement::kMediaRouterPresentationRequest)) {
     CancelPresentationRequest();
     return;
   }

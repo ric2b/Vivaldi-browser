@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "android_webview/browser/net/aw_cookie_change_dispatcher_wrapper.h"
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -16,6 +17,7 @@
 #include "base/task_runner.h"
 #include "base/time/time.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_change_dispatcher.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_store.h"
 
@@ -49,9 +51,6 @@ class AwCookieStoreWrapper : public net::CookieStore {
                                bool secure_source,
                                bool modify_http_only,
                                SetCookiesCallback callback) override;
-  void GetCookiesWithOptionsAsync(const GURL& url,
-                                  const net::CookieOptions& options,
-                                  GetCookiesCallback callback) override;
   void GetCookieListWithOptionsAsync(const GURL& url,
                                      const net::CookieOptions& options,
                                      GetCookieListCallback callback) override;
@@ -61,23 +60,15 @@ class AwCookieStoreWrapper : public net::CookieStore {
                          base::OnceClosure callback) override;
   void DeleteCanonicalCookieAsync(const net::CanonicalCookie& cookie,
                                   DeleteCallback callback) override;
-  void DeleteAllCreatedBetweenAsync(const base::Time& delete_begin,
-                                    const base::Time& delete_end,
-                                    DeleteCallback callback) override;
-  void DeleteAllCreatedBetweenWithPredicateAsync(
-      const base::Time& delete_begin,
-      const base::Time& delete_end,
-      const CookiePredicate& predicate,
+  void DeleteAllCreatedInTimeRangeAsync(
+      const net::CookieDeletionInfo::TimeRange& creation_range,
       DeleteCallback callback) override;
+  void DeleteAllMatchingInfoAsync(net::CookieDeletionInfo delete_info,
+                                  DeleteCallback callback) override;
   void DeleteSessionCookiesAsync(DeleteCallback callback) override;
   void FlushStore(base::OnceClosure callback) override;
   void SetForceKeepSessionState() override;
-  std::unique_ptr<CookieChangedSubscription> AddCallbackForCookie(
-      const GURL& url,
-      const std::string& name,
-      const CookieChangedCallback& callback) override;
-  std::unique_ptr<CookieChangedSubscription> AddCallbackForAllChanges(
-      const CookieChangedCallback& callback) override;
+  net::CookieChangeDispatcher& GetChangeDispatcher() override;
   bool IsEphemeral() override;
 
  private:
@@ -120,6 +111,8 @@ class AwCookieStoreWrapper : public net::CookieStore {
   void RunClosureCallback(base::OnceClosure callback);
 
   scoped_refptr<base::SingleThreadTaskRunner> client_task_runner_;
+
+  AwCookieChangeDispatcherWrapper change_dispatcher_;
 
   base::WeakPtrFactory<AwCookieStoreWrapper> weak_factory_;
 };

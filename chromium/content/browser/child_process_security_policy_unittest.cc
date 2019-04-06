@@ -9,6 +9,7 @@
 #include "base/logging.h"
 #include "base/test/mock_log.h"
 #include "content/browser/child_process_security_policy_impl.h"
+#include "content/public/common/bindings_policy.h"
 #include "content/public/common/url_constants.h"
 #include "content/test/test_content_browser_client.h"
 #include "storage/browser/fileapi/file_permission_policy.h"
@@ -143,8 +144,6 @@ TEST_F(ChildProcessSecurityPolicyTest, IsPseudoSchemeTest) {
   EXPECT_TRUE(p->IsPseudoScheme(url::kAboutScheme));
   EXPECT_TRUE(p->IsPseudoScheme(url::kJavaScriptScheme));
   EXPECT_TRUE(p->IsPseudoScheme(kViewSourceScheme));
-  EXPECT_TRUE(p->IsPseudoScheme(url::kHttpSuboriginScheme));
-  EXPECT_TRUE(p->IsPseudoScheme(url::kHttpsSuboriginScheme));
 
   EXPECT_FALSE(p->IsPseudoScheme("registered-pseudo-scheme"));
   p->RegisterPseudoScheme("registered-pseudo-scheme");
@@ -344,19 +343,11 @@ TEST_F(ChildProcessSecurityPolicyTest, AboutTest) {
   EXPECT_FALSE(p->CanSetAsOriginHeader(kRendererID, GURL("aBoUt:version")));
 
   // Requests for about: pages should be denied.
-  p->GrantRequestURL(kRendererID, GURL("about:crash"));
+  p->GrantCommitURL(kRendererID, GURL("about:crash"));
   EXPECT_FALSE(p->CanRequestURL(kRendererID, GURL("about:crash")));
   EXPECT_FALSE(p->CanRedirectToURL(GURL("about:crash")));
   EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("about:crash")));
   EXPECT_FALSE(p->CanSetAsOriginHeader(kRendererID, GURL("about:crash")));
-
-  // These requests for chrome:// pages should be granted.
-  GURL chrome_url("chrome://foo");
-  p->GrantRequestURL(kRendererID, chrome_url);
-  EXPECT_TRUE(p->CanRequestURL(kRendererID, chrome_url));
-  EXPECT_TRUE(p->CanRedirectToURL(GURL(chrome_url)));
-  EXPECT_TRUE(p->CanCommitURL(kRendererID, chrome_url));
-  EXPECT_TRUE(p->CanSetAsOriginHeader(kRendererID, chrome_url));
 
   p->Remove(kRendererID);
 }
@@ -372,44 +363,12 @@ TEST_F(ChildProcessSecurityPolicyTest, JavaScriptTest) {
   EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("javascript:alert('xss')")));
   EXPECT_FALSE(
       p->CanSetAsOriginHeader(kRendererID, GURL("javascript:alert('xss')")));
-  p->GrantRequestURL(kRendererID, GURL("javascript:alert('xss')"));
+  p->GrantCommitURL(kRendererID, GURL("javascript:alert('xss')"));
   EXPECT_FALSE(p->CanRequestURL(kRendererID, GURL("javascript:alert('xss')")));
   EXPECT_FALSE(p->CanRedirectToURL(GURL("javascript:alert('xss')")));
   EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("javascript:alert('xss')")));
   EXPECT_FALSE(
       p->CanSetAsOriginHeader(kRendererID, GURL("javascript:alert('xss')")));
-
-  p->Remove(kRendererID);
-}
-
-TEST_F(ChildProcessSecurityPolicyTest, SuboriginTest) {
-  ChildProcessSecurityPolicyImpl* p =
-      ChildProcessSecurityPolicyImpl::GetInstance();
-
-  p->Add(kRendererID);
-
-  // Suborigin URLs are not requestable or committable.
-  EXPECT_FALSE(
-      p->CanRequestURL(kRendererID, GURL("http-so://foobar.example.com")));
-  EXPECT_FALSE(
-      p->CanRequestURL(kRendererID, GURL("https-so://foobar.example.com")));
-  EXPECT_FALSE(p->CanRedirectToURL(GURL("http-so://foobar.example.com")));
-  EXPECT_FALSE(p->CanRedirectToURL(GURL("https-so://foobar.example.com")));
-  EXPECT_FALSE(
-      p->CanCommitURL(kRendererID, GURL("http-so://foobar.example.com")));
-  EXPECT_FALSE(
-      p->CanCommitURL(kRendererID, GURL("https-so://foobar.example.com")));
-
-  // It's not possible to grant suborigins requestable status.
-  p->GrantRequestURL(kRendererID, GURL("https-so://foobar.example.com"));
-  EXPECT_FALSE(
-      p->CanCommitURL(kRendererID, GURL("https-so://foobar.example.com")));
-
-  // Suborigin URLs are valid origin headers.
-  EXPECT_TRUE(p->CanSetAsOriginHeader(kRendererID,
-                                      GURL("http-so://foobar.example.com")));
-  EXPECT_TRUE(p->CanSetAsOriginHeader(kRendererID,
-                                      GURL("https-so://foobar.example.com")));
 
   p->Remove(kRendererID);
 }
@@ -456,7 +415,7 @@ TEST_F(ChildProcessSecurityPolicyTest, CanServiceCommandsTest) {
   EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("file:///etc/passwd")));
   EXPECT_FALSE(
       p->CanSetAsOriginHeader(kRendererID, GURL("file:///etc/passwd")));
-  p->GrantRequestURL(kRendererID, GURL("file:///etc/passwd"));
+  p->GrantCommitURL(kRendererID, GURL("file:///etc/passwd"));
   EXPECT_TRUE(p->CanRequestURL(kRendererID, GURL("file:///etc/passwd")));
   EXPECT_TRUE(p->CanRedirectToURL(GURL("file:///etc/passwd")));
   EXPECT_TRUE(p->CanCommitURL(kRendererID, GURL("file:///etc/passwd")));
@@ -515,7 +474,7 @@ TEST_F(ChildProcessSecurityPolicyTest, ViewSource) {
   EXPECT_FALSE(p->CanSetAsOriginHeader(
       kRendererID, GURL("view-source:view-source:http://www.google.com/")));
 
-  p->GrantRequestURL(kRendererID, GURL("view-source:file:///etc/passwd"));
+  p->GrantCommitURL(kRendererID, GURL("view-source:file:///etc/passwd"));
   EXPECT_FALSE(p->CanRequestURL(kRendererID, GURL("file:///etc/passwd")));
   EXPECT_TRUE(p->CanRedirectToURL(GURL("file:///etc/passwd")));
   EXPECT_FALSE(p->CanCommitURL(kRendererID, GURL("file:///etc/passwd")));
@@ -528,6 +487,44 @@ TEST_F(ChildProcessSecurityPolicyTest, ViewSource) {
                                GURL("view-source:file:///etc/passwd")));
   EXPECT_FALSE(p->CanSetAsOriginHeader(kRendererID,
                                        GURL("view-source:file:///etc/passwd")));
+  p->Remove(kRendererID);
+}
+
+TEST_F(ChildProcessSecurityPolicyTest, GrantCommitURLToNonStandardScheme) {
+  ChildProcessSecurityPolicyImpl* p =
+      ChildProcessSecurityPolicyImpl::GetInstance();
+
+  const GURL url("httpxml://awesome");
+  const GURL url2("httpxml://also-awesome");
+
+  ASSERT_TRUE(url::Origin::Create(url).unique());
+  ASSERT_TRUE(url::Origin::Create(url2).unique());
+  RegisterTestScheme("httpxml");
+
+  p->Add(kRendererID);
+
+  EXPECT_FALSE(p->CanRequestURL(kRendererID, url));
+  EXPECT_FALSE(p->CanRequestURL(kRendererID, url2));
+  EXPECT_TRUE(p->CanRedirectToURL(url));
+  EXPECT_TRUE(p->CanRedirectToURL(url2));
+  EXPECT_FALSE(p->CanCommitURL(kRendererID, url));
+  EXPECT_FALSE(p->CanCommitURL(kRendererID, url2));
+  EXPECT_FALSE(p->CanSetAsOriginHeader(kRendererID, url));
+  EXPECT_FALSE(p->CanSetAsOriginHeader(kRendererID, url2));
+
+  // GrantCommitURL with a non-standard scheme should grant commit access to the
+  // entire scheme.
+  p->GrantCommitURL(kRendererID, url);
+
+  EXPECT_TRUE(p->CanRequestURL(kRendererID, url));
+  EXPECT_TRUE(p->CanRequestURL(kRendererID, url2));
+  EXPECT_TRUE(p->CanRedirectToURL(url));
+  EXPECT_TRUE(p->CanRedirectToURL(url2));
+  EXPECT_TRUE(p->CanCommitURL(kRendererID, url));
+  EXPECT_TRUE(p->CanCommitURL(kRendererID, url2));
+  EXPECT_TRUE(p->CanSetAsOriginHeader(kRendererID, url));
+  EXPECT_TRUE(p->CanSetAsOriginHeader(kRendererID, url2));
+
   p->Remove(kRendererID);
 }
 
@@ -558,7 +555,7 @@ TEST_F(ChildProcessSecurityPolicyTest, SpecificFile) {
   EXPECT_TRUE(p->CanSetAsOriginHeader(kRendererID, icon_url));
   EXPECT_FALSE(p->CanSetAsOriginHeader(kRendererID, sensitive_url));
 
-  p->GrantRequestURL(kRendererID, icon_url);
+  p->GrantCommitURL(kRendererID, icon_url);
   EXPECT_TRUE(p->CanRequestURL(kRendererID, icon_url));
   EXPECT_TRUE(p->CanRequestURL(kRendererID, sensitive_url));
   EXPECT_TRUE(p->CanRedirectToURL(icon_url));
@@ -867,19 +864,121 @@ TEST_F(ChildProcessSecurityPolicyTest, CanServiceWebUIBindings) {
   ChildProcessSecurityPolicyImpl* p =
       ChildProcessSecurityPolicyImpl::GetInstance();
 
-  GURL url("chrome://thumb/http://www.google.com/");
+  const GURL url("chrome://thumb/http://www.google.com/");
+  const GURL other_url("chrome://not-thumb/");
+  const url::Origin origin = url::Origin::Create(url);
+  {
+    p->Add(kRendererID);
 
-  p->Add(kRendererID);
+    EXPECT_FALSE(p->HasWebUIBindings(kRendererID));
 
-  EXPECT_FALSE(p->HasWebUIBindings(kRendererID));
-  EXPECT_FALSE(p->CanRequestURL(kRendererID, url));
-  EXPECT_TRUE(p->CanRedirectToURL(url));
-  p->GrantWebUIBindings(kRendererID);
-  EXPECT_TRUE(p->HasWebUIBindings(kRendererID));
-  EXPECT_TRUE(p->CanRequestURL(kRendererID, url));
-  EXPECT_TRUE(p->CanRedirectToURL(url));
+    EXPECT_FALSE(p->CanRequestURL(kRendererID, url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, url));
+    EXPECT_TRUE(p->CanRedirectToURL(url));
 
-  p->Remove(kRendererID);
+    EXPECT_FALSE(p->CanRequestURL(kRendererID, other_url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, other_url));
+    EXPECT_TRUE(p->CanRedirectToURL(other_url));
+
+    p->GrantWebUIBindings(kRendererID, BINDINGS_POLICY_WEB_UI);
+
+    EXPECT_TRUE(p->HasWebUIBindings(kRendererID));
+
+    EXPECT_TRUE(p->CanRequestURL(kRendererID, url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, url));
+    EXPECT_TRUE(p->CanRedirectToURL(url));
+
+    EXPECT_TRUE(p->CanRequestURL(kRendererID, other_url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, other_url));
+    EXPECT_TRUE(p->CanRedirectToURL(other_url));
+
+    p->GrantCommitOrigin(kRendererID, origin);
+
+    EXPECT_TRUE(p->CanRequestURL(kRendererID, url));
+    EXPECT_TRUE(p->CanCommitURL(kRendererID, url));
+    EXPECT_TRUE(p->CanRedirectToURL(url));
+
+    EXPECT_TRUE(p->CanRequestURL(kRendererID, other_url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, other_url));
+    EXPECT_TRUE(p->CanRedirectToURL(other_url));
+
+    p->Remove(kRendererID);
+  }
+  {
+    p->Add(kRendererID);
+
+    EXPECT_FALSE(p->HasWebUIBindings(kRendererID));
+
+    EXPECT_FALSE(p->CanRequestURL(kRendererID, url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, url));
+    EXPECT_TRUE(p->CanRedirectToURL(url));
+
+    EXPECT_FALSE(p->CanRequestURL(kRendererID, other_url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, other_url));
+    EXPECT_TRUE(p->CanRedirectToURL(other_url));
+
+    p->GrantWebUIBindings(kRendererID, BINDINGS_POLICY_MOJO_WEB_UI);
+
+    EXPECT_TRUE(p->HasWebUIBindings(kRendererID));
+
+    EXPECT_TRUE(p->CanRequestURL(kRendererID, url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, url));
+    EXPECT_TRUE(p->CanRedirectToURL(url));
+
+    EXPECT_TRUE(p->CanRequestURL(kRendererID, other_url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, other_url));
+    EXPECT_TRUE(p->CanRedirectToURL(other_url));
+
+    p->GrantCommitOrigin(kRendererID, origin);
+
+    EXPECT_TRUE(p->CanRequestURL(kRendererID, url));
+    EXPECT_TRUE(p->CanCommitURL(kRendererID, url));
+    EXPECT_TRUE(p->CanRedirectToURL(url));
+
+    EXPECT_TRUE(p->CanRequestURL(kRendererID, other_url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, other_url));
+    EXPECT_TRUE(p->CanRedirectToURL(other_url));
+
+    p->Remove(kRendererID);
+  }
+  {
+    p->Add(kRendererID);
+
+    EXPECT_FALSE(p->HasWebUIBindings(kRendererID));
+
+    EXPECT_FALSE(p->CanRequestURL(kRendererID, url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, url));
+    EXPECT_TRUE(p->CanRedirectToURL(url));
+
+    EXPECT_FALSE(p->CanRequestURL(kRendererID, other_url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, other_url));
+    EXPECT_TRUE(p->CanRedirectToURL(other_url));
+
+    p->GrantWebUIBindings(kRendererID,
+                          BINDINGS_POLICY_WEB_UI | BINDINGS_POLICY_MOJO_WEB_UI);
+
+    EXPECT_TRUE(p->HasWebUIBindings(kRendererID));
+
+    EXPECT_TRUE(p->CanRequestURL(kRendererID, url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, url));
+    EXPECT_TRUE(p->CanRedirectToURL(url));
+
+    EXPECT_TRUE(p->CanRequestURL(kRendererID, other_url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, other_url));
+    EXPECT_TRUE(p->CanRedirectToURL(other_url));
+
+    p->GrantCommitOrigin(kRendererID, origin);
+
+    EXPECT_TRUE(p->CanRequestURL(kRendererID, url));
+    EXPECT_TRUE(p->CanCommitURL(kRendererID, url));
+    EXPECT_TRUE(p->CanRedirectToURL(url));
+
+    EXPECT_TRUE(p->CanRequestURL(kRendererID, other_url));
+    EXPECT_FALSE(p->CanCommitURL(kRendererID, other_url));
+    EXPECT_TRUE(p->CanRedirectToURL(other_url));
+
+    p->Remove(kRendererID);
+  }
 }
 
 TEST_F(ChildProcessSecurityPolicyTest, RemoveRace) {
@@ -891,9 +990,10 @@ TEST_F(ChildProcessSecurityPolicyTest, RemoveRace) {
 
   p->Add(kRendererID);
 
-  p->GrantRequestURL(kRendererID, url);
+  p->GrantCommitURL(kRendererID, url);
   p->GrantReadFile(kRendererID, file);
-  p->GrantWebUIBindings(kRendererID);
+  p->GrantWebUIBindings(kRendererID,
+                        BINDINGS_POLICY_WEB_UI | BINDINGS_POLICY_MOJO_WEB_UI);
 
   EXPECT_TRUE(p->CanRequestURL(kRendererID, url));
   EXPECT_TRUE(p->CanRedirectToURL(url));
@@ -938,7 +1038,22 @@ TEST_F(ChildProcessSecurityPolicyTest, OriginGranting) {
   EXPECT_FALSE(p->CanSetAsOriginHeader(kRendererID, url_foo2));
   EXPECT_FALSE(p->CanSetAsOriginHeader(kRendererID, url_bar));
 
-  p->GrantOrigin(kRendererID, url::Origin::Create(url_foo1));
+  p->GrantRequestOrigin(kRendererID, url::Origin::Create(url_foo1));
+
+  EXPECT_TRUE(p->CanRequestURL(kRendererID, url_foo1));
+  EXPECT_TRUE(p->CanRequestURL(kRendererID, url_foo2));
+  EXPECT_FALSE(p->CanRequestURL(kRendererID, url_bar));
+  EXPECT_TRUE(p->CanRedirectToURL(url_foo1));
+  EXPECT_TRUE(p->CanRedirectToURL(url_foo2));
+  EXPECT_TRUE(p->CanRedirectToURL(url_bar));
+  EXPECT_FALSE(p->CanCommitURL(kRendererID, url_foo1));
+  EXPECT_FALSE(p->CanCommitURL(kRendererID, url_foo2));
+  EXPECT_FALSE(p->CanCommitURL(kRendererID, url_bar));
+  EXPECT_FALSE(p->CanSetAsOriginHeader(kRendererID, url_foo1));
+  EXPECT_FALSE(p->CanSetAsOriginHeader(kRendererID, url_foo2));
+  EXPECT_FALSE(p->CanSetAsOriginHeader(kRendererID, url_bar));
+
+  p->GrantCommitOrigin(kRendererID, url::Origin::Create(url_foo1));
 
   EXPECT_TRUE(p->CanRequestURL(kRendererID, url_foo1));
   EXPECT_TRUE(p->CanRequestURL(kRendererID, url_foo2));
@@ -953,20 +1068,21 @@ TEST_F(ChildProcessSecurityPolicyTest, OriginGranting) {
   EXPECT_TRUE(p->CanSetAsOriginHeader(kRendererID, url_foo2));
   EXPECT_FALSE(p->CanSetAsOriginHeader(kRendererID, url_bar));
 
-  p->GrantScheme(kRendererID, kChromeUIScheme);
+  // Make sure this doesn't overwrite the earlier commit grants.
+  p->GrantRequestOrigin(kRendererID, url::Origin::Create(url_foo1));
 
   EXPECT_TRUE(p->CanRequestURL(kRendererID, url_foo1));
   EXPECT_TRUE(p->CanRequestURL(kRendererID, url_foo2));
-  EXPECT_TRUE(p->CanRequestURL(kRendererID, url_bar));
+  EXPECT_FALSE(p->CanRequestURL(kRendererID, url_bar));
   EXPECT_TRUE(p->CanRedirectToURL(url_foo1));
   EXPECT_TRUE(p->CanRedirectToURL(url_foo2));
   EXPECT_TRUE(p->CanRedirectToURL(url_bar));
   EXPECT_TRUE(p->CanCommitURL(kRendererID, url_foo1));
   EXPECT_TRUE(p->CanCommitURL(kRendererID, url_foo2));
-  EXPECT_TRUE(p->CanCommitURL(kRendererID, url_bar));
+  EXPECT_FALSE(p->CanCommitURL(kRendererID, url_bar));
   EXPECT_TRUE(p->CanSetAsOriginHeader(kRendererID, url_foo1));
   EXPECT_TRUE(p->CanSetAsOriginHeader(kRendererID, url_foo2));
-  EXPECT_TRUE(p->CanSetAsOriginHeader(kRendererID, url_bar));
+  EXPECT_FALSE(p->CanSetAsOriginHeader(kRendererID, url_bar));
 
   p->Remove(kRendererID);
 }

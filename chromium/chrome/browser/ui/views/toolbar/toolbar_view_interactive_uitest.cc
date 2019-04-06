@@ -22,11 +22,13 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
-#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
+#include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/extension_toolbar_menu_view.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
+#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "ui/views/focus/focus_manager.h"
@@ -34,18 +36,9 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
-// Borrowed from chrome/browser/ui/views/bookmarks/bookmark_bar_view_test.cc,
-// since these are also disabled on Linux for drag and drop.
-// TODO(erg): Fix DND tests on linux_aura. crbug.com/163931
-#if defined(OS_LINUX) && defined(USE_AURA)
-#define MAYBE(x) DISABLED_##x
-#else
-#define MAYBE(x) x
-#endif
-
 using bookmarks::BookmarkModel;
 
-class ToolbarViewInteractiveUITest : public ExtensionBrowserTest {
+class ToolbarViewInteractiveUITest : public extensions::ExtensionBrowserTest {
  public:
   ToolbarViewInteractiveUITest();
   ~ToolbarViewInteractiveUITest() override;
@@ -66,12 +59,14 @@ class ToolbarViewInteractiveUITest : public ExtensionBrowserTest {
 
  private:
   // Finishes the drag-and-drop operation started in DoDragAndDrop().
-  void FinishDragAndDrop(const base::Closure& quit_closure);
+  void FinishDragAndDrop(base::Closure quit_closure);
 
   // InProcessBrowserTest:
   void SetUpCommandLine(base::CommandLine* command_line) override;
   void SetUpOnMainThread() override;
   void TearDownOnMainThread() override;
+
+  test::ScopedMacViewsBrowserMode views_mode_{true};
 
   ToolbarView* toolbar_view_;
 
@@ -105,11 +100,9 @@ void ToolbarViewInteractiveUITest::DoDragAndDrop(const gfx::Point& start,
       new content::MessageLoopRunner();
 
   ui_controls::SendMouseMoveNotifyWhenDone(
-      end.x() + 10,
-      end.y(),
-      base::Bind(&ToolbarViewInteractiveUITest::FinishDragAndDrop,
-                 base::Unretained(this),
-                 runner->QuitClosure()));
+      end.x() + 10, end.y(),
+      base::BindOnce(&ToolbarViewInteractiveUITest::FinishDragAndDrop,
+                     base::Unretained(this), runner->QuitClosure()));
 
   // Also post a move task to the drag and drop thread.
   if (!dnd_thread_.get()) {
@@ -133,23 +126,22 @@ void ToolbarViewInteractiveUITest::TestWhileInDragOperation() {
 }
 
 void ToolbarViewInteractiveUITest::FinishDragAndDrop(
-    const base::Closure& quit_closure) {
+    base::Closure quit_closure) {
   dnd_thread_.reset();
   TestWhileInDragOperation();
-  ui_controls::SendMouseEvents(ui_controls::LEFT, ui_controls::UP);
-  ui_controls::RunClosureAfterAllPendingUIEvents(
-      quit_closure);
+  ui_controls::SendMouseEventsNotifyWhenDone(ui_controls::LEFT, ui_controls::UP,
+                                             quit_closure);
 }
 
 void ToolbarViewInteractiveUITest::SetUpCommandLine(
     base::CommandLine* command_line) {
-  ExtensionBrowserTest::SetUpCommandLine(command_line);
+  extensions::ExtensionBrowserTest::SetUpCommandLine(command_line);
   ToolbarActionsBar::disable_animations_for_testing_ = true;
-  AppMenuButton::g_open_app_immediately_for_testing = true;
+  BrowserAppMenuButton::g_open_app_immediately_for_testing = true;
 }
 
 void ToolbarViewInteractiveUITest::SetUpOnMainThread() {
-  ExtensionBrowserTest::SetUpOnMainThread();
+  extensions::ExtensionBrowserTest::SetUpOnMainThread();
   ExtensionToolbarMenuView::set_close_menu_delay_for_testing(0);
 
   toolbar_view_ = BrowserView::GetBrowserViewForBrowser(browser())->toolbar();
@@ -158,11 +150,22 @@ void ToolbarViewInteractiveUITest::SetUpOnMainThread() {
 
 void ToolbarViewInteractiveUITest::TearDownOnMainThread() {
   ToolbarActionsBar::disable_animations_for_testing_ = false;
-  AppMenuButton::g_open_app_immediately_for_testing = false;
+  BrowserAppMenuButton::g_open_app_immediately_for_testing = false;
 }
 
+// Borrowed from chrome/browser/ui/views/bookmarks/bookmark_bar_view_test.cc,
+// since these are also disabled on Linux for drag and drop.
+// TODO(erg): Fix DND tests on linux_aura. crbug.com/163931
+#if defined(OS_LINUX) && defined(USE_AURA)
+#define MAYBE_TestAppMenuOpensOnDrag DISABLED_TestAppMenuOpensOnDrag
+#elif defined(OS_MACOSX)
+// Illegal thread join on the UI thread, may fix above: http://crbug.com/824570
+#define MAYBE_TestAppMenuOpensOnDrag DISABLED_TestAppMenuOpensOnDrag
+#else
+#define MAYBE_TestAppMenuOpensOnDrag TestAppMenuOpensOnDrag
+#endif
 IN_PROC_BROWSER_TEST_F(ToolbarViewInteractiveUITest,
-                       MAYBE(TestAppMenuOpensOnDrag)) {
+                       MAYBE_TestAppMenuOpensOnDrag) {
   // Load an extension that has a browser action.
   ASSERT_TRUE(LoadExtension(test_data_dir_.AppendASCII("api_test")
                                           .AppendASCII("browser_action")
@@ -191,6 +194,8 @@ class ToolbarViewTest : public InProcessBrowserTest {
   void RunToolbarCycleFocusTest(Browser* browser);
 
  private:
+  test::ScopedMacViewsBrowserMode views_mode_{true};
+
   DISALLOW_COPY_AND_ASSIGN(ToolbarViewTest);
 };
 
@@ -256,11 +261,25 @@ void ToolbarViewTest::RunToolbarCycleFocusTest(Browser* browser) {
     EXPECT_EQ(ids[i], reverse_ids[count - 2 - i]);
 }
 
-IN_PROC_BROWSER_TEST_F(ToolbarViewTest, ToolbarCycleFocus) {
+#if defined(OS_MACOSX)
+// Widget activation doesn't work on Mac: https://crbug.com/823543
+#define MAYBE_ToolbarCycleFocus DISABLED_ToolbarCycleFocus
+#else
+#define MAYBE_ToolbarCycleFocus ToolbarCycleFocus
+#endif
+IN_PROC_BROWSER_TEST_F(ToolbarViewTest, MAYBE_ToolbarCycleFocus) {
   RunToolbarCycleFocusTest(browser());
 }
 
-IN_PROC_BROWSER_TEST_F(ToolbarViewTest, ToolbarCycleFocusWithBookmarkBar) {
+#if defined(OS_MACOSX)
+// Widget activation doesn't work on Mac: https://crbug.com/823543
+#define MAYBE_ToolbarCycleFocusWithBookmarkBar \
+  DISABLED_ToolbarCycleFocusWithBookmarkBar
+#else
+#define MAYBE_ToolbarCycleFocusWithBookmarkBar ToolbarCycleFocusWithBookmarkBar
+#endif
+IN_PROC_BROWSER_TEST_F(ToolbarViewTest,
+                       MAYBE_ToolbarCycleFocusWithBookmarkBar) {
   CommandUpdater* updater = browser()->command_controller();
   updater->ExecuteCommand(IDC_SHOW_BOOKMARK_BAR);
 
@@ -274,4 +293,23 @@ IN_PROC_BROWSER_TEST_F(ToolbarViewTest, ToolbarCycleFocusWithBookmarkBar) {
   // window with the same profile.
   Browser* second_browser = CreateBrowser(browser()->profile());
   RunToolbarCycleFocusTest(second_browser);
+}
+
+IN_PROC_BROWSER_TEST_F(ToolbarViewTest, BackButtonUpdate) {
+  ToolbarView* toolbar =
+      BrowserView::GetBrowserViewForBrowser(browser())->toolbar();
+  EXPECT_FALSE(toolbar->back_button()->enabled());
+
+  // Navigate to title1.html. Back button should be enabled.
+  GURL url = ui_test_utils::GetTestUrl(
+      base::FilePath(), base::FilePath(FILE_PATH_LITERAL("title1.html")));
+  ui_test_utils::NavigateToURL(browser(), url);
+  EXPECT_TRUE(toolbar->back_button()->enabled());
+
+  // Delete old navigations. Back button will be disabled.
+  auto& controller =
+      browser()->tab_strip_model()->GetActiveWebContents()->GetController();
+  controller.DeleteNavigationEntries(base::BindRepeating(
+      [&](const content::NavigationEntry& entry) { return true; }));
+  EXPECT_FALSE(toolbar->back_button()->enabled());
 }

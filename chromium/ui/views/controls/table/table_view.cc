@@ -31,14 +31,11 @@
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/style/typography.h"
 
-// Size of images.
-static const int kImageSize = 16;
-
-static const int kGroupingIndicatorSize = 6;
-
 namespace views {
 
 namespace {
+
+constexpr int kGroupingIndicatorSize = 6;
 
 // Returns result, unless ascending is false in which case -result is returned.
 int SwapCompareResult(int result, bool ascending) {
@@ -287,6 +284,11 @@ bool TableView::HasColumn(int id) const {
   return false;
 }
 
+const TableView::VisibleColumn& TableView::GetVisibleColumn(int index) {
+  DCHECK(index >= 0 && index < static_cast<int>(visible_columns_.size()));
+  return visible_columns_[index];
+}
+
 void TableView::SetVisibleColumnWidth(int index, int width) {
   DCHECK(index >= 0 && index < static_cast<int>(visible_columns_.size()));
   if (visible_columns_[index].width == width)
@@ -447,21 +449,22 @@ bool TableView::GetTooltipTextOrigin(const gfx::Point& p,
 }
 
 void TableView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_TABLE;
-  node_data->AddIntAttribute(ui::AX_ATTR_RESTRICTION,
-                             ui::AX_RESTRICTION_READ_ONLY);
-  node_data->AddIntAttribute(ui::AX_ATTR_SET_SIZE, RowCount());
+  // TODO(aleventhal) Needs work, see https://crbug.com/811277.
+  node_data->role = ax::mojom::Role::kTable;
+  node_data->SetRestriction(ax::mojom::Restriction::kReadOnly);
+  node_data->AddIntAttribute(ax::mojom::IntAttribute::kSetSize, RowCount());
 
   if (selection_model_.active() != ui::ListSelectionModel::kUnselectedIndex) {
     // Get information about the active item, this is not the same as the set
     // of selected items (of which there could be more than one).
-    node_data->role = ui::AX_ROLE_ROW;
-    node_data->AddIntAttribute(ui::AX_ATTR_POS_IN_SET,
+    node_data->role = ax::mojom::Role::kRow;
+    node_data->AddIntAttribute(ax::mojom::IntAttribute::kPosInSet,
                                selection_model_.active());
-    if (selection_model_.IsSelected(selection_model_.active())) {
-      node_data->AddState(ui::AX_STATE_SELECTED);
-    }
+    node_data->AddBoolAttribute(
+        ax::mojom::BoolAttribute::kSelected,
+        selection_model_.IsSelected(selection_model_.active()));
 
+    // Generate accessible name from column headers and selected cell text.
     std::vector<base::string16> name_parts;
     for (const VisibleColumn& visible_column : visible_columns_) {
       base::string16 value = model_->GetText(
@@ -472,6 +475,9 @@ void TableView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
       }
     }
     node_data->SetName(base::JoinString(name_parts, base::ASCIIToUTF16(", ")));
+  } else {
+    // Name requires a selection.
+    node_data->SetNameExplicitlyEmpty();
   }
 }
 
@@ -579,14 +585,15 @@ void TableView::OnPaint(gfx::Canvas* canvas) {
       if (j == 0 && table_type_ == ICON_AND_TEXT) {
         gfx::ImageSkia image = model_->GetIcon(model_index);
         if (!image.isNull()) {
-          int image_x = GetMirroredXWithWidthInView(text_x, kImageSize);
+          int image_x =
+              GetMirroredXWithWidthInView(text_x, ui::TableModel::kIconSize);
           canvas->DrawImageInt(
-              image, 0, 0, image.width(), image.height(),
-              image_x,
-              cell_bounds.y() + (cell_bounds.height() - kImageSize) / 2,
-              kImageSize, kImageSize, true);
+              image, 0, 0, image.width(), image.height(), image_x,
+              cell_bounds.y() +
+                  (cell_bounds.height() - ui::TableModel::kIconSize) / 2,
+              ui::TableModel::kIconSize, ui::TableModel::kIconSize, true);
         }
-        text_x += kImageSize + cell_element_spacing;
+        text_x += ui::TableModel::kIconSize + cell_element_spacing;
       }
       if (text_x < cell_bounds.right() - cell_margin) {
         canvas->DrawStringRectWithFlags(
@@ -648,7 +655,7 @@ void TableView::OnFocus() {
     scroll_view->SetHasFocusIndicator(true);
 
   SchedulePaintForSelection();
-  NotifyAccessibilityEvent(ui::AX_EVENT_FOCUS, true);
+  NotifyAccessibilityEvent(ax::mojom::Event::kFocus, true);
 }
 
 void TableView::OnBlur() {
@@ -734,7 +741,7 @@ void TableView::AdjustCellBoundsForText(int visible_column_index,
     if (grouper_)
       text_x += kGroupingIndicatorSize + cell_element_spacing;
     if (table_type_ == ICON_AND_TEXT)
-      text_x += kImageSize + cell_element_spacing;
+      text_x += ui::TableModel::kIconSize + cell_element_spacing;
   }
   bounds->set_x(text_x);
   bounds->set_width(std::max(0, bounds->right() - cell_margin - text_x));
@@ -761,7 +768,7 @@ void TableView::UpdateVisibleColumnSizes() {
   const int cell_element_spacing = GetCellElementSpacing();
   int first_column_padding = 0;
   if (table_type_ == ICON_AND_TEXT && header_)
-    first_column_padding += kImageSize + cell_element_spacing;
+    first_column_padding += ui::TableModel::kIconSize + cell_element_spacing;
   if (grouper_)
     first_column_padding += kGroupingIndicatorSize + cell_element_spacing;
 
@@ -873,7 +880,7 @@ void TableView::SetSelectionModel(ui::ListSelectionModel new_selection) {
   if (observer_)
     observer_->OnSelectionChanged();
 
-  NotifyAccessibilityEvent(ui::AX_EVENT_FOCUS, true);
+  NotifyAccessibilityEvent(ax::mojom::Event::kFocus, true);
 }
 
 void TableView::AdvanceSelection(AdvanceDirection direction) {

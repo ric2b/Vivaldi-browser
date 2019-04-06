@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/compiler_specific.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#import "ios/testing/wait_util.h"
+#import "base/test/ios/wait_util.h"
+#include "base/test/scoped_feature_list.h"
 #import "ios/web/navigation/navigation_item_impl.h"
+#include "ios/web/public/features.h"
 #import "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/test/http_server/http_server.h"
@@ -55,13 +58,29 @@ NSString* const kNoOpCheckScript = @"isNoOpPlaceholderTextVisible()";
 // Wait timeout for state updates.
 const NSTimeInterval kWaitForStateUpdateTimeout = 5.0;
 
+// HistoryStateOperationsTest is parameterized on this enum to test both
+// LegacyNavigationManager and WKBasedNavigationManager.
+enum class NavigationManagerChoice {
+  LEGACY,
+  WK_BASED,
+};
+
 }  // namespace
 
 // Test fixture for integration tests involving html5 window.history state
 // operations.
-class HistoryStateOperationsTest : public web::WebIntTest {
+class HistoryStateOperationsTest
+    : public web::WebIntTest,
+      public ::testing::WithParamInterface<NavigationManagerChoice> {
  protected:
   void SetUp() override {
+    if (GetParam() == NavigationManagerChoice::LEGACY) {
+      scoped_feature_list_.InitAndDisableFeature(
+          web::features::kSlimNavigationManager);
+    } else {
+      scoped_feature_list_.InitAndEnableFeature(
+          web::features::kSlimNavigationManager);
+    }
     web::WebIntTest::SetUp();
 
     // History state tests use file-based test pages.
@@ -70,15 +89,15 @@ class HistoryStateOperationsTest : public web::WebIntTest {
     // Load the history state test page.
     state_operations_url_ =
         web::test::HttpServer::MakeUrl(kHistoryStateOperationsTestUrl);
-    LoadUrl(state_operations_url());
+    ASSERT_TRUE(LoadUrl(state_operations_url()));
   }
 
   // The URL of the window.location test page.
   const GURL& state_operations_url() { return state_operations_url_; }
 
   // Reloads the page and waits for the load to finish.
-  void Reload() {
-    ExecuteBlockAndWaitForLoad(GetLastCommittedItem()->GetURL(), ^{
+  bool Reload() WARN_UNUSED_RESULT {
+    return ExecuteBlockAndWaitForLoad(GetLastCommittedItem()->GetURL(), ^{
       // TODO(crbug.com/677364): Use NavigationManager::Reload() once it no
       // longer requires a web delegate.
       web_state()->ExecuteJavaScript(ASCIIToUTF16("window.location.reload()"));
@@ -117,8 +136,8 @@ class HistoryStateOperationsTest : public web::WebIntTest {
 
   // Waits for the NoOp text to be visible.
   void WaitForNoOpText() {
-    BOOL completed = testing::WaitUntilConditionOrTimeout(
-        testing::kWaitForJSCompletionTimeout, ^{
+    BOOL completed = base::test::ios::WaitUntilConditionOrTimeout(
+        base::test::ios::kWaitForJSCompletionTimeout, ^{
           return IsNoOpTextVisible();
         });
     EXPECT_TRUE(completed) << "NoOp text failed to be visible.";
@@ -126,11 +145,12 @@ class HistoryStateOperationsTest : public web::WebIntTest {
 
  private:
   GURL state_operations_url_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Tests that calling window.history.pushState() is a no-op for unresolvable
 // URLs.
-TEST_F(HistoryStateOperationsTest, NoOpPushUnresolvable) {
+TEST_P(HistoryStateOperationsTest, NoOpPushUnresolvable) {
   // Perform a window.history.pushState() with an unresolvable URL.  This will
   // clear the OnLoad and NoOp text, so checking below that the NoOp text is
   // displayed and the OnLoad text is empty ensures that no navigation occurred
@@ -145,7 +165,7 @@ TEST_F(HistoryStateOperationsTest, NoOpPushUnresolvable) {
 
 // Tests that calling window.history.replaceState() is a no-op for unresolvable
 // URLs.
-TEST_F(HistoryStateOperationsTest, NoOpReplaceUnresolvable) {
+TEST_P(HistoryStateOperationsTest, NoOpReplaceUnresolvable) {
   // Perform a window.history.replaceState() with an unresolvable URL.  This
   // will clear the OnLoad and NoOp text, so checking below that the NoOp text
   // is displayed and the OnLoad text is empty ensures that no navigation
@@ -160,7 +180,7 @@ TEST_F(HistoryStateOperationsTest, NoOpReplaceUnresolvable) {
 
 // Tests that calling window.history.pushState() is a no-op for URLs with a
 // different scheme.
-TEST_F(HistoryStateOperationsTest, NoOpPushDifferentScheme) {
+TEST_P(HistoryStateOperationsTest, NoOpPushDifferentScheme) {
   // Perform a window.history.pushState() with a URL with a different scheme.
   // This will clear the OnLoad and NoOp text, so checking below that the NoOp
   // text is displayed and the OnLoad text is empty ensures that no navigation
@@ -176,7 +196,7 @@ TEST_F(HistoryStateOperationsTest, NoOpPushDifferentScheme) {
 
 // Tests that calling window.history.replaceState() is a no-op for URLs with a
 // different scheme.
-TEST_F(HistoryStateOperationsTest, NoOpRelaceDifferentScheme) {
+TEST_P(HistoryStateOperationsTest, NoOpRelaceDifferentScheme) {
   // Perform a window.history.replaceState() with a URL with a different scheme.
   // This will clear the OnLoad and NoOp text, so checking below that the NoOp
   // text is displayed and the OnLoad text is empty ensures that no navigation
@@ -192,7 +212,7 @@ TEST_F(HistoryStateOperationsTest, NoOpRelaceDifferentScheme) {
 
 // Tests that calling window.history.pushState() is a no-op for URLs with a
 // origin differing from that of the current page.
-TEST_F(HistoryStateOperationsTest, NoOpPushDifferentOrigin) {
+TEST_P(HistoryStateOperationsTest, NoOpPushDifferentOrigin) {
   // Perform a window.history.pushState() with a URL with a different origin.
   // This will clear the OnLoad and NoOp text, so checking below that the NoOp
   // text is displayed and the OnLoad text is empty ensures that no navigation
@@ -214,7 +234,7 @@ TEST_F(HistoryStateOperationsTest, NoOpPushDifferentOrigin) {
 
 // Tests that calling window.history.replaceState() is a no-op for URLs with a
 // origin differing from that of the current page.
-TEST_F(HistoryStateOperationsTest, NoOpReplaceDifferentOrigin) {
+TEST_P(HistoryStateOperationsTest, NoOpReplaceDifferentOrigin) {
   // Perform a window.history.replaceState() with a URL with a different origin.
   // This will clear the OnLoad and NoOp text, so checking below that the NoOp
   // text is displayed and the OnLoad text is empty ensures that no navigation
@@ -238,16 +258,16 @@ TEST_F(HistoryStateOperationsTest, NoOpReplaceDifferentOrigin) {
 // successfully replaces the current NavigationItem's title.
 // TODO(crbug.com/677356): Enable this test once the NavigationItem's title is
 // updated from within the web layer.
-TEST_F(HistoryStateOperationsTest, DISABLED_TitleReplacement) {
+TEST_P(HistoryStateOperationsTest, DISABLED_TitleReplacement) {
   // Navigate to about:blank then navigate back to the test page.  The created
   // NavigationItem can be used later to verify that the title is replaced
   // rather than pushed.
   GURL about_blank("about:blank");
-  LoadUrl(about_blank);
+  ASSERT_TRUE(LoadUrl(about_blank));
   web::NavigationItem* about_blank_item = GetLastCommittedItem();
-  ExecuteBlockAndWaitForLoad(state_operations_url(), ^{
+  EXPECT_TRUE(ExecuteBlockAndWaitForLoad(state_operations_url(), ^{
     navigation_manager()->GoBack();
-  });
+  }));
   EXPECT_EQ(state_operations_url(), GetLastCommittedItem()->GetURL());
   // Set up the state parameters and tap the replace state button.
   std::string empty_state;
@@ -256,8 +276,8 @@ TEST_F(HistoryStateOperationsTest, DISABLED_TitleReplacement) {
   SetStateParams(empty_state, new_title, empty_url);
   ASSERT_TRUE(web::test::TapWebViewElementWithId(web_state(), kReplaceStateId));
   // Wait for the title to be reflected in the NavigationItem.
-  BOOL completed =
-      testing::WaitUntilConditionOrTimeout(kWaitForStateUpdateTimeout, ^{
+  BOOL completed = base::test::ios::WaitUntilConditionOrTimeout(
+      kWaitForStateUpdateTimeout, ^{
         return GetLastCommittedItem()->GetTitle() == ASCIIToUTF16(new_title);
       });
   EXPECT_TRUE(completed) << "Failed to validate NavigationItem title.";
@@ -268,16 +288,16 @@ TEST_F(HistoryStateOperationsTest, DISABLED_TitleReplacement) {
 
 // Tests that calling window.history.replaceState() with a new state object
 // replaces the state object for the current NavigationItem.
-TEST_F(HistoryStateOperationsTest, StateReplacement) {
+TEST_P(HistoryStateOperationsTest, StateReplacement) {
   // Navigate to about:blank then navigate back to the test page.  The created
   // NavigationItem can be used later to verify that the state is replaced
   // rather than pushed.
   GURL about_blank("about:blank");
-  LoadUrl(about_blank);
+  ASSERT_TRUE(LoadUrl(about_blank));
   web::NavigationItem* about_blank_item = GetLastCommittedItem();
-  ExecuteBlockAndWaitForLoad(state_operations_url(), ^{
+  EXPECT_TRUE(ExecuteBlockAndWaitForLoad(state_operations_url(), ^{
     navigation_manager()->GoBack();
-  });
+  }));
   ASSERT_EQ(state_operations_url(), GetLastCommittedItem()->GetURL());
   // Set up the state parameters and tap the replace state button.
   std::string new_state("STATE OBJECT");
@@ -287,8 +307,8 @@ TEST_F(HistoryStateOperationsTest, StateReplacement) {
   ASSERT_TRUE(web::test::TapWebViewElementWithId(web_state(), kReplaceStateId));
   // Verify that the state is reflected in the JavaScript context.
   BOOL verify_java_script_context_completed =
-      testing::WaitUntilConditionOrTimeout(
-          testing::kWaitForJSCompletionTimeout, ^{
+      base::test::ios::WaitUntilConditionOrTimeout(
+          base::test::ios::kWaitForJSCompletionTimeout, ^{
             return GetJavaScriptState() == new_state;
           });
   EXPECT_TRUE(verify_java_script_context_completed)
@@ -296,13 +316,14 @@ TEST_F(HistoryStateOperationsTest, StateReplacement) {
   // Verify that the state is reflected in the latest NavigationItem.
   std::string serialized_state("\"STATE OBJECT\"");
   BOOL verify_navigation_item_completed =
-      testing::WaitUntilConditionOrTimeout(kWaitForStateUpdateTimeout, ^{
-        web::NavigationItemImpl* item =
-            static_cast<web::NavigationItemImpl*>(GetLastCommittedItem());
-        std::string item_state =
-            base::SysNSStringToUTF8(item->GetSerializedStateObject());
-        return item_state == serialized_state;
-      });
+      base::test::ios::WaitUntilConditionOrTimeout(
+          kWaitForStateUpdateTimeout, ^{
+            web::NavigationItemImpl* item =
+                static_cast<web::NavigationItemImpl*>(GetLastCommittedItem());
+            std::string item_state =
+                base::SysNSStringToUTF8(item->GetSerializedStateObject());
+            return item_state == serialized_state;
+          });
   EXPECT_TRUE(verify_navigation_item_completed)
       << "Failed to validate NavigationItem state.";
   // Verify that the forward navigation was not pruned.
@@ -318,7 +339,7 @@ TEST_F(HistoryStateOperationsTest, StateReplacement) {
 #define MAYBE_StateReplacementReload DISABLED_StateReplacementReload
 #endif
 // TODO(crbug.com/720381): Enable this test on device.
-TEST_F(HistoryStateOperationsTest, MAYBE_StateReplacementReload) {
+TEST_P(HistoryStateOperationsTest, MAYBE_StateReplacementReload) {
   // Set up the state parameters and tap the replace state button.
   std::string new_state("STATE OBJECT");
   std::string empty_title;
@@ -326,10 +347,10 @@ TEST_F(HistoryStateOperationsTest, MAYBE_StateReplacementReload) {
   SetStateParams(new_state, empty_title, empty_url);
   ASSERT_TRUE(web::test::TapWebViewElementWithId(web_state(), kReplaceStateId));
   // Reload the page and check that the state object is present.
-  Reload();
+  EXPECT_TRUE(Reload());
   ASSERT_TRUE(IsOnLoadTextVisible());
-  BOOL completed = testing::WaitUntilConditionOrTimeout(
-      testing::kWaitForJSCompletionTimeout, ^{
+  BOOL completed = base::test::ios::WaitUntilConditionOrTimeout(
+      base::test::ios::kWaitForJSCompletionTimeout, ^{
         return GetJavaScriptState() == new_state;
       });
   EXPECT_TRUE(completed) << "Failed to validate JavaScript state.";
@@ -337,15 +358,15 @@ TEST_F(HistoryStateOperationsTest, MAYBE_StateReplacementReload) {
 
 // Tests that the state object is correctly set for a page after a back/forward
 // navigation.
-TEST_F(HistoryStateOperationsTest, StateReplacementBackForward) {
+TEST_P(HistoryStateOperationsTest, StateReplacementBackForward) {
   // Navigate to about:blank then navigate back to the test page.  The created
   // NavigationItem can be used later to verify that the state is replaced
   // rather than pushed.
   GURL about_blank("about:blank");
-  LoadUrl(about_blank);
-  ExecuteBlockAndWaitForLoad(state_operations_url(), ^{
+  ASSERT_TRUE(LoadUrl(about_blank));
+  ASSERT_TRUE(ExecuteBlockAndWaitForLoad(state_operations_url(), ^{
     navigation_manager()->GoBack();
-  });
+  }));
   ASSERT_EQ(state_operations_url(), GetLastCommittedItem()->GetURL());
   // Set up the state parameters and tap the replace state button.
   std::string new_state("STATE OBJECT");
@@ -354,15 +375,23 @@ TEST_F(HistoryStateOperationsTest, StateReplacementBackForward) {
   SetStateParams(new_state, empty_title, empty_url);
   ASSERT_TRUE(web::test::TapWebViewElementWithId(web_state(), kReplaceStateId));
   // Go forward and back, then check that the state object is present.
-  ExecuteBlockAndWaitForLoad(about_blank, ^{
+  ASSERT_TRUE(ExecuteBlockAndWaitForLoad(about_blank, ^{
     navigation_manager()->GoForward();
-  });
-  ExecuteBlockAndWaitForLoad(state_operations_url(), ^{
+  }));
+  ASSERT_TRUE(ExecuteBlockAndWaitForLoad(state_operations_url(), ^{
     navigation_manager()->GoBack();
-  });
-  ASSERT_TRUE(IsOnLoadTextVisible());
-  BOOL completed = testing::WaitUntilConditionOrTimeout(
-      testing::kWaitForJSCompletionTimeout, ^{
+  }));
+
+  if (GetParam() == NavigationManagerChoice::LEGACY) {
+    ASSERT_TRUE(IsOnLoadTextVisible());
+  } else {
+    // WebKit doesn't trigger onload on back. WKBasedNavigationManager inherits
+    // this behavior.
+    WaitForNoOpText();
+  }
+
+  BOOL completed = base::test::ios::WaitUntilConditionOrTimeout(
+      base::test::ios::kWaitForJSCompletionTimeout, ^{
         return GetJavaScriptState() == new_state;
       });
   EXPECT_TRUE(completed) << "Failed to validate JavaScript state.";
@@ -370,16 +399,16 @@ TEST_F(HistoryStateOperationsTest, StateReplacementBackForward) {
 
 // Tests that calling window.history.pushState() creates a new NavigationItem
 // and prunes trailing items.
-TEST_F(HistoryStateOperationsTest, PushState) {
+TEST_P(HistoryStateOperationsTest, PushState) {
   // Navigate to about:blank then navigate back to the test page.  The created
   // NavigationItem can be used later to verify that the state is replaced
   // rather than pushed.
   GURL about_blank("about:blank");
-  LoadUrl(about_blank);
+  ASSERT_TRUE(LoadUrl(about_blank));
   web::NavigationItem* about_blank_item = GetLastCommittedItem();
-  ExecuteBlockAndWaitForLoad(state_operations_url(), ^{
+  ASSERT_TRUE(ExecuteBlockAndWaitForLoad(state_operations_url(), ^{
     navigation_manager()->GoBack();
-  });
+  }));
   ASSERT_EQ(state_operations_url(), GetLastCommittedItem()->GetURL());
   web::NavigationItem* non_pushed_item = GetLastCommittedItem();
   // Set up the state parameters and tap the replace state button.
@@ -389,8 +418,8 @@ TEST_F(HistoryStateOperationsTest, PushState) {
   SetStateParams(empty_state, empty_title, new_url);
   ASSERT_TRUE(web::test::TapWebViewElementWithId(web_state(), kPushStateId));
   // Verify that the url with the path is pushed.
-  BOOL completed =
-      testing::WaitUntilConditionOrTimeout(kWaitForStateUpdateTimeout, ^{
+  BOOL completed = base::test::ios::WaitUntilConditionOrTimeout(
+      kWaitForStateUpdateTimeout, ^{
         return GetLastCommittedItem()->GetURL() == new_url;
       });
   EXPECT_TRUE(completed) << "Failed to validate current url.";
@@ -403,7 +432,7 @@ TEST_F(HistoryStateOperationsTest, PushState) {
 
 // Tests that performing a replaceState() on a page created with a POST request
 // resets the page to a GET request.
-TEST_F(HistoryStateOperationsTest, ReplaceStatePostRequest) {
+TEST_P(HistoryStateOperationsTest, ReplaceStatePostRequest) {
   // Add POST data to the current NavigationItem.
   NSData* post_data = [NSData data];
   static_cast<web::NavigationItemImpl*>(GetLastCommittedItem())
@@ -416,8 +445,8 @@ TEST_F(HistoryStateOperationsTest, ReplaceStatePostRequest) {
   SetStateParams(new_state, empty_title, new_url);
   ASSERT_TRUE(web::test::TapWebViewElementWithId(web_state(), kReplaceStateId));
   // Verify that url has been replaced.
-  BOOL completed =
-      testing::WaitUntilConditionOrTimeout(kWaitForStateUpdateTimeout, ^{
+  BOOL completed = base::test::ios::WaitUntilConditionOrTimeout(
+      kWaitForStateUpdateTimeout, ^{
         return GetLastCommittedItem()->GetURL() == new_url;
       });
   EXPECT_TRUE(completed) << "Failed to validate current url.";
@@ -427,7 +456,7 @@ TEST_F(HistoryStateOperationsTest, ReplaceStatePostRequest) {
 
 // Tests that performing a replaceState() on a page where only the URL fragment
 // is updated does not trigger a hashchange event.
-TEST_F(HistoryStateOperationsTest, ReplaceStateNoHashChangeEvent) {
+TEST_P(HistoryStateOperationsTest, ReplaceStateNoHashChangeEvent) {
   // Set up the state parameters and tap the replace state button.
   std::string empty_state;
   std::string empty_title;
@@ -435,8 +464,8 @@ TEST_F(HistoryStateOperationsTest, ReplaceStateNoHashChangeEvent) {
   SetStateParams(empty_state, empty_title, new_url);
   ASSERT_TRUE(web::test::TapWebViewElementWithId(web_state(), kReplaceStateId));
   // Verify that url has been replaced.
-  BOOL completed =
-      testing::WaitUntilConditionOrTimeout(kWaitForStateUpdateTimeout, ^{
+  BOOL completed = base::test::ios::WaitUntilConditionOrTimeout(
+      kWaitForStateUpdateTimeout, ^{
         return GetLastCommittedItem()->GetURL() == new_url;
       });
   EXPECT_TRUE(completed) << "Failed to validate current url.";
@@ -446,16 +475,21 @@ TEST_F(HistoryStateOperationsTest, ReplaceStateNoHashChangeEvent) {
 }
 
 // Regression test for crbug.com/788464.
-TEST_F(HistoryStateOperationsTest, ReplaceStateThenReload) {
+TEST_P(HistoryStateOperationsTest, ReplaceStateThenReload) {
   GURL url = web::test::HttpServer::MakeUrl(
       "http://ios/testing/data/http_server_files/"
       "onload_replacestate_reload.html");
-  LoadUrl(url);
+  ASSERT_TRUE(LoadUrl(url));
   GURL new_url = web::test::HttpServer::MakeUrl(
       "http://ios/testing/data/http_server_files/pony.html");
-  BOOL completed =
-      testing::WaitUntilConditionOrTimeout(kWaitForStateUpdateTimeout, ^{
+  BOOL completed = base::test::ios::WaitUntilConditionOrTimeout(
+      kWaitForStateUpdateTimeout, ^{
         return GetLastCommittedItem()->GetURL() == new_url;
       });
   EXPECT_TRUE(completed);
 }
+
+INSTANTIATE_TEST_CASE_P(ProgrammaticHistoryStateOperationsTest,
+                        HistoryStateOperationsTest,
+                        ::testing::Values(NavigationManagerChoice::LEGACY,
+                                          NavigationManagerChoice::WK_BASED));

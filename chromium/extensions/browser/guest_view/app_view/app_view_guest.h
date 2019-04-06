@@ -52,7 +52,7 @@ class AppViewGuest : public guest_view::GuestView<AppViewGuest> {
 
   // GuestViewBase implementation.
   void CreateWebContents(const base::DictionaryValue& create_params,
-                         const WebContentsCreatedCallback& callback) final;
+                         WebContentsCreatedCallback callback) final;
   void DidInitialize(const base::DictionaryValue& create_params) final;
   const char* GetAPINamespace() const final;
   int GetTaskPrefix() const final;
@@ -62,17 +62,17 @@ class AppViewGuest : public guest_view::GuestView<AppViewGuest> {
   void RequestMediaAccessPermission(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback) final;
-  bool CheckMediaAccessPermission(content::WebContents* web_contents,
+      content::MediaResponseCallback callback) final;
+  bool CheckMediaAccessPermission(content::RenderFrameHost* render_frame_host,
                                   const GURL& security_origin,
                                   content::MediaStreamType type) final;
 
   void CompleteCreateWebContents(const GURL& url,
                                  const Extension* guest_extension,
-                                 const WebContentsCreatedCallback& callback);
+                                 WebContentsCreatedCallback callback);
 
   void LaunchAppAndFireEvent(std::unique_ptr<base::DictionaryValue> data,
-                             const WebContentsCreatedCallback& callback,
+                             WebContentsCreatedCallback callback,
                              ExtensionHost* extension_host);
 
   GURL url_;

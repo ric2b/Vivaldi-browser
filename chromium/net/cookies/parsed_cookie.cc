@@ -150,7 +150,7 @@ ParsedCookie::ParsedCookie(const std::string& cookie_line)
 ParsedCookie::~ParsedCookie() = default;
 
 bool ParsedCookie::IsValid() const {
-  return !pairs_.empty() && IsSameSiteAttributeValid();
+  return !pairs_.empty();
 }
 
 CookieSameSite ParsedCookie::SameSite() const {
@@ -492,17 +492,13 @@ void ParsedCookie::ClearAttributePair(size_t index) {
   size_t* indexes[] = {&path_index_,      &domain_index_,  &expires_index_,
                        &maxage_index_,    &secure_index_,  &httponly_index_,
                        &same_site_index_, &priority_index_};
-  for (size_t i = 0; i < arraysize(indexes); ++i) {
-    if (*indexes[i] == index)
-      *indexes[i] = 0;
-    else if (*indexes[i] > index)
-      --*indexes[i];
+  for (size_t* attribute_index : indexes) {
+    if (*attribute_index == index)
+      *attribute_index = 0;
+    else if (*attribute_index > index)
+      --(*attribute_index);
   }
   pairs_.erase(pairs_.begin() + index);
-}
-
-bool ParsedCookie::IsSameSiteAttributeValid() const {
-  return same_site_index_ == 0 || SameSite() != CookieSameSite::DEFAULT_MODE;
 }
 
 }  // namespace net

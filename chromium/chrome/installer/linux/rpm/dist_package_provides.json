@@ -16,6 +16,7 @@
         "libXrender.so.1()(64bit)",
         "libXss.so.1()(64bit)",
         "libXtst.so.6()(64bit)",
+        "libappindicator3.so.1()(64bit)",
         "libasound.so.2()(64bit)",
         "libasound.so.2(ALSA_0.9)(64bit)",
         "libasound.so.2(ALSA_0.9.0)(64bit)",
@@ -235,7 +236,12 @@
         "libstdc++.so.6(GLIBCXX_3.4.7)(64bit)",
         "libstdc++.so.6(GLIBCXX_3.4.8)(64bit)",
         "libstdc++.so.6(GLIBCXX_3.4.9)(64bit)",
-        "libxcb.so.1()(64bit)"
+        "libuuid.so.1()(64bit)",
+        "libuuid.so.1(UUIDD_PRIVATE)(64bit)",
+        "libuuid.so.1(UUID_1.0)(64bit)",
+        "libuuid.so.1(UUID_2.20)(64bit)",
+        "libxcb.so.1()(64bit)",
+        "rtld(GNU_HASH)"
     ],
     "Fedora 26": [
         "ld-linux-x86-64.so.2()(64bit)",
@@ -254,6 +260,7 @@
         "libXrender.so.1()(64bit)",
         "libXss.so.1()(64bit)",
         "libXtst.so.6()(64bit)",
+        "libappindicator3.so.1()(64bit)",
         "libasound.so.2()(64bit)",
         "libasound.so.2(ALSA_0.9)(64bit)",
         "libasound.so.2(ALSA_0.9.0)(64bit)",
@@ -479,7 +486,12 @@
         "libstdc++.so.6(GLIBCXX_3.4.7)(64bit)",
         "libstdc++.so.6(GLIBCXX_3.4.8)(64bit)",
         "libstdc++.so.6(GLIBCXX_3.4.9)(64bit)",
-        "libxcb.so.1()(64bit)"
+        "libuuid.so.1()(64bit)",
+        "libuuid.so.1(UUIDD_PRIVATE)(64bit)",
+        "libuuid.so.1(UUID_1.0)(64bit)",
+        "libuuid.so.1(UUID_2.20)(64bit)",
+        "libxcb.so.1()(64bit)",
+        "rtld(GNU_HASH)"
     ],
     "Fedora 27": [
         "ld-linux-x86-64.so.2()(64bit)",
@@ -498,6 +510,7 @@
         "libXrender.so.1()(64bit)",
         "libXss.so.1()(64bit)",
         "libXtst.so.6()(64bit)",
+        "libappindicator3.so.1()(64bit)",
         "libasound.so.2()(64bit)",
         "libasound.so.2(ALSA_0.9)(64bit)",
         "libasound.so.2(ALSA_0.9.0)(64bit)",
@@ -724,7 +737,12 @@
         "libstdc++.so.6(GLIBCXX_3.4.7)(64bit)",
         "libstdc++.so.6(GLIBCXX_3.4.8)(64bit)",
         "libstdc++.so.6(GLIBCXX_3.4.9)(64bit)",
-        "libxcb.so.1()(64bit)"
+        "libuuid.so.1()(64bit)",
+        "libuuid.so.1(UUIDD_PRIVATE)(64bit)",
+        "libuuid.so.1(UUID_1.0)(64bit)",
+        "libuuid.so.1(UUID_2.20)(64bit)",
+        "libxcb.so.1()(64bit)",
+        "rtld(GNU_HASH)"
     ],
     "openSUSE Leap 42.2": [
         "ld-linux-x86-64.so.2()(64bit)",
@@ -755,6 +773,7 @@
         "libXss.so.1()(64bit)",
         "libXtst.so.6",
         "libXtst.so.6()(64bit)",
+        "libappindicator3.so.1()(64bit)",
         "libasound.so.2",
         "libasound.so.2()(64bit)",
         "libasound.so.2(ALSA_0.9)",
@@ -1172,8 +1191,17 @@
         "libstdc++.so.6(GLIBCXX_3.4.8)(64bit)",
         "libstdc++.so.6(GLIBCXX_3.4.9)",
         "libstdc++.so.6(GLIBCXX_3.4.9)(64bit)",
+        "libuuid.so.1",
+        "libuuid.so.1()(64bit)",
+        "libuuid.so.1(UUIDD_PRIVATE)",
+        "libuuid.so.1(UUIDD_PRIVATE)(64bit)",
+        "libuuid.so.1(UUID_1.0)",
+        "libuuid.so.1(UUID_1.0)(64bit)",
+        "libuuid.so.1(UUID_2.20)",
+        "libuuid.so.1(UUID_2.20)(64bit)",
         "libxcb.so.1",
-        "libxcb.so.1()(64bit)"
+        "libxcb.so.1()(64bit)",
+        "rtld(GNU_HASH)"
     ],
     "openSUSE Leap 42.3": [
         "ld-linux-x86-64.so.2()(64bit)",
@@ -1204,6 +1232,7 @@
         "libXss.so.1()(64bit)",
         "libXtst.so.6",
         "libXtst.so.6()(64bit)",
+        "libappindicator3.so.1()(64bit)",
         "libasound.so.2",
         "libasound.so.2()(64bit)",
         "libasound.so.2(ALSA_0.9)",
@@ -1629,7 +1658,16 @@
         "libstdc++.so.6(GLIBCXX_3.4.8)(64bit)",
         "libstdc++.so.6(GLIBCXX_3.4.9)",
         "libstdc++.so.6(GLIBCXX_3.4.9)(64bit)",
+        "libuuid.so.1",
+        "libuuid.so.1()(64bit)",
+        "libuuid.so.1(UUIDD_PRIVATE)",
+        "libuuid.so.1(UUIDD_PRIVATE)(64bit)",
+        "libuuid.so.1(UUID_1.0)",
+        "libuuid.so.1(UUID_1.0)(64bit)",
+        "libuuid.so.1(UUID_2.20)",
+        "libuuid.so.1(UUID_2.20)(64bit)",
         "libxcb.so.1",
-        "libxcb.so.1()(64bit)"
+        "libxcb.so.1()(64bit)",
+        "rtld(GNU_HASH)"
     ]
 }

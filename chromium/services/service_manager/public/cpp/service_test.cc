@@ -4,12 +4,11 @@
 
 #include "services/service_manager/public/cpp/service_test.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
 #include "base/values.h"
-#include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/scoped_ipc_support.h"
+#include "mojo/core/embedder/embedder.h"
+#include "mojo/core/embedder/scoped_ipc_support.h"
 #include "services/service_manager/background/background_service_manager.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/cpp/service_context.h"
@@ -48,6 +47,10 @@ std::unique_ptr<Service> ServiceTest::CreateService() {
   return std::make_unique<ServiceTestClient>(this);
 }
 
+std::unique_ptr<base::Value> ServiceTest::CreateCustomTestCatalog() {
+  return nullptr;
+}
+
 void ServiceTest::OnStartCalled(Connector* connector,
                                 const std::string& name,
                                 const std::string& user_id) {
@@ -59,8 +62,8 @@ void ServiceTest::OnStartCalled(Connector* connector,
 
 void ServiceTest::SetUp() {
   background_service_manager_ =
-      std::make_unique<service_manager::BackgroundServiceManager>(nullptr,
-                                                                  nullptr);
+      std::make_unique<service_manager::BackgroundServiceManager>(
+          nullptr, CreateCustomTestCatalog());
 
   // Create the service manager connection. We don't proceed until we get our
   // Service's OnStart() method is called.

@@ -23,6 +23,11 @@ namespace keyboard {
 constexpr int kDefaultDistanceFromScreenBottom = 20;
 constexpr int kDefaultDistanceFromScreenRight = 20;
 
+struct KeyboardPosition {
+  double left_padding_allotment_ratio;
+  double top_padding_allotment_ratio;
+};
+
 class KEYBOARD_EXPORT ContainerFloatingBehavior : public ContainerBehavior {
  public:
   ContainerFloatingBehavior(KeyboardController* controller);
@@ -36,53 +41,49 @@ class KEYBOARD_EXPORT ContainerFloatingBehavior : public ContainerBehavior {
       aura::Window* window,
       ui::ScopedLayerAnimationSettings* animation_settings) override;
   void InitializeShowAnimationStartingState(aura::Window* container) override;
-  const gfx::Rect AdjustSetBoundsRequest(
+  gfx::Rect AdjustSetBoundsRequest(
       const gfx::Rect& display_bounds,
-      const gfx::Rect& requested_bounds) override;
+      const gfx::Rect& requested_bounds_in_screen_coords) override;
   bool IsOverscrollAllowed() const override;
   bool IsDragHandle(const gfx::Vector2d& offset,
                     const gfx::Size& keyboard_size) const override;
-  void SavePosition(const gfx::Point& position) override;
-  void HandlePointerEvent(const ui::LocatedEvent& event) override;
+  void SavePosition(const gfx::Rect& keyboard_bounds_in_screen,
+                    const gfx::Size& screen_size) override;
+  bool HandlePointerEvent(const ui::LocatedEvent& event,
+                          const display::Display& current_display) override;
   void SetCanonicalBounds(aura::Window* container,
                           const gfx::Rect& display_bounds) override;
   ContainerType GetType() const override;
   bool TextBlurHidesKeyboard() const override;
-  bool BoundsObscureUsableRegion() const override;
-  bool BoundsAffectWorkspaceLayout() const override;
+  gfx::Rect GetOccludedBounds(
+      const gfx::Rect& visual_bounds_in_screen) const override;
+  bool OccludedBoundsAffectWorkspaceLayout() const override;
   bool SetDraggableArea(const gfx::Rect& rect) override;
-
- private:
-  // Ensures that the keyboard is neither off the screen nor overlapping an
-  // edge.
-  gfx::Rect ContainKeyboardToScreenBounds(
-      const gfx::Rect& keyboard_bounds,
-      const gfx::Rect& display_bounds) const;
-
-  // Saves the current keyboard location for use the next time it is displayed.
-  void UpdateLastPoint(const gfx::Point& position);
-
-  // Returns true if the keyboard has not been display/moved yet and the default
-  // position should be used.
-  bool UseDefaultPosition() const;
 
   // Calculate the position of the keyboard for when it is being shown.
   gfx::Point GetPositionForShowingKeyboard(
       const gfx::Size& keyboard_size,
       const gfx::Rect& display_bounds) const;
 
+ private:
+  // Ensures that the keyboard is neither off the screen nor overlapping an
+  // edge.
+  gfx::Rect ContainKeyboardToScreenBounds(
+      const gfx::Rect& keyboard_bounds_in_screen,
+      const gfx::Rect& display_bounds) const;
+
+  // Saves the current keyboard location for use the next time it is displayed.
+  void UpdateLastPoint(const gfx::Point& position);
+
   KeyboardController* controller_;
 
   // TODO(blakeo): cache the default_position_ on a per-display basis.
-  gfx::Point default_position_ = gfx::Point(-1, -1);
+  std::unique_ptr<struct keyboard::KeyboardPosition>
+      default_position_in_screen_ = nullptr;
 
   // Current state of a cursor drag to move the keyboard, if one exists.
   // Otherwise nullptr.
-  std::unique_ptr<DragDescriptor> drag_descriptor_ = nullptr;
-
-  // Distinguish whether the current drag is from a touch event or mouse event,
-  // so drag/move events can be filtered accordingly
-  bool drag_started_by_touch_ = false;
+  std::unique_ptr<const DragDescriptor> drag_descriptor_ = nullptr;
 
   gfx::Rect draggable_area_ = gfx::Rect();
 };

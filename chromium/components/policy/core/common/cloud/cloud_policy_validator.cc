@@ -45,6 +45,23 @@ enum MetricPolicyKeyVerification {
   METRIC_POLICY_KEY_VERIFICATION_SIZE  // Must be the last.
 };
 
+const char kMetricPolicyUserVerification[] =
+    "Enterprise.PolicyUserVerification";
+
+enum class MetricPolicyUserVerification {
+  // Gaia id check used, but failed.
+  kGaiaIdFailed = 0,
+  // Gaia id check used and succeeded.
+  kGaiaIdSucceeded = 1,
+  // Gaia id is not present and username check failed.
+  kUsernameFailed = 2,
+  // Gaia id is not present for user and username check succeeded.
+  kUsernameSucceeded = 3,
+  // Gaia id is not present in policy and username check succeeded.
+  kGaiaIdMissingUsernameSucceeded = 4,
+  kMaxValue = kGaiaIdMissingUsernameSucceeded,
+};
+
 }  // namespace
 
 CloudPolicyValidatorBase::~CloudPolicyValidatorBase() {}
@@ -57,11 +74,19 @@ void CloudPolicyValidatorBase::ValidateTimestamp(
   timestamp_option_ = timestamp_option;
 }
 
+void CloudPolicyValidatorBase::ValidateUser(const AccountId& account_id) {
+  validation_flags_ |= VALIDATE_USER;
+  account_id_ = account_id;
+  // Always canonicalize when falls back to username check,
+  // because it checks only for regular users.
+  canonicalize_user_ = true;
+}
+
 void CloudPolicyValidatorBase::ValidateUsername(
     const std::string& expected_user,
     bool canonicalize) {
-  validation_flags_ |= VALIDATE_USERNAME;
-  user_ = expected_user;
+  validation_flags_ |= VALIDATE_USER;
+  account_id_ = AccountId::FromUserEmail(expected_user);
   canonicalize_user_ = canonicalize;
 }
 
@@ -102,7 +127,6 @@ void CloudPolicyValidatorBase::ValidateSettingsEntityId(
 void CloudPolicyValidatorBase::ValidatePayload() {
   validation_flags_ |= VALIDATE_PAYLOAD;
 }
-
 
 void CloudPolicyValidatorBase::ValidateCachedKey(
     const std::string& cached_key,
@@ -156,11 +180,9 @@ void CloudPolicyValidatorBase::ValidateAgainstCurrentPolicy(
 
 CloudPolicyValidatorBase::CloudPolicyValidatorBase(
     std::unique_ptr<em::PolicyFetchResponse> policy_response,
-    google::protobuf::MessageLite* payload,
     scoped_refptr<base::SequencedTaskRunner> background_task_runner)
     : status_(VALIDATION_OK),
       policy_(std::move(policy_response)),
-      payload_(payload),
       validation_flags_(0),
       timestamp_not_before_(0),
       timestamp_option_(TIMESTAMP_VALIDATED),
@@ -180,9 +202,9 @@ void CloudPolicyValidatorBase::PostValidationTask(
   const auto task_runner = validator->background_task_runner_;
   task_runner->PostTask(
       FROM_HERE,
-      base::Bind(&CloudPolicyValidatorBase::PerformValidation,
-                 base::Passed(&validator), base::ThreadTaskRunnerHandle::Get(),
-                 completion_callback));
+      base::BindOnce(&CloudPolicyValidatorBase::PerformValidation,
+                     std::move(validator), base::ThreadTaskRunnerHandle::Get(),
+                     completion_callback));
 }
 
 // static
@@ -195,10 +217,8 @@ void CloudPolicyValidatorBase::PerformValidation(
 
   // Report completion on |task_runner|.
   task_runner->PostTask(
-      FROM_HERE,
-      base::Bind(&CloudPolicyValidatorBase::ReportCompletion,
-                 base::Passed(&self),
-                 completion_callback));
+      FROM_HERE, base::BindOnce(&CloudPolicyValidatorBase::ReportCompletion,
+                                std::move(self), completion_callback));
 }
 
 // static
@@ -211,6 +231,18 @@ void CloudPolicyValidatorBase::ReportCompletion(
 void CloudPolicyValidatorBase::RunValidation() {
   policy_data_.reset(new em::PolicyData());
   RunChecks();
+}
+
+CloudPolicyValidatorBase::Status CloudPolicyValidatorBase::CheckProtoPayload(
+    google::protobuf::MessageLite* payload) {
+  DCHECK(payload);
+  if (!policy_data_ || !policy_data_->has_policy_value() ||
+      !payload->ParseFromString(policy_data_->policy_value()) ||
+      !payload->IsInitialized()) {
+    LOG(ERROR) << "Failed to decode policy payload protobuf";
+    return VALIDATION_POLICY_PARSE_ERROR;
+  }
+  return VALIDATION_OK;
 }
 
 void CloudPolicyValidatorBase::RunChecks() {
@@ -236,19 +268,19 @@ void CloudPolicyValidatorBase::RunChecks() {
   // error, s.t. the most severe check will determine the validation status.
   static const struct {
     int flag;
-    Status (CloudPolicyValidatorBase::* checkFunction)();
+    Status (CloudPolicyValidatorBase::*checkFunction)();
   } kCheckFunctions[] = {
-      { VALIDATE_SIGNATURE,   &CloudPolicyValidatorBase::CheckSignature },
-      { VALIDATE_INITIAL_KEY, &CloudPolicyValidatorBase::CheckInitialKey },
-      { VALIDATE_CACHED_KEY,  &CloudPolicyValidatorBase::CheckCachedKey },
-      { VALIDATE_POLICY_TYPE, &CloudPolicyValidatorBase::CheckPolicyType },
-      { VALIDATE_ENTITY_ID,   &CloudPolicyValidatorBase::CheckEntityId },
-      { VALIDATE_DM_TOKEN,    &CloudPolicyValidatorBase::CheckDMToken },
-      { VALIDATE_DEVICE_ID,   &CloudPolicyValidatorBase::CheckDeviceId },
-      { VALIDATE_USERNAME,    &CloudPolicyValidatorBase::CheckUsername },
-      { VALIDATE_DOMAIN,      &CloudPolicyValidatorBase::CheckDomain },
-      { VALIDATE_TIMESTAMP,   &CloudPolicyValidatorBase::CheckTimestamp },
-      { VALIDATE_PAYLOAD,     &CloudPolicyValidatorBase::CheckPayload },
+      {VALIDATE_SIGNATURE, &CloudPolicyValidatorBase::CheckSignature},
+      {VALIDATE_INITIAL_KEY, &CloudPolicyValidatorBase::CheckInitialKey},
+      {VALIDATE_CACHED_KEY, &CloudPolicyValidatorBase::CheckCachedKey},
+      {VALIDATE_POLICY_TYPE, &CloudPolicyValidatorBase::CheckPolicyType},
+      {VALIDATE_ENTITY_ID, &CloudPolicyValidatorBase::CheckEntityId},
+      {VALIDATE_DM_TOKEN, &CloudPolicyValidatorBase::CheckDMToken},
+      {VALIDATE_DEVICE_ID, &CloudPolicyValidatorBase::CheckDeviceId},
+      {VALIDATE_USER, &CloudPolicyValidatorBase::CheckUser},
+      {VALIDATE_DOMAIN, &CloudPolicyValidatorBase::CheckDomain},
+      {VALIDATE_TIMESTAMP, &CloudPolicyValidatorBase::CheckTimestamp},
+      {VALIDATE_PAYLOAD, &CloudPolicyValidatorBase::CheckPayload},
   };
 
   for (size_t i = 0; i < arraysize(kCheckFunctions); ++i) {
@@ -273,8 +305,7 @@ bool CloudPolicyValidatorBase::CheckNewPublicKeyVerificationSignature() {
   }
 
   if (!CheckVerificationKeySignature(
-          policy_->new_public_key(),
-          verification_key_,
+          policy_->new_public_key(), verification_key_,
           policy_->new_public_key_verification_signature_deprecated())) {
     LOG(ERROR) << "Signature verification failed";
     UMA_HISTOGRAM_ENUMERATION(kMetricPolicyKeyVerification,
@@ -301,8 +332,8 @@ bool CloudPolicyValidatorBase::CheckVerificationKeySignature(
   // If no owning_domain_ supplied, try extracting the domain from the policy
   // itself (this happens on certain platforms during startup, when we validate
   // cached policy before prefs are loaded).
-  std::string domain = owning_domain_.empty() ?
-      ExtractDomainFromPolicy() : owning_domain_;
+  std::string domain =
+      owning_domain_.empty() ? ExtractDomainFromPolicy() : owning_domain_;
   if (domain.empty()) {
     LOG(ERROR) << "Policy does not contain a domain";
     return false;
@@ -321,8 +352,7 @@ std::string CloudPolicyValidatorBase::ExtractDomainFromPolicy() {
   std::string domain;
   if (policy_data_->has_username()) {
     domain = gaia::ExtractDomainName(
-        gaia::CanonicalizeEmail(
-            gaia::SanitizeEmail(policy_data_->username())));
+        gaia::CanonicalizeEmail(gaia::SanitizeEmail(policy_data_->username())));
   }
   return domain;
 }
@@ -362,8 +392,7 @@ CloudPolicyValidatorBase::Status CloudPolicyValidatorBase::CheckSignature() {
 }
 
 CloudPolicyValidatorBase::Status CloudPolicyValidatorBase::CheckInitialKey() {
-  if (!policy_->has_new_public_key() ||
-      !policy_->has_policy_data_signature() ||
+  if (!policy_->has_new_public_key() || !policy_->has_policy_data_signature() ||
       !VerifySignature(policy_->policy_data(), policy_->new_public_key(),
                        policy_->policy_data_signature(), SHA1)) {
     LOG(ERROR) << "Initial policy signature validation failed";
@@ -390,7 +419,7 @@ CloudPolicyValidatorBase::Status CloudPolicyValidatorBase::CheckCachedKey() {
 
 CloudPolicyValidatorBase::Status CloudPolicyValidatorBase::CheckPolicyType() {
   if (!policy_data_->has_policy_type() ||
-       policy_data_->policy_type() != policy_type_) {
+      policy_data_->policy_type() != policy_type_) {
     LOG(ERROR) << "Wrong policy type " << policy_data_->policy_type();
     return VALIDATION_WRONG_POLICY_TYPE;
   }
@@ -445,8 +474,7 @@ CloudPolicyValidatorBase::Status CloudPolicyValidatorBase::CheckDMToken() {
 
 CloudPolicyValidatorBase::Status CloudPolicyValidatorBase::CheckDeviceId() {
   if (device_id_option_ == DEVICE_ID_REQUIRED &&
-      (!policy_data_->has_device_id() ||
-       policy_data_->device_id().empty())) {
+      (!policy_data_->has_device_id() || policy_data_->device_id().empty())) {
     LOG(ERROR) << "Empty device id encountered - expected: " << device_id_;
     return VALIDATION_BAD_DEVICE_ID;
   }
@@ -458,22 +486,50 @@ CloudPolicyValidatorBase::Status CloudPolicyValidatorBase::CheckDeviceId() {
   return VALIDATION_OK;
 }
 
-CloudPolicyValidatorBase::Status CloudPolicyValidatorBase::CheckUsername() {
-  if (!policy_data_->has_username()) {
-    LOG(ERROR) << "Policy is missing user name";
-    return VALIDATION_BAD_USERNAME;
+CloudPolicyValidatorBase::Status CloudPolicyValidatorBase::CheckUser() {
+  if (!policy_data_->has_username() && !policy_data_->has_gaia_id()) {
+    LOG(ERROR) << "Policy is missing user name and gaia id";
+    return VALIDATION_BAD_USER;
   }
 
-  std::string expected = user_;
-  std::string actual = policy_data_->username();
-  if (canonicalize_user_) {
-    expected = gaia::CanonicalizeEmail(gaia::SanitizeEmail(expected));
-    actual = gaia::CanonicalizeEmail(gaia::SanitizeEmail(actual));
-  }
+  if (policy_data_->has_gaia_id() && !policy_data_->gaia_id().empty() &&
+      account_id_.GetAccountType() == AccountType::GOOGLE &&
+      !account_id_.GetGaiaId().empty()) {
+    std::string expected = account_id_.GetGaiaId();
+    std::string actual = policy_data_->gaia_id();
 
-  if (expected != actual) {
-    LOG(ERROR) << "Invalid user name " << policy_data_->username();
-    return VALIDATION_BAD_USERNAME;
+    if (expected != actual) {
+      LOG(ERROR) << "Invalid gaia id: " << actual;
+      UMA_HISTOGRAM_ENUMERATION(kMetricPolicyUserVerification,
+                                MetricPolicyUserVerification::kGaiaIdFailed);
+      return VALIDATION_BAD_USER;
+    }
+    UMA_HISTOGRAM_ENUMERATION(kMetricPolicyUserVerification,
+                              MetricPolicyUserVerification::kGaiaIdSucceeded);
+  } else {
+    std::string expected = account_id_.GetUserEmail();
+    std::string actual = policy_data_->username();
+    if (canonicalize_user_) {
+      expected = gaia::CanonicalizeEmail(gaia::SanitizeEmail(expected));
+      actual = gaia::CanonicalizeEmail(gaia::SanitizeEmail(actual));
+    }
+
+    if (expected != actual) {
+      LOG(ERROR) << "Invalid user name " << policy_data_->username();
+      UMA_HISTOGRAM_ENUMERATION(kMetricPolicyUserVerification,
+                                MetricPolicyUserVerification::kUsernameFailed);
+      return VALIDATION_BAD_USER;
+    }
+    if (account_id_.GetAccountType() != AccountType::GOOGLE ||
+        account_id_.GetGaiaId().empty()) {
+      UMA_HISTOGRAM_ENUMERATION(
+          kMetricPolicyUserVerification,
+          MetricPolicyUserVerification::kUsernameSucceeded);
+    } else {
+      UMA_HISTOGRAM_ENUMERATION(
+          kMetricPolicyUserVerification,
+          MetricPolicyUserVerification::kGaiaIdMissingUsernameSucceeded);
+    }
   }
 
   return VALIDATION_OK;
@@ -483,23 +539,12 @@ CloudPolicyValidatorBase::Status CloudPolicyValidatorBase::CheckDomain() {
   std::string policy_domain = ExtractDomainFromPolicy();
   if (policy_domain.empty()) {
     LOG(ERROR) << "Policy is missing user name";
-    return VALIDATION_BAD_USERNAME;
+    return VALIDATION_BAD_USER;
   }
 
   if (domain_ != policy_domain) {
     LOG(ERROR) << "Invalid user name " << policy_data_->username();
-    return VALIDATION_BAD_USERNAME;
-  }
-
-  return VALIDATION_OK;
-}
-
-CloudPolicyValidatorBase::Status CloudPolicyValidatorBase::CheckPayload() {
-  if (!policy_data_->has_policy_value() ||
-      !payload_->ParseFromString(policy_data_->policy_value()) ||
-      !payload_->IsInitialized()) {
-    LOG(ERROR) << "Failed to decode policy payload protobuf";
-    return VALIDATION_POLICY_PARSE_ERROR;
+    return VALIDATION_BAD_USER;
   }
 
   return VALIDATION_OK;
@@ -524,15 +569,13 @@ bool CloudPolicyValidatorBase::VerifySignature(const std::string& data,
       return false;
   }
 
-  if (!verifier.VerifyInit(
-          algorithm, reinterpret_cast<const uint8_t*>(signature.c_str()),
-          signature.size(), reinterpret_cast<const uint8_t*>(key.c_str()),
-          key.size())) {
+  if (!verifier.VerifyInit(algorithm,
+                           base::as_bytes(base::make_span(signature)),
+                           base::as_bytes(base::make_span(key)))) {
     DLOG(ERROR) << "Invalid verification signature/key format";
     return false;
   }
-  verifier.VerifyUpdate(reinterpret_cast<const uint8_t*>(data.c_str()),
-                        data.size());
+  verifier.VerifyUpdate(base::as_bytes(base::make_span(data)));
   return verifier.VerifyFinal();
 }
 

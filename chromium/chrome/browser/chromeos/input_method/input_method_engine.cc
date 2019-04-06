@@ -24,6 +24,7 @@
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/text_input_flags.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/chromeos/ime/input_method_menu_item.h"
 #include "ui/chromeos/ime/input_method_menu_manager.h"
 #include "ui/events/event.h"
@@ -31,7 +32,6 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
-#include "ui/keyboard/content/keyboard_content_util.h"
 #include "ui/keyboard/keyboard_controller.h"
 
 using input_method::InputMethodEngineBase;
@@ -216,23 +216,27 @@ bool InputMethodEngine::IsActive() const {
 }
 
 void InputMethodEngine::HideInputView() {
-  keyboard::KeyboardController* keyboard_controller =
-      keyboard::KeyboardController::GetInstance();
-  if (keyboard_controller) {
-    keyboard_controller->HideKeyboard(
-        keyboard::KeyboardController::HIDE_REASON_MANUAL);
+  // TODO(mash): Support virtual keyboard under MASH. There is no
+  // KeyboardController in the browser process under MASH.
+  if (features::IsAshInBrowserProcess()) {
+    auto* keyboard_controller = keyboard::KeyboardController::Get();
+    if (keyboard_controller->enabled()) {
+      keyboard_controller->HideKeyboardByUser();
+    }
   }
 }
 
 void InputMethodEngine::EnableInputView() {
-  keyboard::SetOverrideContentUrl(input_method::InputMethodManager::Get()
-                                      ->GetActiveIMEState()
-                                      ->GetCurrentInputMethod()
-                                      .input_view_url());
-  keyboard::KeyboardController* keyboard_controller =
-      keyboard::KeyboardController::GetInstance();
-  if (keyboard_controller)
-    keyboard_controller->Reload();
+  input_method::InputMethodManager::Get()
+      ->GetActiveIMEState()
+      ->EnableInputView();
+  // TODO(mash): Support virtual keyboard under MASH. There is no
+  // KeyboardController in the browser process under MASH.
+  if (features::IsAshInBrowserProcess()) {
+    auto* keyboard_controller = keyboard::KeyboardController::Get();
+    if (keyboard_controller->enabled())
+      keyboard_controller->Reload();
+  }
 }
 
 

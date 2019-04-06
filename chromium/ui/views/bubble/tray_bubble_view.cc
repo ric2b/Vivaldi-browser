@@ -150,7 +150,8 @@ TrayBubbleView::InitParams::InitParams(const InitParams& other) = default;
 TrayBubbleView::RerouteEventHandler::RerouteEventHandler(
     TrayBubbleView* tray_bubble_view)
     : tray_bubble_view_(tray_bubble_view) {
-  aura::Env::GetInstance()->PrependPreTargetHandler(this);
+  aura::Env::GetInstance()->AddPreTargetHandler(
+      this, ui::EventTarget::Priority::kSystem);
 }
 
 TrayBubbleView::RerouteEventHandler::~RerouteEventHandler() {
@@ -210,7 +211,8 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
       preferred_width_(init_params.min_width),
       bubble_border_(new BubbleBorder(
           arrow(),
-          BubbleBorder::NO_ASSETS,
+          init_params.has_shadow ? BubbleBorder::NO_ASSETS
+                                 : BubbleBorder::NO_SHADOW,
           init_params.bg_color.value_or(gfx::kPlaceholderColor))),
       owned_bubble_border_(bubble_border_),
       is_gesture_dragging_(false),
@@ -221,6 +223,8 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
   bubble_border_->set_use_theme_background_color(!init_params.bg_color);
   bubble_border_->set_alignment(BubbleBorder::ALIGN_EDGE_TO_ANCHOR_EDGE);
   bubble_border_->set_paint_arrow(BubbleBorder::PAINT_NONE);
+  if (init_params.corner_radius)
+    bubble_border_->SetCornerRadius(init_params.corner_radius.value());
   set_parent_window(params_.parent_window);
   set_can_activate(false);
   set_notify_enter_exit_on_child(true);
@@ -270,7 +274,6 @@ void TrayBubbleView::InitializeAndShowBubble() {
 void TrayBubbleView::UpdateBubble() {
   if (GetWidget()) {
     SizeToContents();
-    bubble_content_mask_->layer()->SetBounds(GetBubbleBounds());
     GetWidget()->GetRootView()->SchedulePaint();
 
     // When extra keyboard accessibility is enabled, focus the default item if
@@ -309,20 +312,33 @@ void TrayBubbleView::ResetDelegate() {
   delegate_ = nullptr;
 }
 
+void TrayBubbleView::ChangeAnchorView(views::View* anchor_view) {
+  BubbleDialogDelegateView::SetAnchorView(anchor_view);
+}
+
 int TrayBubbleView::GetDialogButtons() const {
   return ui::DIALOG_BUTTON_NONE;
 }
 
+ax::mojom::Role TrayBubbleView::GetAccessibleWindowRole() const {
+  // We override the role because the base class sets it to alert dialog.
+  // This would make screen readers announce the whole of the system tray
+  // which is undesirable.
+  return ax::mojom::Role::kDialog;
+}
+
 void TrayBubbleView::SizeToContents() {
   BubbleDialogDelegateView::SizeToContents();
-  bubble_content_mask_->layer()->SetBounds(GetBubbleBounds());
+  bubble_content_mask_->layer()->SetBounds(layer()->parent()->bounds());
 }
 
 void TrayBubbleView::OnBeforeBubbleWidgetInit(Widget::InitParams* params,
                                               Widget* bubble_widget) const {
-  // Apply a WM-provided shadow (see ui/wm/core/).
-  params->shadow_type = Widget::InitParams::SHADOW_TYPE_DROP;
-  params->shadow_elevation = wm::ShadowElevation::LARGE;
+  if (bubble_border_->shadow() == BubbleBorder::NO_ASSETS) {
+    // Apply a WM-provided shadow (see ui/wm/core/).
+    params->shadow_type = Widget::InitParams::SHADOW_TYPE_DROP;
+    params->shadow_elevation = wm::kShadowElevationActiveWindow;
+  }
 }
 
 void TrayBubbleView::OnWidgetClosing(Widget* widget) {
@@ -332,7 +348,8 @@ void TrayBubbleView::OnWidgetClosing(Widget* widget) {
 
   BubbleDialogDelegateView::OnWidgetClosing(widget);
   --g_current_tray_bubble_showing_count_;
-  DCHECK_GE(g_current_tray_bubble_showing_count_, 0);
+  DCHECK_GE(g_current_tray_bubble_showing_count_, 0)
+      << "Closing " << widget->GetName();
 }
 
 void TrayBubbleView::OnWidgetActivationChanged(Widget* widget, bool active) {
@@ -360,17 +377,15 @@ void TrayBubbleView::GetWidgetHitTestMask(gfx::Path* mask) const {
 }
 
 base::string16 TrayBubbleView::GetAccessibleWindowTitle() const {
-  return delegate_->GetAccessibleNameForBubble();
+  if (delegate_)
+    return delegate_->GetAccessibleNameForBubble();
+  else
+    return base::string16();
 }
 
 gfx::Size TrayBubbleView::CalculatePreferredSize() const {
+  DCHECK_LE(preferred_width_, params_.max_width);
   return gfx::Size(preferred_width_, GetHeightForWidth(preferred_width_));
-}
-
-gfx::Size TrayBubbleView::GetMaximumSize() const {
-  gfx::Size size = GetPreferredSize();
-  size.set_width(params_.max_width);
-  return size;
 }
 
 int TrayBubbleView::GetHeightForWidth(int width) const {
@@ -421,7 +436,7 @@ void TrayBubbleView::OnMouseExited(const ui::MouseEvent& event) {
 
 void TrayBubbleView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   if (delegate_ && CanActivate()) {
-    node_data->role = ui::AX_ROLE_WINDOW;
+    node_data->role = ax::mojom::Role::kWindow;
     node_data->SetName(delegate_->GetAccessibleNameForBubble());
   }
 }
@@ -438,7 +453,8 @@ void TrayBubbleView::MouseMovedOutOfHost() {
   // The mouse was accidentally over the bubble when it opened and the AutoClose
   // logic was not activated. Now that the user did move the mouse we tell the
   // delegate to disable AutoClose.
-  delegate_->OnMouseEnteredView();
+  if (delegate_)
+    delegate_->OnMouseEnteredView();
   mouse_actively_entered_ = true;
   mouse_watcher_->Stop();
 }

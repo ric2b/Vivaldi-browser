@@ -17,6 +17,7 @@
 
 class AutocompleteInput;
 class AutocompleteProvider;
+class AutocompleteProviderClient;
 class TemplateURLService;
 
 // All matches from all providers for a particular query.  This also tracks
@@ -53,6 +54,13 @@ class AutocompleteResult {
   // suggestions.
   void SortAndCull(const AutocompleteInput& input,
                    TemplateURLService* template_url_service);
+
+  // Sets |has_tab_match| in matches whose URL matches an open tab's URL.
+  // Also, fixes up the description if not using another UI element to
+  // annotate (e.g. tab switch button). |input| can be null; if provided,
+  // the match can be more precise (e.g. scheme presence).
+  void ConvertOpenTabMatches(AutocompleteProviderClient* client,
+                             const AutocompleteInput* input);
 
   // Returns true if at least one match was copied from the last result.
   bool HasCopiedMatches() const;
@@ -92,10 +100,10 @@ class AutocompleteResult {
   // operator=() by another name.
   void CopyFrom(const AutocompleteResult& rhs);
 
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
   // Does a data integrity check on this result.
   void Validate() const;
-#endif
+#endif  // DCHECK_IS_ON()
 
   // Compute the "alternate navigation URL" for a given match. This is obtained
   // by interpreting the user input directly as a URL. See comments on
@@ -115,8 +123,13 @@ class AutocompleteResult {
   // Prepend missing tail suggestion prefixes in results, if present.
   void InlineTailPrefixes();
 
+  // Estimates dynamic memory usage.
+  // See base/trace_event/memory_usage_estimator.h for more info.
+  size_t EstimateMemoryUsage() const;
+
  private:
   friend class AutocompleteProviderTest;
+  FRIEND_TEST_ALL_PREFIXES(AutocompleteResultTest, ConvertsOpenTabsCorrectly);
 
   typedef std::map<AutocompleteProvider*, ACMatches> ProviderToMatches;
 

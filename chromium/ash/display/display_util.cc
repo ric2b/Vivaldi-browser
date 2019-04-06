@@ -30,9 +30,9 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notification_delegate.h"
 #include "ui/message_center/notification_list.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_delegate.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
 namespace ash {
@@ -40,27 +40,6 @@ namespace {
 
 const char kDisplayErrorNotificationId[] = "chrome://settings/display/error";
 const char kNotifierDisplayError[] = "ash.display.error";
-
-// A notification delegate that will start the feedback app when the notication
-// is clicked.
-class DisplayErrorNotificationDelegate
-    : public message_center::NotificationDelegate {
- public:
-  DisplayErrorNotificationDelegate() = default;
-
-  // message_center::NotificationDelegate:
-  void ButtonClick(int index) override {
-    DCHECK_EQ(0, index);
-    Shell::Get()->new_window_controller()->OpenFeedbackPage();
-  }
-
- private:
-  // Private destructor since NotificationDelegate is ref-counted.
-  ~DisplayErrorNotificationDelegate() override = default;
-
-  DISALLOW_COPY_AND_ASSIGN(DisplayErrorNotificationDelegate);
-};
-
 
 void ConvertPointFromScreenToNative(aura::WindowTreeHost* host,
                                     gfx::Point* point) {
@@ -154,7 +133,7 @@ void MoveCursorTo(AshWindowTreeHost* ash_host,
       Shell::GetPrimaryRootWindow()->GetHost()->ConvertScreenInPixelsToDIP(
           &new_point_in_screen);
     }
-    aura::Env::GetInstance()->set_last_mouse_location(new_point_in_screen);
+    aura::Env::GetInstance()->SetLastMouseLocation(new_point_in_screen);
   }
 }
 
@@ -182,7 +161,12 @@ void ShowDisplayErrorNotification(const base::string16& message,
           message_center::NotifierId(
               message_center::NotifierId::SYSTEM_COMPONENT,
               kNotifierDisplayError),
-          data, new DisplayErrorNotificationDelegate,
+          data,
+          base::MakeRefCounted<message_center::HandleNotificationClickDelegate>(
+              base::BindRepeating([](base::Optional<int> button_index) {
+                if (button_index)
+                  Shell::Get()->new_window_controller()->OpenFeedbackPage();
+              })),
           kNotificationMonitorWarningIcon,
           message_center::SystemNotificationWarningLevel::WARNING);
   notification->set_priority(message_center::SYSTEM_PRIORITY);

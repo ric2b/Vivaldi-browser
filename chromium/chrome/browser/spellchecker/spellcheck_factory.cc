@@ -4,7 +4,6 @@
 
 #include "chrome/browser/spellchecker/spellcheck_factory.h"
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/spellchecker/spellcheck_service.h"
 #include "chrome/grit/locale_settings.h"
@@ -69,9 +68,9 @@ KeyedService* SpellcheckServiceFactory::BuildServiceInstanceFor(
 void SpellcheckServiceFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* user_prefs) {
   user_prefs->RegisterListPref(spellcheck::prefs::kSpellCheckDictionaries,
-                               base::MakeUnique<base::ListValue>());
+                               std::make_unique<base::ListValue>());
   user_prefs->RegisterListPref(spellcheck::prefs::kSpellCheckForcedDictionaries,
-                               base::MakeUnique<base::ListValue>());
+                               std::make_unique<base::ListValue>());
   // Continue registering kSpellCheckDictionary for preference migration.
   // TODO(estade): remove: crbug.com/751275
   user_prefs->RegisterStringPref(

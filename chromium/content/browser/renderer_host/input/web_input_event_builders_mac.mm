@@ -37,8 +37,10 @@
 
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/strings/string_util.h"
-#include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "base/time/time.h"
+#include "third_party/blink/public/platform/web_input_event.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/blink/blink_event_util.h"
 #import "ui/events/cocoa/cocoa_event_utils.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
@@ -217,10 +219,10 @@ blink::WebKeyboardEvent WebKeyboardEventBuilder::Build(NSEvent* event) {
   if (([event type] != NSFlagsChanged) && [event isARepeat])
     modifiers |= blink::WebInputEvent::kIsAutoRepeat;
 
-  blink::WebKeyboardEvent result(ui::IsKeyUpEvent(event)
-                                     ? blink::WebInputEvent::kKeyUp
-                                     : blink::WebInputEvent::kRawKeyDown,
-                                 modifiers, [event timestamp]);
+  blink::WebKeyboardEvent result(
+      ui::IsKeyUpEvent(event) ? blink::WebInputEvent::kKeyUp
+                              : blink::WebInputEvent::kRawKeyDown,
+      modifiers, ui::EventTimeStampFromSeconds([event timestamp]));
   result.windows_key_code =
       ui::LocatedToNonLocatedKeyboardCode(ui::KeyboardCodeFromNSEvent(event));
   result.native_key_code = [event keyCode];
@@ -330,7 +332,8 @@ blink::WebMouseEvent WebMouseEventBuilder::Build(
   // NSMouseExited and NSMouseEntered events don't have deviceID.
   // Therefore pen exit and enter events can't get correct id.
   blink::WebMouseEvent result(event_type, ModifiersFromEvent(event),
-                              [event timestamp], 0);
+                              ui::EventTimeStampFromSeconds([event timestamp]),
+                              0);
   result.click_count = click_count;
   result.button = button;
   SetWebEventLocationFromEventInView(&result, event, view);
@@ -372,9 +375,9 @@ blink::WebMouseEvent WebMouseEventBuilder::Build(
 blink::WebMouseWheelEvent WebMouseWheelEventBuilder::Build(
     NSEvent* event,
     NSView* view) {
-  blink::WebMouseWheelEvent result(blink::WebInputEvent::kMouseWheel,
-                                   ModifiersFromEvent(event),
-                                   [event timestamp]);
+  blink::WebMouseWheelEvent result(
+      blink::WebInputEvent::kMouseWheel, ModifiersFromEvent(event),
+      ui::EventTimeStampFromSeconds([event timestamp]));
   result.button = blink::WebMouseEvent::Button::kNoButton;
 
   SetWebEventLocationFromEventInView(&result, event, view);
@@ -523,19 +526,22 @@ blink::WebGestureEvent WebGestureEventBuilder::Build(NSEvent* event,
   blink::WebMouseEvent temp;
 
   SetWebEventLocationFromEventInView(&temp, event, view);
-  result.x = temp.PositionInWidget().x;
-  result.y = temp.PositionInWidget().y;
-  result.global_x = temp.PositionInScreen().x;
-  result.global_y = temp.PositionInScreen().y;
+  result.SetPositionInWidget(temp.PositionInWidget());
+  result.SetPositionInScreen(temp.PositionInScreen());
 
   result.SetModifiers(ModifiersFromEvent(event));
-  result.SetTimeStampSeconds([event timestamp]);
+  result.SetTimeStamp(ui::EventTimeStampFromSeconds([event timestamp]));
 
-  result.source_device = blink::kWebGestureDeviceTouchpad;
+  result.SetSourceDevice(blink::kWebGestureDeviceTouchpad);
+
   switch ([event type]) {
     case NSEventTypeMagnify:
+      // We don't need to set the type based on |[event phase]| as the caller
+      // must set the begin and end types in order to support older Mac
+      // versions.
       result.SetType(blink::WebInputEvent::kGesturePinchUpdate);
       result.data.pinch_update.scale = [event magnification] + 1.0;
+      result.SetNeedsWheelEvent(true);
       break;
     case NSEventTypeSmartMagnify:
       // Map the Cocoa "double-tap with two fingers" zoom gesture to regular

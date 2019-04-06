@@ -25,6 +25,16 @@ struct TtsVoice {
   std::string gender;
   bool remote;
   std::set<std::string> event_types;
+};
+
+struct TtsVoices : public Extension::ManifestData {
+  TtsVoices();
+  ~TtsVoices() override;
+  static bool Parse(const base::ListValue* tts_voices,
+                    TtsVoices* out_voices,
+                    base::string16* error);
+
+  std::vector<extensions::TtsVoice> voices;
 
   static const std::vector<TtsVoice>* GetTtsVoices(const Extension* extension);
 };
@@ -38,7 +48,7 @@ class TtsEngineManifestHandler : public ManifestHandler {
   bool Parse(Extension* extension, base::string16* error) override;
 
  private:
-  const std::vector<std::string> Keys() const override;
+  base::span<const char* const> Keys() const override;
 
   DISALLOW_COPY_AND_ASSIGN(TtsEngineManifestHandler);
 };

@@ -120,16 +120,16 @@ const std::string& ComponentCloudPolicyStore::GetCachedHash(
   return it == cached_hashes_.end() ? base::EmptyString() : it->second;
 }
 
-void ComponentCloudPolicyStore::SetCredentials(const std::string& username,
+void ComponentCloudPolicyStore::SetCredentials(const AccountId& account_id,
                                                const std::string& dm_token,
                                                const std::string& device_id,
                                                const std::string& public_key,
                                                int public_key_version) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(username_.empty() || username == username_);
+  DCHECK(!account_id_.is_valid() || account_id == account_id_);
   DCHECK(dm_token_.empty() || dm_token == dm_token_);
   DCHECK(device_id_.empty() || device_id == device_id_);
-  username_ = username;
+  account_id_ = account_id;
   dm_token_ = dm_token;
   device_id_ = device_id;
   public_key_ = public_key;
@@ -261,8 +261,7 @@ void ComponentCloudPolicyStore::Purge(
   bool purged_current_policies = false;
   for (PolicyBundle::const_iterator it = policy_bundle_.begin();
        it != policy_bundle_.end(); ++it) {
-    if (it->first.domain == domain &&
-        filter.Run(it->first.component_id) &&
+    if (it->first.domain == domain && filter.Run(it->first.component_id) &&
         !policy_bundle_.Get(it->first).empty()) {
       policy_bundle_.Get(it->first).Clear();
       purged_current_policies = true;
@@ -321,7 +320,7 @@ bool ComponentCloudPolicyStore::ValidatePolicy(
     return false;
   }
 
-  if (username_.empty() || dm_token_.empty() || device_id_.empty() ||
+  if (!account_id_.is_valid() || dm_token_.empty() || device_id_.empty() ||
       public_key_.empty() || public_key_version_ == -1) {
     LOG(WARNING) << "Credentials are not loaded yet.";
     return false;
@@ -334,12 +333,11 @@ bool ComponentCloudPolicyStore::ValidatePolicy(
   if (stored_policy_times_iter != stored_policy_times_.end())
     time_not_before = stored_policy_times_iter->second;
 
-  std::unique_ptr<ComponentCloudPolicyValidator> validator(
-      ComponentCloudPolicyValidator::Create(
-          std::move(proto), scoped_refptr<base::SequencedTaskRunner>()));
+  auto validator = std::make_unique<ComponentCloudPolicyValidator>(
+      std::move(proto), scoped_refptr<base::SequencedTaskRunner>());
   validator->ValidateTimestamp(time_not_before,
                                CloudPolicyValidatorBase::TIMESTAMP_VALIDATED);
-  validator->ValidateUsername(username_, true);
+  validator->ValidateUser(account_id_);
   validator->ValidateDMToken(dm_token_,
                              ComponentCloudPolicyValidator::DM_TOKEN_REQUIRED);
   validator->ValidateDeviceId(device_id_,
@@ -388,10 +386,9 @@ bool ComponentCloudPolicyStore::ValidatePolicy(
   return true;
 }
 
-bool ComponentCloudPolicyStore::ValidateData(
-    const std::string& data,
-    const std::string& secure_hash,
-    PolicyMap* policy) {
+bool ComponentCloudPolicyStore::ValidateData(const std::string& data,
+                                             const std::string& secure_hash,
+                                             PolicyMap* policy) {
   if (crypto::SHA256HashString(data) != secure_hash) {
     LOG(ERROR) << "The received data doesn't match the expected hash.";
     return false;

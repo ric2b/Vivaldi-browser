@@ -11,12 +11,16 @@ namespace web {
 class NavigationItem;
 }
 
+// TODO(crbug.com/800266): Remove this protocol once Phase 1 is enabled.
 @protocol TabHistoryPopupCommands
 // Shows the tab history popup containing the tab's backward history.
 - (void)showTabHistoryPopupForBackwardHistory;
 
 // Shows the tab history popup containing the tab's forward history.
 - (void)showTabHistoryPopupForForwardHistory;
+
+// Dismiss the presented Tab History Popup.
+- (void)dismissHistoryPopup;
 
 // Navigate back/forward to the selected entry in the tab's history.
 - (void)navigateToHistoryItem:(const web::NavigationItem*)item;

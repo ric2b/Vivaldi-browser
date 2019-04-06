@@ -14,13 +14,66 @@
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/pref_names.h"
 
+#include "sync/vivaldi_prefs_names.h"
+
 namespace syncer {
+
+namespace {
+// Groups of prefs that always have the same value as a "master" pref.
+// For example, the APPS group has {APP_NOTIFICATIONS, APP_SETTINGS}
+// (as well as APPS, but that is implied), so
+//   pref_groups_[APPS] =       { APP_NOTIFICATIONS,
+//                                          APP_SETTINGS }
+//   pref_groups_[EXTENSIONS] = { EXTENSION_SETTINGS }
+// etc.
+using PrefGroupsMap = std::map<ModelType, ModelTypeSet>;
+PrefGroupsMap ComputePrefGroups(bool user_events_separate_pref_group) {
+  PrefGroupsMap pref_groups;
+  pref_groups[APPS].Put(APP_NOTIFICATIONS);
+  pref_groups[APPS].Put(APP_SETTINGS);
+  pref_groups[APPS].Put(APP_LIST);
+  pref_groups[APPS].Put(ARC_PACKAGE);
+  pref_groups[APPS].Put(READING_LIST);
+
+  pref_groups[AUTOFILL].Put(AUTOFILL_PROFILE);
+  pref_groups[AUTOFILL].Put(AUTOFILL_WALLET_DATA);
+  pref_groups[AUTOFILL].Put(AUTOFILL_WALLET_METADATA);
+
+  pref_groups[EXTENSIONS].Put(EXTENSION_SETTINGS);
+
+  pref_groups[PREFERENCES].Put(DICTIONARY);
+  pref_groups[PREFERENCES].Put(PRIORITY_PREFERENCES);
+  pref_groups[PREFERENCES].Put(SEARCH_ENGINES);
+
+  pref_groups[TYPED_URLS].Put(HISTORY_DELETE_DIRECTIVES);
+  pref_groups[TYPED_URLS].Put(SESSIONS);
+  pref_groups[TYPED_URLS].Put(FAVICON_IMAGES);
+  pref_groups[TYPED_URLS].Put(FAVICON_TRACKING);
+
+  if (!user_events_separate_pref_group) {
+    pref_groups[TYPED_URLS].Put(USER_EVENTS);
+  }
+
+  pref_groups[PROXY_TABS].Put(SESSIONS);
+  pref_groups[PROXY_TABS].Put(FAVICON_IMAGES);
+  pref_groups[PROXY_TABS].Put(FAVICON_TRACKING);
+
+  // TODO(zea): Put favicons in the bookmarks group as well once it handles
+  // those favicons.
+
+  return pref_groups;
+}
+
+}  // namespace
+
+SessionSyncPrefs::~SessionSyncPrefs() {}
+
+CryptoSyncPrefs::~CryptoSyncPrefs() {}
 
 SyncPrefObserver::~SyncPrefObserver() {}
 
 SyncPrefs::SyncPrefs(PrefService* pref_service) : pref_service_(pref_service) {
   DCHECK(pref_service);
-  RegisterPrefGroups();
   // Watch the preference that indicates sync is managed so we can take
   // appropriate action.
   pref_sync_managed_.Init(
@@ -46,6 +99,8 @@ void SyncPrefs::RegisterProfilePrefs(
   registry->RegisterInt64Pref(prefs::kSyncLastSyncedTime, 0);
   registry->RegisterInt64Pref(prefs::kSyncLastPollTime, 0);
   registry->RegisterInt64Pref(prefs::kSyncFirstSyncTime, 0);
+  registry->RegisterInt64Pref(prefs::kSyncShortPollIntervalSeconds, 0);
+  registry->RegisterInt64Pref(prefs::kSyncLongPollIntervalSeconds, 0);
 
   // All datatypes are on by default, but this gets set explicitly
   // when you configure sync (when turning it on), in
@@ -58,18 +113,13 @@ void SyncPrefs::RegisterProfilePrefs(
   // although they don't have sync representations.
   user_types.PutAll(ProxyTypes());
 
-  // Treat bookmarks and device info specially.
-  RegisterDataTypePreferredPref(registry, BOOKMARKS, true);
-  RegisterDataTypePreferredPref(registry, DEVICE_INFO, true);
-  user_types.Remove(BOOKMARKS);
-  user_types.Remove(DEVICE_INFO);
-
-  // All types are set to off by default, which forces a configuration to
-  // explicitly enable them. GetPreferredTypes() will ensure that any new
-  // implicit types are enabled when their pref group is, or via
-  // KeepEverythingSynced.
+  // All types except the always-preferred ones are set to off by default, which
+  // forces a configuration to explicitly enable them. GetPreferredTypes() will
+  // ensure that any new implicit types are enabled when their pref group is, or
+  // via KeepEverythingSynced.
   for (ModelTypeSet::Iterator it = user_types.First(); it.Good(); it.Inc()) {
-    RegisterDataTypePreferredPref(registry, it.Get(), false);
+    RegisterDataTypePreferredPref(registry, it.Get(),
+                                  AlwaysPreferredUserTypes().Has(it.Get()));
   }
 
   registry->RegisterBooleanPref(prefs::kSyncManaged, false);
@@ -110,6 +160,8 @@ void SyncPrefs::ClearPreferences() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   pref_service_->ClearPref(prefs::kSyncLastSyncedTime);
   pref_service_->ClearPref(prefs::kSyncLastPollTime);
+  pref_service_->ClearPref(prefs::kSyncShortPollIntervalSeconds);
+  pref_service_->ClearPref(prefs::kSyncLongPollIntervalSeconds);
   pref_service_->ClearPref(prefs::kSyncFirstSetupComplete);
   pref_service_->ClearPref(prefs::kSyncEncryptionBootstrapToken);
   pref_service_->ClearPref(prefs::kSyncKeystoreEncryptionBootstrapToken);
@@ -181,6 +233,30 @@ void SyncPrefs::SetLastPollTime(base::Time time) {
   pref_service_->SetInt64(prefs::kSyncLastPollTime, time.ToInternalValue());
 }
 
+base::TimeDelta SyncPrefs::GetShortPollInterval() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return base::TimeDelta::FromSeconds(
+      pref_service_->GetInt64(prefs::kSyncShortPollIntervalSeconds));
+}
+
+void SyncPrefs::SetShortPollInterval(base::TimeDelta interval) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  pref_service_->SetInt64(prefs::kSyncShortPollIntervalSeconds,
+                          interval.InSeconds());
+}
+
+base::TimeDelta SyncPrefs::GetLongPollInterval() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return base::TimeDelta::FromSeconds(
+      pref_service_->GetInt64(prefs::kSyncLongPollIntervalSeconds));
+}
+
+void SyncPrefs::SetLongPollInterval(base::TimeDelta interval) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  pref_service_->SetInt64(prefs::kSyncLongPollIntervalSeconds,
+                          interval.InSeconds());
+}
+
 bool SyncPrefs::HasKeepEverythingSynced() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return pref_service_->GetBoolean(prefs::kSyncKeepEverythingSynced);
@@ -193,7 +269,8 @@ void SyncPrefs::SetKeepEverythingSynced(bool keep_everything_synced) {
 }
 
 ModelTypeSet SyncPrefs::GetPreferredDataTypes(
-    ModelTypeSet registered_types) const {
+    ModelTypeSet registered_types,
+    bool user_events_separate_pref_group) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (pref_service_->GetBoolean(prefs::kSyncKeepEverythingSynced)) {
@@ -207,13 +284,16 @@ ModelTypeSet SyncPrefs::GetPreferredDataTypes(
       preferred_types.Put(it.Get());
     }
   }
-  return ResolvePrefGroups(registered_types, preferred_types);
+  return ResolvePrefGroups(registered_types, preferred_types,
+                           user_events_separate_pref_group);
 }
 
 void SyncPrefs::SetPreferredDataTypes(ModelTypeSet registered_types,
-                                      ModelTypeSet preferred_types) {
+                                      ModelTypeSet preferred_types,
+                                      bool user_events_separate_pref_group) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  preferred_types = ResolvePrefGroups(registered_types, preferred_types);
+  preferred_types = ResolvePrefGroups(registered_types, preferred_types,
+                                      user_events_separate_pref_group);
   DCHECK(registered_types.HasAll(preferred_types));
   for (ModelTypeSet::Iterator i = registered_types.First(); i.Good(); i.Inc()) {
     SetDataTypePreferred(i.Get(), preferred_types.Has(i.Get()));
@@ -311,9 +391,9 @@ const char* SyncPrefs::GetPrefNameForDataType(ModelType type) {
       return prefs::kSyncPriorityPreferences;
     case SUPERVISED_USER_SETTINGS:
       return prefs::kSyncSupervisedUserSettings;
-    case SUPERVISED_USERS:
+    case DEPRECATED_SUPERVISED_USERS:
       return prefs::kSyncSupervisedUsers;
-    case SUPERVISED_USER_SHARED_SETTINGS:
+    case DEPRECATED_SUPERVISED_USER_SHARED_SETTINGS:
       return prefs::kSyncSupervisedUserSharedSettings;
     case ARTICLES:
       return prefs::kSyncArticles;
@@ -333,6 +413,10 @@ const char* SyncPrefs::GetPrefNameForDataType(ModelType type) {
       return prefs::kSyncUserEvents;
     case PROXY_TABS:
       return prefs::kSyncTabs;
+    case MOUNTAIN_SHARES:
+      return prefs::kSyncMountainShares;
+    case USER_CONSENTS:
+      return prefs::kSyncUserConsents;
     case NIGORI:
     case EXPERIMENTS:
     case MODEL_TYPE_COUNT:
@@ -367,60 +451,22 @@ void SyncPrefs::SetManagedForTest(bool is_managed) {
   pref_service_->SetBoolean(prefs::kSyncManaged, is_managed);
 }
 
-void SyncPrefs::RegisterPrefGroups() {
-  pref_groups_[APPS].Put(APP_NOTIFICATIONS);
-  pref_groups_[APPS].Put(APP_SETTINGS);
-  pref_groups_[APPS].Put(APP_LIST);
-  pref_groups_[APPS].Put(ARC_PACKAGE);
-  pref_groups_[APPS].Put(READING_LIST);
-
-  pref_groups_[AUTOFILL].Put(AUTOFILL_PROFILE);
-  pref_groups_[AUTOFILL].Put(AUTOFILL_WALLET_DATA);
-  pref_groups_[AUTOFILL].Put(AUTOFILL_WALLET_METADATA);
-
-  pref_groups_[EXTENSIONS].Put(EXTENSION_SETTINGS);
-
-  pref_groups_[PREFERENCES].Put(DICTIONARY);
-  pref_groups_[PREFERENCES].Put(PRIORITY_PREFERENCES);
-  pref_groups_[PREFERENCES].Put(SEARCH_ENGINES);
-
-  pref_groups_[TYPED_URLS].Put(HISTORY_DELETE_DIRECTIVES);
-  pref_groups_[TYPED_URLS].Put(SESSIONS);
-  pref_groups_[TYPED_URLS].Put(FAVICON_IMAGES);
-  pref_groups_[TYPED_URLS].Put(FAVICON_TRACKING);
-  pref_groups_[TYPED_URLS].Put(USER_EVENTS);
-
-  pref_groups_[PROXY_TABS].Put(SESSIONS);
-  pref_groups_[PROXY_TABS].Put(FAVICON_IMAGES);
-  pref_groups_[PROXY_TABS].Put(FAVICON_TRACKING);
-
-  // TODO(zea): Put favicons in the bookmarks group as well once it handles
-  // those favicons.
-}
-
 // static
 void SyncPrefs::RegisterDataTypePreferredPref(
     user_prefs::PrefRegistrySyncable* registry,
     ModelType type,
     bool is_preferred) {
   const char* pref_name = GetPrefNameForDataType(type);
-  if (!pref_name) {
-    NOTREACHED();
-    return;
-  }
+  DCHECK(pref_name);
   registry->RegisterBooleanPref(pref_name, is_preferred);
 }
 
 bool SyncPrefs::GetDataTypePreferred(ModelType type) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   const char* pref_name = GetPrefNameForDataType(type);
-  if (!pref_name) {
-    NOTREACHED();
-    return false;
-  }
+  DCHECK(pref_name);
 
-  // Device info is always enabled.
-  if (pref_name == prefs::kSyncDeviceInfo)
+  if (AlwaysPreferredUserTypes().Has(type))
     return true;
 
   if (type == PROXY_TABS &&
@@ -437,25 +483,24 @@ bool SyncPrefs::GetDataTypePreferred(ModelType type) const {
 void SyncPrefs::SetDataTypePreferred(ModelType type, bool is_preferred) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   const char* pref_name = GetPrefNameForDataType(type);
-  if (!pref_name) {
-    NOTREACHED();
-    return;
-  }
+  DCHECK(pref_name);
 
-  // Device info is always preferred.
-  if (type == DEVICE_INFO)
+  if (AlwaysPreferredUserTypes().Has(type))
     return;
 
   pref_service_->SetBoolean(pref_name, is_preferred);
 }
 
-ModelTypeSet SyncPrefs::ResolvePrefGroups(ModelTypeSet registered_types,
-                                          ModelTypeSet types) const {
+ModelTypeSet SyncPrefs::ResolvePrefGroups(
+    ModelTypeSet registered_types,
+    ModelTypeSet types,
+    bool user_events_separate_pref_group) const {
   ModelTypeSet types_with_groups = types;
-  for (PrefGroupsMap::const_iterator i = pref_groups_.begin();
-       i != pref_groups_.end(); ++i) {
-    if (types.Has(i->first))
-      types_with_groups.PutAll(i->second);
+  for (const auto& pref_group :
+       ComputePrefGroups(user_events_separate_pref_group)) {
+    if (types.Has(pref_group.first)) {
+      types_with_groups.PutAll(pref_group.second);
+    }
   }
   types_with_groups.RetainAll(registered_types);
   return types_with_groups;

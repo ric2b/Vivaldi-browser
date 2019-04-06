@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/webui/log_web_ui_url.h"
 
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -17,12 +17,6 @@ TEST(LogWebUIUrlTest, ValidUrls) {
 
   // Developer tools scheme.
   EXPECT_TRUE(webui::LogWebUIUrl(GURL("chrome-devtools://devtools")));
-
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  // Bookmarks Manager (the only currently allowed extension).
-  EXPECT_TRUE(webui::LogWebUIUrl(GURL(
-      "chrome-extension://eemcgdkfndhakfknompkggombfjjjeno")));
-#endif
 }
 
 TEST(LogWebUIUrlTest, InvalidUrls) {
@@ -31,7 +25,7 @@ TEST(LogWebUIUrlTest, InvalidUrls) {
   EXPECT_FALSE(webui::LogWebUIUrl(GURL("https://facebook.com")));
   EXPECT_FALSE(webui::LogWebUIUrl(GURL("ftp://ftp.mysite.com")));
 
-  // Extensions other than the Bookmarks Manager should also be ignored.
+  // Extensions schemes should also be ignored.
   EXPECT_FALSE(webui::LogWebUIUrl(GURL(
       "chrome-extension://mfehgcgbbipciphmccgaenjidiccnmng")));
 }

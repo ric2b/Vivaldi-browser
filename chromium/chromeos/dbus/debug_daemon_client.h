@@ -107,9 +107,6 @@ class CHROMEOS_EXPORT DebugDaemonClient
   virtual void SetStopAgentTracingTaskRunner(
       scoped_refptr<base::TaskRunner> task_runner) = 0;
 
-  // Returns an empty StopAgentTracingCallback that does nothing.
-  static StopAgentTracingCallback EmptyStopAgentTracingCallback();
-
   // Called once TestICMP() is complete. Takes two parameters:
   // - succeeded: information was obtained successfully.
   // - status: information about ICMP connectivity to a specified host as json.
@@ -217,6 +214,21 @@ class CHROMEOS_EXPORT DebugDaemonClient
   virtual void CupsRemovePrinter(const std::string& name,
                                  const CupsRemovePrinterCallback& callback,
                                  const base::Closure& error_callback) = 0;
+
+  // A callback to handle the result of StartConcierge/StopConcierge.
+  using ConciergeCallback = base::OnceCallback<void(bool success)>;
+  // Calls debugd::kStartVmConcierge, which starts the Concierge service.
+  // |callback| is called when the method finishes.
+  virtual void StartConcierge(ConciergeCallback callback) = 0;
+  // Calls debugd::kStopVmConcierge, which stops the Concierge service.
+  // |callback| is called when the method finishes.
+  virtual void StopConcierge(ConciergeCallback callback) = 0;
+
+  // A callback to handle the result of SetRlzPingSent.
+  using SetRlzPingSentCallback = base::OnceCallback<void(bool success)>;
+  // Calls debugd::kSetRlzPingSent, which sets |should_send_rlz_ping| in RW_VPD
+  // to 0.
+  virtual void SetRlzPingSent(SetRlzPingSentCallback callback) = 0;
 
   // Factory function, creates a new instance and returns ownership.
   // For normal usage, access the singleton via DBusThreadManager::Get().

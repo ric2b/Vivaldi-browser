@@ -7,14 +7,13 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "services/device/battery/battery_status_manager.h"
 #include "services/device/battery/battery_status_service.h"
 #include "services/device/device_service_test_base.h"
-#include "services/device/public/interfaces/battery_monitor.mojom.h"
-#include "services/device/public/interfaces/constants.mojom.h"
+#include "services/device/public/mojom/battery_monitor.mojom.h"
+#include "services/device/public/mojom/constants.mojom.h"
 
 // These tests run against the implementation of the BatteryMonitor interface
 // inside Device Service, with a dummy BatteryManager set as a source of the

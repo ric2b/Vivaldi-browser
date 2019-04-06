@@ -55,7 +55,7 @@ class ExternalProcessImporterClient
   ExternalProcessImporterClient(
       base::WeakPtr<ExternalProcessImporterHost> importer_host,
       const importer::SourceProfile& source_profile,
-      const importer::ImportConfig &import_config,
+      uint16_t items,
       InProcessImporterBridge* bridge);
 
   // Launches the task to start the external process.
@@ -167,7 +167,7 @@ class ExternalProcessImporterClient
 
   // Data to be passed from the importer host to the external importer.
   importer::SourceProfile source_profile_;
-  const importer::ImportConfig &import_config_;
+  uint16_t items_;
 
   // Takes import data coming over IPC and delivers it to be written by the
   // ProfileWriter.

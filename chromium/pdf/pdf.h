@@ -5,8 +5,7 @@
 #ifndef PDF_PDF_H_
 #define PDF_PDF_H_
 
-#include "ppapi/c/ppb.h"
-#include "ppapi/cpp/module.h"
+#include "build/build_config.h"
 
 #if defined(OS_WIN)
 #include <windows.h>
@@ -19,21 +18,6 @@ typedef void (*PDFEnsureTypefaceCharactersAccessible)(const LOGFONT* font,
 #endif
 
 namespace chrome_pdf {
-
-class PDFModule : public pp::Module {
- public:
-  PDFModule();
-  ~PDFModule() override;
-
-  // pp::Module implementation.
-  bool Init() override;
-  pp::Instance* CreateInstance(PP_Instance instance) override;
-};
-
-int PPP_InitializeModule(PP_Module module_id,
-                         PPB_GetInterface get_browser_interface);
-void PPP_ShutdownModule();
-const void* PPP_GetInterface(const char* interface_name);
 
 #if defined(OS_WIN)
 // Printing modes - type to convert PDF to for printing
@@ -49,8 +33,7 @@ enum PrintingMode {
 // |buffer_size| is the size of |pdf_buffer| in bytes.
 // |page_number| is the 0-based index of the page to be rendered.
 // |dc| is the device context to render into.
-// |dpi| and |dpi_y| is the resolution. If the value is -1, the dpi from the DC
-//     will be used.
+// |dpi_x| and |dpi_y| is the resolution.
 // |bounds_origin_x|, |bounds_origin_y|, |bounds_width| and |bounds_height|
 //     specify a bounds rectangle within the DC in which to render the PDF
 //     page.
@@ -70,12 +53,14 @@ enum PrintingMode {
 //     done) should be centered within the given bounds.
 // |autorotate| specifies whether the final image should be rotated to match
 //     the output bound.
+// |use_color| specifies color or grayscale.
 // Returns false if the document or the page number are not valid.
 bool RenderPDFPageToDC(const void* pdf_buffer,
                        int buffer_size,
                        int page_number,
                        HDC dc,
-                       int dpi,
+                       int dpi_x,
+                       int dpi_y,
                        int bounds_origin_x,
                        int bounds_origin_y,
                        int bounds_width,
@@ -84,7 +69,8 @@ bool RenderPDFPageToDC(const void* pdf_buffer,
                        bool stretch_to_bounds,
                        bool keep_aspect_ratio,
                        bool center_in_bounds,
-                       bool autorotate);
+                       bool autorotate,
+                       bool use_color);
 
 void SetPDFEnsureTypefaceCharactersAccessible(
     PDFEnsureTypefaceCharactersAccessible func);
@@ -124,9 +110,10 @@ bool GetPDFPageSizeByIndex(const void* pdf_buffer,
 // |bitmap_buffer| is the output buffer for bitmap.
 // |bitmap_width| is the width of the output bitmap.
 // |bitmap_height| is the height of the output bitmap.
-// |dpi| is the resolutions.
+// |dpi_x| and |dpi_y| is the resolution.
 // |autorotate| specifies whether the final image should be rotated to match
 //     the output bound.
+// |use_color| specifies color or grayscale.
 // Returns false if the document or the page number are not valid.
 bool RenderPDFPageToBitmap(const void* pdf_buffer,
                            int pdf_buffer_size,
@@ -134,8 +121,10 @@ bool RenderPDFPageToBitmap(const void* pdf_buffer,
                            void* bitmap_buffer,
                            int bitmap_width,
                            int bitmap_height,
-                           int dpi,
-                           bool autorotate);
+                           int dpi_x,
+                           int dpi_y,
+                           bool autorotate,
+                           bool use_color);
 
 }  // namespace chrome_pdf
 

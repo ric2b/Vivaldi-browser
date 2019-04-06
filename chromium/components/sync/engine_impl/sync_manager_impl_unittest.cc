@@ -20,7 +20,6 @@
 #include "base/test/scoped_task_environment.h"
 #include "base/test/values_test_util.h"
 #include "base/values.h"
-#include "components/sync/base/attachment_id_proto.h"
 #include "components/sync/base/cancelation_signal.h"
 #include "components/sync/base/extensions_activity.h"
 #include "components/sync/base/fake_encryptor.h"
@@ -227,12 +226,8 @@ class SyncApiTest : public testing::Test {
   void TearDown() override { test_user_share_.TearDown(); }
 
  protected:
-  // Create an entry with the given |model_type|, |client_tag| and
-  // |attachment_metadata|.
-  void CreateEntryWithAttachmentMetadata(
-      const ModelType& model_type,
-      const std::string& client_tag,
-      const sync_pb::AttachmentMetadata& attachment_metadata);
+  // Create an entry with the given |model_type| and |client_tag|.
+  void CreateEntry(const ModelType& model_type, const std::string& client_tag);
 
   // Attempts to load the entry specified by |model_type| and |client_tag| and
   // returns the lookup result code.
@@ -278,17 +273,14 @@ bool SyncApiTest::ReloadDir() {
   return test_user_share_.Reload();
 }
 
-void SyncApiTest::CreateEntryWithAttachmentMetadata(
-    const ModelType& model_type,
-    const std::string& client_tag,
-    const sync_pb::AttachmentMetadata& attachment_metadata) {
+void SyncApiTest::CreateEntry(const ModelType& model_type,
+                              const std::string& client_tag) {
   WriteTransaction trans(FROM_HERE, user_share());
   ReadNode root_node(&trans);
   root_node.InitByRootLookup();
   WriteNode node(&trans);
   ASSERT_EQ(node.InitUniqueByCreation(model_type, root_node, client_tag),
             WriteNode::INIT_SUCCESS);
-  node.SetAttachmentMetadata(attachment_metadata);
 }
 
 BaseNode::InitByLookupResult SyncApiTest::LookupEntryByClientTag(
@@ -726,57 +718,6 @@ TEST_F(SyncApiTest, GetTotalNodeCountMultipleChildren) {
   EXPECT_EQ(4, GetTotalNodeCount(user_share(), parent));
 }
 
-// Verify that Directory keeps track of which attachments are referenced by
-// which entries.
-TEST_F(SyncApiTest, AttachmentLinking) {
-  // Add an entry with an attachment.
-  std::string tag1("some tag");
-  AttachmentId attachment_id(AttachmentId::Create(0, 0));
-  sync_pb::AttachmentMetadata attachment_metadata;
-  sync_pb::AttachmentMetadataRecord* record = attachment_metadata.add_record();
-  *record->mutable_id() = attachment_id.GetProto();
-  ASSERT_FALSE(dir()->IsAttachmentLinked(attachment_id.GetProto()));
-  CreateEntryWithAttachmentMetadata(PREFERENCES, tag1, attachment_metadata);
-
-  // See that the directory knows it's linked.
-  ASSERT_TRUE(dir()->IsAttachmentLinked(attachment_id.GetProto()));
-
-  // Add a second entry referencing the same attachment.
-  std::string tag2("some other tag");
-  CreateEntryWithAttachmentMetadata(PREFERENCES, tag2, attachment_metadata);
-
-  // See that the directory knows it's still linked.
-  ASSERT_TRUE(dir()->IsAttachmentLinked(attachment_id.GetProto()));
-
-  // Tombstone the first entry.
-  ReplaceWithTombstone(PREFERENCES, tag1);
-
-  // See that the attachment is still considered linked because the entry hasn't
-  // been purged from the Directory.
-  ASSERT_TRUE(dir()->IsAttachmentLinked(attachment_id.GetProto()));
-
-  // Save changes and see that the entry is truly gone.
-  ASSERT_TRUE(dir()->SaveChanges());
-  ASSERT_EQ(LookupEntryByClientTag(PREFERENCES, tag1),
-            WriteNode::INIT_FAILED_ENTRY_NOT_GOOD);
-
-  // However, the attachment is still linked.
-  ASSERT_TRUE(dir()->IsAttachmentLinked(attachment_id.GetProto()));
-
-  // Save, destroy, and recreate the directory.  See that it's still linked.
-  ASSERT_TRUE(ReloadDir());
-  ASSERT_TRUE(dir()->IsAttachmentLinked(attachment_id.GetProto()));
-
-  // Tombstone the second entry, save changes, see that it's truly gone.
-  ReplaceWithTombstone(PREFERENCES, tag2);
-  ASSERT_TRUE(dir()->SaveChanges());
-  ASSERT_EQ(LookupEntryByClientTag(PREFERENCES, tag2),
-            WriteNode::INIT_FAILED_ENTRY_NOT_GOOD);
-
-  // Finally, the attachment is no longer linked.
-  ASSERT_FALSE(dir()->IsAttachmentLinked(attachment_id.GetProto()));
-}
-
 // This tests directory integrity in the case of creating a new unique node
 // with client tag matching that of an existing unapplied node with server only
 // data. See crbug.com/505761.
@@ -980,7 +921,7 @@ class SyncManagerTest : public testing::Test,
     switches_.encryption_method = EngineComponentsFactory::ENCRYPTION_KEYSTORE;
   }
 
-  virtual ~SyncManagerTest() {}
+  ~SyncManagerTest() override {}
 
   virtual void DoSetUp(bool enable_local_sync_backend) {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
@@ -1028,6 +969,8 @@ class SyncManagerTest : public testing::Test,
     args.unrecoverable_error_handler =
         MakeWeakHandle(mock_unrecoverable_error_handler_.GetWeakPtr());
     args.cancelation_signal = &cancelation_signal_;
+    args.short_poll_interval = base::TimeDelta::FromMinutes(60);
+    args.long_poll_interval = base::TimeDelta::FromMinutes(120);
     sync_manager_.Init(&args);
 
     sync_manager_.GetEncryptionHandler()->AddObserver(&encryption_observer_);
@@ -1047,11 +990,11 @@ class SyncManagerTest : public testing::Test,
   }
 
   // Test implementation.
-  void SetUp() { DoSetUp(false); }
+  void SetUp() override { DoSetUp(false); }
 
-  void TearDown() {
+  void TearDown() override {
     sync_manager_.RemoveObserver(&manager_observer_);
-    sync_manager_.ShutdownOnSyncThread(STOP_SYNC);
+    sync_manager_.ShutdownOnSyncThread();
     PumpLoop();
   }
 
@@ -1178,7 +1121,7 @@ class SyncManagerTest : public testing::Test,
   }
 
   void SimulateInvalidatorEnabledForTest(bool is_enabled) {
-    DCHECK(sync_manager_.thread_checker_.CalledOnValidThread());
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sync_manager_.sequence_checker_);
     sync_manager_.SetInvalidatorEnabled(is_enabled);
   }
 
@@ -2699,7 +2642,7 @@ TEST_F(SyncManagerWithLocalBackendTest, StartSyncInLocalMode) {
 class MockSyncScheduler : public FakeSyncScheduler {
  public:
   MockSyncScheduler() : FakeSyncScheduler() {}
-  virtual ~MockSyncScheduler() {}
+  ~MockSyncScheduler() override {}
 
   MOCK_METHOD2(Start, void(SyncScheduler::Mode, base::Time));
   MOCK_METHOD1(ScheduleConfiguration, void(const ConfigurationParams&));
@@ -2769,7 +2712,7 @@ TEST_F(SyncManagerTestWithMockScheduler, BasicConfiguration) {
                  base::Unretained(&retry_task_counter)));
   EXPECT_EQ(0, ready_task_counter.times_called());
   EXPECT_EQ(0, retry_task_counter.times_called());
-  EXPECT_EQ(sync_pb::GetUpdatesCallerInfo::RECONFIGURATION, params.source);
+  EXPECT_EQ(sync_pb::SyncEnums::RECONFIGURATION, params.origin);
   EXPECT_EQ(types_to_download, params.types_to_download);
 }
 
@@ -3378,66 +3321,6 @@ TEST_F(SyncManagerChangeProcessingTest, DeletionsAndChanges) {
   // Deletes should appear before updates.
   EXPECT_LT(child_pos, folder_a_pos);
   EXPECT_LT(folder_b_pos, folder_a_pos);
-}
-
-// See that attachment metadata changes are not filtered out by
-// SyncManagerImpl::VisiblePropertiesDiffer.
-TEST_F(SyncManagerChangeProcessingTest, AttachmentMetadataOnlyChanges) {
-  // Create an article with no attachments.  See that a change is generated.
-  int64_t article_id = kInvalidId;
-  {
-    syncable::WriteTransaction trans(FROM_HERE, syncable::SYNCER,
-                                     share()->directory.get());
-    int64_t type_root = GetIdForDataType(ARTICLES);
-    syncable::Entry root(&trans, syncable::GET_BY_HANDLE, type_root);
-    ASSERT_TRUE(root.good());
-    syncable::MutableEntry article(&trans, syncable::CREATE, ARTICLES,
-                                   root.GetId(), "article");
-    ASSERT_TRUE(article.good());
-    SetNodeProperties(&article);
-    article_id = article.GetMetahandle();
-  }
-  ASSERT_EQ(1UL, GetChangeListSize());
-  FindChangeInList(article_id, ChangeRecord::ACTION_ADD);
-  ClearChangeList();
-
-  // Modify the article by adding one attachment.  Don't touch anything else.
-  // See that a change is generated.
-  {
-    syncable::WriteTransaction trans(FROM_HERE, syncable::SYNCER,
-                                     share()->directory.get());
-    syncable::MutableEntry article(&trans, syncable::GET_BY_HANDLE, article_id);
-    sync_pb::AttachmentMetadata metadata;
-    *metadata.add_record()->mutable_id() = CreateAttachmentIdProto(0, 0);
-    article.PutAttachmentMetadata(metadata);
-  }
-  ASSERT_EQ(1UL, GetChangeListSize());
-  FindChangeInList(article_id, ChangeRecord::ACTION_UPDATE);
-  ClearChangeList();
-
-  // Modify the article by replacing its attachment with a different one.  See
-  // that a change is generated.
-  {
-    syncable::WriteTransaction trans(FROM_HERE, syncable::SYNCER,
-                                     share()->directory.get());
-    syncable::MutableEntry article(&trans, syncable::GET_BY_HANDLE, article_id);
-    sync_pb::AttachmentMetadata metadata = article.GetAttachmentMetadata();
-    *metadata.add_record()->mutable_id() = CreateAttachmentIdProto(0, 0);
-    article.PutAttachmentMetadata(metadata);
-  }
-  ASSERT_EQ(1UL, GetChangeListSize());
-  FindChangeInList(article_id, ChangeRecord::ACTION_UPDATE);
-  ClearChangeList();
-
-  // Modify the article by replacing its attachment metadata with the same
-  // attachment metadata.  No change should be generated.
-  {
-    syncable::WriteTransaction trans(FROM_HERE, syncable::SYNCER,
-                                     share()->directory.get());
-    syncable::MutableEntry article(&trans, syncable::GET_BY_HANDLE, article_id);
-    article.PutAttachmentMetadata(article.GetAttachmentMetadata());
-  }
-  ASSERT_EQ(0UL, GetChangeListSize());
 }
 
 // During initialization SyncManagerImpl loads sqlite database. If it fails to

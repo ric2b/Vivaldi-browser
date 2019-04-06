@@ -10,11 +10,11 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "components/signin/core/account_id/account_id.h"
-
-class EasyUnlockTpmKeyManager;
+#include "components/account_id/account_id.h"
 
 namespace chromeos {
+
+class EasyUnlockTpmKeyManager;
 
 // Wraps a user challenge in a SecureMessage that can be verified by the remote
 // device, containing the signature by the TPM of some unique data from the

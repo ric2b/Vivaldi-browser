@@ -8,9 +8,9 @@
 #include <utility>
 
 #include "ash/new_window_controller.h"
+#include "ash/public/interfaces/constants.mojom.h"
+#include "ash/public/interfaces/wallpaper.mojom.h"
 #include "ash/shell.h"
-#include "ash/shell_delegate.h"
-#include "ash/wallpaper/wallpaper_controller.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
@@ -19,7 +19,10 @@
 #include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/audio/arc_audio_bridge.h"
+#include "components/arc/intent_helper/open_url_delegate.h"
 #include "components/url_formatter/url_fixer.h"
+#include "content/public/common/service_manager_connection.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/layout.h"
 #include "url/url_constants.h"
 
@@ -70,18 +73,9 @@ static_assert(arraysize(kMapping) ==
                   static_cast<size_t>(mojom::ChromePage::LAST) + 1,
               "kMapping is out of sync");
 
-class OpenUrlDelegateImpl : public ArcIntentHelperBridge::OpenUrlDelegate {
- public:
-  ~OpenUrlDelegateImpl() override = default;
-
-  // ArcIntentHelperBridge::OpenUrlDelegate:
-  void OpenUrl(const GURL& url) override {
-    // TODO(mash): Support this functionality without ash::Shell access in
-    // Chrome.
-    if (ash::Shell::HasInstance())
-      ash::Shell::Get()->shell_delegate()->OpenUrlFromArc(url);
-  }
-};
+// Not owned. Must outlive all ArcIntentHelperBridge instances. Typically this
+// is ChromeNewWindowClient in the browser.
+OpenUrlDelegate* g_open_url_delegate = nullptr;
 
 // Singleton factory for ArcIntentHelperBridge.
 class ArcIntentHelperBridgeFactory
@@ -129,11 +123,15 @@ std::string ArcIntentHelperBridge::AppendStringToIntentHelperPackageName(
   return base::JoinString({kArcIntentHelperPackageName, to_append}, ".");
 }
 
+// static
+void ArcIntentHelperBridge::SetOpenUrlDelegate(OpenUrlDelegate* delegate) {
+  g_open_url_delegate = delegate;
+}
+
 ArcIntentHelperBridge::ArcIntentHelperBridge(content::BrowserContext* context,
                                              ArcBridgeService* bridge_service)
     : context_(context),
       arc_bridge_service_(bridge_service),
-      open_url_delegate_(std::make_unique<OpenUrlDelegateImpl>()),
       allowed_chrome_pages_map_(std::cbegin(kMapping), std::cend(kMapping)),
       allowed_arc_schemes_(std::cbegin(kArcSchemes), std::cend(kArcSchemes)) {
   arc_bridge_service_->intent_helper()->SetHost(this);
@@ -168,7 +166,7 @@ void ArcIntentHelperBridge::OnOpenUrl(const std::string& url) {
     return;
 
   if (allowed_arc_schemes_.find(gurl.scheme()) != allowed_arc_schemes_.end())
-    open_url_delegate_->OpenUrl(gurl);
+    g_open_url_delegate->OpenUrlFromArc(gurl);
 }
 
 void ArcIntentHelperBridge::OnOpenChromePage(mojom::ChromePage page) {
@@ -181,17 +179,21 @@ void ArcIntentHelperBridge::OnOpenChromePage(mojom::ChromePage page) {
   }
 
   GURL page_gurl(it->second);
-  if (page_gurl.SchemeIs(url::kAboutScheme))
-    open_url_delegate_->OpenUrl(page_gurl);
-  else
-    open_url_delegate_->OpenUrl(GURL(kSettingsPageBaseUrl).Resolve(it->second));
+  if (page_gurl.SchemeIs(url::kAboutScheme)) {
+    g_open_url_delegate->OpenUrlFromArc(page_gurl);
+  } else {
+    g_open_url_delegate->OpenUrlFromArc(
+        GURL(kSettingsPageBaseUrl).Resolve(it->second));
+  }
 }
 
 void ArcIntentHelperBridge::OpenWallpaperPicker() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  // TODO(mash): Support this functionality without ash::Shell access in Chrome.
-  if (ash::Shell::HasInstance())
-    ash::Shell::Get()->wallpaper_controller()->OpenSetWallpaperPage();
+  ash::mojom::WallpaperControllerPtr wallpaper_controller_ptr;
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->BindInterface(ash::mojom::kServiceName, &wallpaper_controller_ptr);
+  wallpaper_controller_ptr->OpenWallpaperPickerIfAllowed();
 }
 
 void ArcIntentHelperBridge::SetWallpaperDeprecated(
@@ -267,11 +269,6 @@ void ArcIntentHelperBridge::OnIntentFiltersUpdated(
 
   for (auto& observer : observer_list_)
     observer.OnIntentFiltersUpdated();
-}
-
-void ArcIntentHelperBridge::SetOpenUrlDelegateForTesting(
-    std::unique_ptr<OpenUrlDelegate> open_url_delegate) {
-  open_url_delegate_ = std::move(open_url_delegate);
 }
 
 }  // namespace arc

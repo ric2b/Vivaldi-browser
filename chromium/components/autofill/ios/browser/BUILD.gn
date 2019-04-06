@@ -13,6 +13,8 @@ source_set("browser") {
     "autofill_driver_ios.h",
     "autofill_driver_ios.mm",
     "autofill_driver_ios_bridge.h",
+    "autofill_switches.cc",
+    "autofill_switches.h",
     "autofill_util.h",
     "autofill_util.mm",
     "credit_card_util.h",
@@ -33,9 +35,12 @@ source_set("browser") {
     "//base",
     "//components/autofill/core/browser",
     "//components/autofill/core/common",
+    "//components/autofill/ios/form_util",
     "//components/prefs:prefs",
+    "//components/prefs/ios",
     "//google_apis",
     "//ios/web",
+    "//services/network/public/cpp",
     "//ui/gfx/geometry",
   ]
 }
@@ -74,6 +79,7 @@ source_set("unit_tests") {
   deps = [
     ":browser",
     "//base",
+    "//base/test:test_support",
     "//components/autofill/core/browser:test_support",
     "//components/prefs",
     "//ios/web/public",

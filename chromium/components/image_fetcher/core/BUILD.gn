@@ -8,9 +8,9 @@ static_library("core") {
     "image_data_fetcher.h",
     "image_decoder.h",
     "image_fetcher.h",
-    "image_fetcher_delegate.h",
     "image_fetcher_impl.cc",
     "image_fetcher_impl.h",
+    "image_fetcher_types.h",
     "request_metadata.cc",
     "request_metadata.h",
   ]
@@ -19,8 +19,26 @@ static_library("core") {
     "//base",
     "//components/data_use_measurement/core",
     "//net",
+    "//services/network/public/cpp",
+    "//ui/gfx",
     "//ui/gfx/geometry",
     "//url",
+  ]
+}
+
+static_library("test_support") {
+  testonly = true
+  sources = [
+    "mock_image_decoder.cc",
+    "mock_image_decoder.h",
+    "mock_image_fetcher.cc",
+    "mock_image_fetcher.h",
+  ]
+
+  public_deps = [
+    ":core",
+    "//services/network:test_support",
+    "//testing/gmock",
   ]
 }
 
@@ -28,13 +46,16 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "image_data_fetcher_unittest.cc",
+    "image_fetcher_impl_unittest.cc",
     "request_metadata_unittest.cc",
   ]
   deps = [
     ":core",
+    ":test_support",
     "//net",
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//ui/gfx:test_support",
   ]
 }

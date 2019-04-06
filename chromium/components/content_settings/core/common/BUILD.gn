@@ -15,6 +15,10 @@ static_library("common") {
     "content_settings_types.h",
     "content_settings_utils.cc",
     "content_settings_utils.h",
+    "cookie_settings_base.cc",
+    "cookie_settings_base.h",
+    "features.cc",
+    "features.h",
     "pref_names.cc",
     "pref_names.h",
   ]
@@ -23,8 +27,7 @@ static_library("common") {
 
   deps = [
     "//base",
-    "//mojo/common:common_custom_types",
-    "//mojo/common:struct_traits",
+    "//mojo/public/cpp/base",
     "//mojo/public/cpp/bindings:struct_traits",
     "//net",
     "//url",
@@ -36,10 +39,12 @@ source_set("unit_tests") {
   sources = [
     "content_settings_pattern_parser_unittest.cc",
     "content_settings_pattern_unittest.cc",
+    "cookie_settings_base_unittest.cc",
   ]
 
   deps = [
     ":common",
+    "//base",
     "//net",
     "//testing/gmock",
     "//testing/gtest",
@@ -53,6 +58,6 @@ mojom("mojo_bindings") {
   ]
 
   public_deps = [
-    "//mojo/common:common_custom_types",
+    "//mojo/public/mojom/base",
   ]
 }

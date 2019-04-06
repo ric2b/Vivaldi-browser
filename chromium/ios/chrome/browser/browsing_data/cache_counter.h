@@ -5,30 +5,33 @@
 #ifndef IOS_CHROME_BROWSER_BROWSING_DATA_CACHE_COUNTER_H_
 #define IOS_CHROME_BROWSER_BROWSING_DATA_CACHE_COUNTER_H_
 
+#include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/browsing_data/core/counters/browsing_data_counter.h"
 
-namespace web {
-class BrowserState;
+namespace ios {
+class ChromeBrowserState;
 }
 
+// CacheCounter is a BrowsingDataCounter used to compute the cache size.
 class CacheCounter : public browsing_data::BrowsingDataCounter {
  public:
-  explicit CacheCounter(web::BrowserState* browser_state);
+  explicit CacheCounter(ios::ChromeBrowserState* browser_state);
   ~CacheCounter() override;
 
-  // BrowsingDataCounter implementation.
+  // browsing_data::BrowsingDataCounter implementation.
   const char* GetPrefName() const override;
-
- private:
-  // BrowsingDataCounter implementation.
   void Count() override;
 
-  void OnCacheSizeCalculated(int result_bytes);
+ private:
+  // Invoked when cache size has been computed.
+  void OnCacheSizeCalculated(int cache_size);
 
-  web::BrowserState* browser_state_;
+  ios::ChromeBrowserState* browser_state_;
 
   base::WeakPtrFactory<CacheCounter> weak_ptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(CacheCounter);
 };
 
 #endif  // IOS_CHROME_BROWSER_BROWSING_DATA_CACHE_COUNTER_H_

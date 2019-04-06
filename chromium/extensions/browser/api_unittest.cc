@@ -14,7 +14,6 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/test_browser_context.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/web_contents_tester.h"
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/browser/extension_function.h"
@@ -29,8 +28,7 @@ namespace utils = extensions::api_test_utils;
 
 namespace extensions {
 
-ApiUnitTest::ApiUnitTest()
-    : ExtensionsTest(std::make_unique<content::TestBrowserThreadBundle>()) {}
+ApiUnitTest::ApiUnitTest() {}
 
 ApiUnitTest::~ApiUnitTest() {}
 
@@ -39,13 +37,7 @@ void ApiUnitTest::SetUp() {
 
   user_prefs::UserPrefs::Set(browser_context(), &testing_pref_service_);
 
-  extension_ = ExtensionBuilder()
-                   .SetManifest(DictionaryBuilder()
-                                    .Set("name", "Test")
-                                    .Set("version", "1.0")
-                                    .Build())
-                   .SetLocation(Manifest::UNPACKED)
-                   .Build();
+  extension_ = ExtensionBuilder("Test").Build();
 }
 
 void ApiUnitTest::TearDown() {
@@ -59,10 +51,9 @@ void ApiUnitTest::CreateBackgroundPage() {
     GURL url = BackgroundInfo::GetBackgroundURL(extension());
     if (url.is_empty())
       url = GURL(url::kAboutBlankURL);
-    contents_.reset(
-        content::WebContents::Create(content::WebContents::CreateParams(
-            browser_context(),
-            content::SiteInstance::CreateForURL(browser_context(), url))));
+    contents_ = content::WebContents::Create(content::WebContents::CreateParams(
+        browser_context(),
+        content::SiteInstance::CreateForURL(browser_context(), url)));
   }
 }
 

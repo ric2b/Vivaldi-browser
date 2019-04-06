@@ -77,8 +77,7 @@ SourceReaderCallback::SourceReaderCallback(
 
 STDMETHODIMP SourceReaderCallback::QueryInterface(REFIID iid, void** ppv) {
   static const QITAB qit[] = {
-      QITABENT(SourceReaderCallback, IMFSourceReaderCallback),
-      {0},
+      QITABENT(SourceReaderCallback, IMFSourceReaderCallback), {0},
   };
   return QISearch(this, qit, iid, ppv);
 }
@@ -104,7 +103,8 @@ STDMETHODIMP SourceReaderCallback::OnReadSample(HRESULT status,
 
   if (FAILED(status)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ": Error";
-    on_read_sample_cb_.Run(MediaDataStatus::kMediaError, stream_index, sample);
+    on_read_sample_cb_.Run(MediaDataStatus::kMediaError, stream_index,
+                           sample);
     return S_OK;
   }
 
@@ -129,7 +129,8 @@ STDMETHODIMP SourceReaderCallback::OnReadSample(HRESULT status,
     // ignore it
     DCHECK(!(stream_flags & MF_SOURCE_READERF_STREAMTICK));
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ": Abort";
-    on_read_sample_cb_.Run(MediaDataStatus::kMediaError, stream_index, sample);
+    on_read_sample_cb_.Run(MediaDataStatus::kMediaError, stream_index,
+                           sample);
     return E_ABORT;
   }
 
@@ -190,7 +191,8 @@ WMFMediaPipeline::AudioTimestampCalculator::AudioTimestampCalculator()
       samples_per_second_(0),
       frame_sum_(0),
       frame_offset_(0),
-      must_recapture_position_(false) {}
+      must_recapture_position_(false) {
+}
 
 void WMFMediaPipeline::AudioTimestampCalculator::SetChannelCount(
     int channel_count) {
@@ -247,9 +249,7 @@ void WMFMediaPipeline::AudioTimestampCalculator::UpdateFrameCounter(
 WMFMediaPipeline::WMFMediaPipeline(
     DataSource* data_source,
     const AudioConfigChangedCB& audio_config_changed_cb,
-    const VideoConfigChangedCB& video_config_changed_cb,
-    PlatformMediaDecodingMode preferred_video_decoding_mode,
-    const MakeGLContextCurrentCB& make_gl_context_current_cb)
+    const VideoConfigChangedCB& video_config_changed_cb)
     : audio_config_changed_cb_(audio_config_changed_cb),
       video_config_changed_cb_(video_config_changed_cb),
       byte_stream_(new WMFByteStream(data_source)),
@@ -322,8 +322,7 @@ void WMFMediaPipeline::ReadAudioData(const ReadDataCB& read_audio_data_cb) {
                             PlatformMediaDataType::PLATFORM_MEDIA_AUDIO));
 }
 
-void WMFMediaPipeline::ReadVideoData(const ReadDataCB& read_video_data_cb,
-                                     uint32_t texture_id) {
+void WMFMediaPipeline::ReadVideoData(const ReadDataCB& read_video_data_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(read_video_data_cb_.is_null());
   read_video_data_cb_ = read_video_data_cb;
@@ -413,11 +412,12 @@ void WMFMediaPipeline::ThreadedImpl::Initialize(
 
   // We've already made this check in WebMediaPlayerImpl, but that's been in
   // a different process, so let's take its result with a grain of salt.
-  const bool has_platform_support =
-      IsPlatformMediaPipelineAvailable(PlatformMediaCheckType::FULL);
+  const bool has_platform_support = IsPlatformMediaPipelineAvailable(
+      PlatformMediaCheckType::FULL);
 
   get_stride_function_ = reinterpret_cast<decltype(get_stride_function_)>(
-      GetFunctionFromLibrary("MFGetStrideForBitmapInfoHeader", "evr.dll"));
+      GetFunctionFromLibrary("MFGetStrideForBitmapInfoHeader",
+                                    "evr.dll"));
 
   if (!has_platform_support || !get_stride_function_) {
     LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
@@ -618,6 +618,7 @@ void WMFMediaPipeline::ThreadedImpl::OnReadSample(
         break;
       }
       // Fallthrough.
+      FALLTHROUGH;
     }
 
     default:
@@ -649,7 +650,8 @@ WMFMediaPipeline::ThreadedImpl::CreateDataBufferFromMemory(IMFSample* sample) {
                << " Failed to lock buffer.";
     return nullptr;
   }
-  scoped_refptr<DataBuffer> data_buffer = DataBuffer::CopyFrom(data, data_size);
+  scoped_refptr<DataBuffer> data_buffer =
+      DataBuffer::CopyFrom(data, data_size);
 
   // Unlock the IMFMediaBuffer buffer.
   output_buffer->Unlock();
@@ -709,6 +711,16 @@ scoped_refptr<DataBuffer> WMFMediaPipeline::ThreadedImpl::CreateDataBuffer(
 void WMFMediaPipeline::ThreadedImpl::Seek(base::TimeDelta time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  // Seek requests on a streaming data source can confuse WMF.
+  // Chromium sometimes seeks to the beginning of a stream when starting up.
+  // Since that should be a no-op, we just pretend it succeeded.
+  if (data_source_->IsStreaming() && time == base::TimeDelta()) {
+    main_task_runner_->PostTask(
+        FROM_HERE, base::Bind(&WMFMediaPipeline::SeekDone, wmf_media_pipeline_,
+                              true));
+    return;
+  }
+
   AutoPropVariant position;
   // IMFSourceReader::SetCurrentPosition expects position in 100-nanosecond
   // units, so we have to multiply time in microseconds by 10.
@@ -732,7 +744,7 @@ bool WMFMediaPipeline::ThreadedImpl::HasMediaStream(
     PlatformMediaDataType type) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return stream_indices_[type] !=
-         static_cast<DWORD>(MF_SOURCE_READER_INVALID_STREAM_INDEX);
+      static_cast<DWORD>(MF_SOURCE_READER_INVALID_STREAM_INDEX);
 }
 
 void WMFMediaPipeline::ThreadedImpl::SetNoMediaStream(
@@ -834,32 +846,37 @@ bool WMFMediaPipeline::ThreadedImpl::GetVideoDecoderConfig(
   if (pan_scan_enabled) {
     hr = media_type->GetBlob(MF_MT_PAN_SCAN_APERTURE,
                              reinterpret_cast<uint8_t*>(&video_area),
-                             sizeof(MFVideoArea), NULL);
+                             sizeof(MFVideoArea),
+                             NULL);
     if (SUCCEEDED(hr)) {
       // MFOffset structure consists of the integer part and the fractional
       // part, but pixels are not divisible, so we ignore the fractional part.
-      video_config->visible_rect =
-          gfx::Rect(video_area.OffsetX.value, video_area.OffsetY.value,
-                    video_area.Area.cx, video_area.Area.cy);
+      video_config->visible_rect = gfx::Rect(video_area.OffsetX.value,
+                                             video_area.OffsetY.value,
+                                             video_area.Area.cx,
+                                             video_area.Area.cy);
     }
   }
 
   if (!pan_scan_enabled || FAILED(hr)) {
     hr = media_type->GetBlob(MF_MT_MINIMUM_DISPLAY_APERTURE,
                              reinterpret_cast<uint8_t*>(&video_area),
-                             sizeof(MFVideoArea), NULL);
+                             sizeof(MFVideoArea),
+                             NULL);
     if (FAILED(hr)) {
       hr = media_type->GetBlob(MF_MT_GEOMETRIC_APERTURE,
                                reinterpret_cast<uint8_t*>(&video_area),
-                               sizeof(MFVideoArea), NULL);
+                               sizeof(MFVideoArea),
+                               NULL);
     }
 
     if (SUCCEEDED(hr)) {
       // MFOffset structure consists of the integer part and the fractional
       // part, but pixels are not divisible, so we ignore the fractional part.
-      video_config->visible_rect =
-          gfx::Rect(video_area.OffsetX.value, video_area.OffsetY.value,
-                    video_area.Area.cx, video_area.Area.cy);
+      video_config->visible_rect = gfx::Rect(video_area.OffsetX.value,
+                                             video_area.OffsetY.value,
+                                             video_area.Area.cx,
+                                             video_area.Area.cy);
     } else {
       video_config->visible_rect = gfx::Rect(frame_width, frame_height);
     }
@@ -982,15 +999,11 @@ bool WMFMediaPipeline::ThreadedImpl::RetrieveStreamIndices() {
         if (major_type == MFMediaType_Audio &&
             stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO] ==
                 static_cast<DWORD>(MF_SOURCE_READER_INVALID_STREAM_INDEX)) {
-          stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO] =
-              stream_index;
+          stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO] = stream_index;
         } else if (major_type == MFMediaType_Video &&
-                   stream_indices_
-                           [PlatformMediaDataType::PLATFORM_MEDIA_VIDEO] ==
-                       static_cast<DWORD>(
-                           MF_SOURCE_READER_INVALID_STREAM_INDEX)) {
-          stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO] =
-              stream_index;
+                   stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO] ==
+                       static_cast<DWORD>(MF_SOURCE_READER_INVALID_STREAM_INDEX)) {
+          stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO] = stream_index;
         }
       }
     }
@@ -1005,12 +1018,9 @@ bool WMFMediaPipeline::ThreadedImpl::ConfigureStream(DWORD stream_index) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(source_reader_worker_.hasReader());
 
-  DCHECK(stream_index ==
-             stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO] ||
-         stream_index ==
-             stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO]);
-  bool is_video = stream_index ==
-                  stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO];
+  DCHECK(stream_index == stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_AUDIO] ||
+         stream_index == stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO]);
+  bool is_video = stream_index == stream_indices_[PlatformMediaDataType::PLATFORM_MEDIA_VIDEO];
 
   Microsoft::WRL::ComPtr<IMFMediaType> new_current_media_type;
   HRESULT hr = MFCreateMediaType(new_current_media_type.GetAddressOf());
@@ -1029,15 +1039,16 @@ bool WMFMediaPipeline::ThreadedImpl::ConfigureStream(DWORD stream_index) {
   }
 
   hr = new_current_media_type->SetGUID(
-      MF_MT_SUBTYPE, is_video ? MFVideoFormat_YV12 : MFAudioFormat_Float);
+      MF_MT_SUBTYPE,
+      is_video ? MFVideoFormat_YV12 : MFAudioFormat_Float);
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Failed to set media subtype.";
     return false;
   }
 
-  hr = source_reader_worker_.SetCurrentMediaType(stream_index,
-                                                 new_current_media_type);
+  hr = source_reader_worker_.SetCurrentMediaType(
+      stream_index, new_current_media_type);
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Failed to set media type. No "
@@ -1066,10 +1077,8 @@ bool WMFMediaPipeline::ThreadedImpl::ConfigureSourceReader() {
   DCHECK(source_reader_worker_.hasReader());
 
   static const PlatformMediaDataType media_types[] = {
-      PlatformMediaDataType::PLATFORM_MEDIA_AUDIO,
-      PlatformMediaDataType::PLATFORM_MEDIA_VIDEO};
-  static_assert(arraysize(media_types) ==
-                    PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT,
+      PlatformMediaDataType::PLATFORM_MEDIA_AUDIO, PlatformMediaDataType::PLATFORM_MEDIA_VIDEO};
+  static_assert(arraysize(media_types) == PlatformMediaDataType::PLATFORM_MEDIA_DATA_TYPE_COUNT,
                 "Not all media types chosen to be configured.");
 
   bool status = false;
@@ -1134,7 +1143,7 @@ int WMFMediaPipeline::ThreadedImpl::GetBitrate(base::TimeDelta duration) {
   if (bitrate == 0 && !data_source_->IsStreaming()) {
     // If we have a valid bitrate we can use it, otherwise we have to calculate
     // it from file size and duration.
-    hr = source_reader_worker_.GetFileSize(var);
+      hr = source_reader_worker_.GetFileSize(var);
     if (SUCCEEDED(hr) && duration.InMicroseconds() > 0) {
       int64_t file_size_in_bytes;
       hr = var.ToInt64(&file_size_in_bytes);
@@ -1172,7 +1181,8 @@ bool WMFMediaPipeline::ThreadedImpl::GetStride(int* stride) {
   }
 
   LONG stride_long = 0;
-  hr = get_stride_function_(MFVideoFormat_YV12.Data1, width, &stride_long);
+  hr = get_stride_function_(MFVideoFormat_YV12.Data1, width,
+                            &stride_long);
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Failed to obtain stride.";

@@ -9,12 +9,20 @@
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_scheduler/lazy_task_runner.h"
+#include "build/build_config.h"
 
 namespace base {
 
+namespace internal {
+class ScopedSetSequenceLocalStorageMapForCurrentThread;
+class SequenceLocalStorageMap;
+}  // namespace internal
+
+class FileDescriptorWatcher;
 class MessageLoop;
 class TaskScheduler;
 class TestMockTimeTaskRunner;
+class TickClock;
 
 namespace test {
 
@@ -68,7 +76,8 @@ class ScopedTaskEnvironment {
     MOCK_TIME,
     // The main thread pumps UI messages.
     UI,
-    // The main thread pumps asynchronous IO messages.
+    // The main thread pumps asynchronous IO messages and supports the
+    // FileDescriptorWatcher API on POSIX.
     IO,
   };
 
@@ -92,6 +101,9 @@ class ScopedTaskEnvironment {
   // Returns a TaskRunner that schedules tasks on the main thread.
   scoped_refptr<base::SingleThreadTaskRunner> GetMainThreadTaskRunner();
 
+  // Returns whether the main thread's TaskRunner has pending tasks.
+  bool MainThreadHasPendingTask() const;
+
   // Runs tasks until both the (Thread|Sequenced)TaskRunnerHandle and the
   // TaskScheduler's non-delayed queues are empty.
   void RunUntilIdle();
@@ -108,6 +120,20 @@ class ScopedTaskEnvironment {
   // Short for FastForwardBy(TimeDelta::Max()).
   void FastForwardUntilNoTasksRemain();
 
+  // Only valid for instances with a MOCK_TIME MainThreadType.  Returns a
+  // TickClock whose time is updated by FastForward(By|UntilNoTasksRemain).
+  const TickClock* GetMockTickClock();
+  std::unique_ptr<TickClock> DeprecatedGetMockTickClock();
+
+  // Only valid for instances with a MOCK_TIME MainThreadType.
+  // Returns the number of pending tasks of the main thread's TaskRunner.
+  size_t GetPendingMainThreadTaskCount() const;
+
+  // Only valid for instances with a MOCK_TIME MainThreadType.
+  // Returns the delay until the next delayed pending task of the main thread's
+  // TaskRunner.
+  TimeDelta NextMainThreadPendingTaskDelay() const;
+
  private:
   class TestTaskTracker;
 
@@ -119,6 +145,19 @@ class ScopedTaskEnvironment {
   // the backing implementation of each MainThreadType may change over time.
   const std::unique_ptr<MessageLoop> message_loop_;
   const scoped_refptr<TestMockTimeTaskRunner> mock_time_task_runner_;
+
+  // Non-null in MOCK_TIME, where an explicit SequenceLocalStorageMap needs to
+  // be provided. TODO(gab): This can be removed once mock time support is added
+  // to MessageLoop directly.
+  const std::unique_ptr<internal::SequenceLocalStorageMap> slsm_for_mock_time_;
+  const std::unique_ptr<
+      internal::ScopedSetSequenceLocalStorageMapForCurrentThread>
+      slsm_registration_for_mock_time_;
+
+#if defined(OS_POSIX)
+  // Enables the FileDescriptorWatcher API iff running a MainThreadType::IO.
+  const std::unique_ptr<FileDescriptorWatcher> file_descriptor_watcher_;
+#endif
 
   const TaskScheduler* task_scheduler_ = nullptr;
 

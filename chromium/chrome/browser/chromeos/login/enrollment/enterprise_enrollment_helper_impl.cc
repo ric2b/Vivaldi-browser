@@ -20,12 +20,14 @@
 #include "chrome/browser/chromeos/policy/enrollment_status_chromeos.h"
 #include "chrome/browser/chromeos/policy/policy_oauth2_token_fetcher.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
 #include "google_apis/gaia/gaia_constants.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace {
 
@@ -38,7 +40,8 @@ class TokenRevoker : public GaiaAuthConsumer {
   void Start(const std::string& token);
 
   // GaiaAuthConsumer:
-  void OnOAuth2RevokeTokenCompleted() override;
+  void OnOAuth2RevokeTokenCompleted(
+      GaiaAuthConsumer::TokenRevocationStatus status) override;
 
  private:
   GaiaAuthFetcher gaia_fetcher_;
@@ -49,7 +52,8 @@ class TokenRevoker : public GaiaAuthConsumer {
 TokenRevoker::TokenRevoker()
     : gaia_fetcher_(this,
                     GaiaConstants::kChromeOSSource,
-                    g_browser_process->system_request_context()) {}
+                    g_browser_process->system_network_context_manager()
+                        ->GetSharedURLLoaderFactory()) {}
 
 TokenRevoker::~TokenRevoker() {}
 
@@ -57,7 +61,8 @@ void TokenRevoker::Start(const std::string& token) {
   gaia_fetcher_.StartRevokeOAuth2Token(token);
 }
 
-void TokenRevoker::OnOAuth2RevokeTokenCompleted() {
+void TokenRevoker::OnOAuth2RevokeTokenCompleted(
+    GaiaAuthConsumer::TokenRevocationStatus status) {
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
 }
 
@@ -95,7 +100,9 @@ void EnterpriseEnrollmentHelperImpl::EnrollUsingAuthCode(
   oauth_status_ = OAUTH_STARTED_WITH_AUTH_CODE;
   oauth_fetcher_.reset(policy::PolicyOAuth2TokenFetcher::CreateInstance());
   oauth_fetcher_->StartWithAuthCode(
-      auth_code, g_browser_process->system_request_context(),
+      auth_code,
+      g_browser_process->system_network_context_manager()
+          ->GetSharedURLLoaderFactory(),
       base::Bind(&EnterpriseEnrollmentHelperImpl::OnTokenFetched,
                  weak_ptr_factory_.GetWeakPtr(),
                  fetch_additional_token /* is_additional_token */));
@@ -112,6 +119,12 @@ void EnterpriseEnrollmentHelperImpl::EnrollUsingToken(
 void EnterpriseEnrollmentHelperImpl::EnrollUsingAttestation() {
   CHECK(enrollment_config_.is_mode_attestation());
   DoEnroll("");  // The token is not used in attestation mode.
+}
+
+void EnterpriseEnrollmentHelperImpl::EnrollForOfflineDemo() {
+  CHECK_EQ(enrollment_config_.mode,
+           policy::EnrollmentConfig::MODE_OFFLINE_DEMO);
+  DoEnroll("");  // The token is not used in offline demo mode.
 }
 
 void EnterpriseEnrollmentHelperImpl::ClearAuth(const base::Closure& callback) {
@@ -140,9 +153,23 @@ void EnterpriseEnrollmentHelperImpl::ClearAuth(const base::Closure& callback) {
                  weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
+bool EnterpriseEnrollmentHelperImpl::ShouldCheckLicenseType() const {
+  // The license selection dialog is not used when doing Zero Touch or setting
+  // up offline demo-mode, or when forced to enroll by server.
+  if (enrollment_config_.is_mode_attestation() ||
+      enrollment_config_.mode == policy::EnrollmentConfig::MODE_SERVER_FORCED ||
+      enrollment_config_.mode == policy::EnrollmentConfig::MODE_OFFLINE_DEMO) {
+    return false;
+  }
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnterpriseDisableLicenseTypeSelection);
+}
+
 void EnterpriseEnrollmentHelperImpl::DoEnroll(const std::string& token) {
   DCHECK(token == oauth_token_ || oauth_token_.empty());
   DCHECK(enrollment_config_.is_mode_attestation() ||
+         enrollment_config_.mode ==
+             policy::EnrollmentConfig::MODE_OFFLINE_DEMO ||
          oauth_status_ == OAUTH_STARTED_WITH_AUTH_CODE ||
          oauth_status_ == OAUTH_STARTED_WITH_TOKEN);
   oauth_token_ = token;
@@ -160,13 +187,6 @@ void EnterpriseEnrollmentHelperImpl::DoEnroll(const std::string& token) {
     return;
   }
 
-  bool check_license_type = false;
-  // The license selection dialog is not used when doing Zero Touch.
-  if (!enrollment_config_.is_mode_attestation()) {
-    check_license_type = !base::CommandLine::ForCurrentProcess()->HasSwitch(
-        chromeos::switches::kEnterpriseDisableLicenseTypeSelection);
-  }
-
   connector->ScheduleServiceInitialization(0);
   policy::DeviceCloudPolicyInitializer* dcp_initializer =
       connector->GetDeviceCloudPolicyInitializer();
@@ -176,7 +196,7 @@ void EnterpriseEnrollmentHelperImpl::DoEnroll(const std::string& token) {
       enrollment_config_, token,
       base::Bind(&EnterpriseEnrollmentHelperImpl::OnEnrollmentFinished,
                  weak_ptr_factory_.GetWeakPtr()));
-  if (check_license_type) {
+  if (ShouldCheckLicenseType()) {
     dcp_initializer->CheckAvailableLicenses(
         base::Bind(&EnterpriseEnrollmentHelperImpl::OnLicenseMapObtained,
                    weak_ptr_factory_.GetWeakPtr()));
@@ -251,7 +271,9 @@ void EnterpriseEnrollmentHelperImpl::OnTokenFetched(
   std::string refresh_token = oauth_fetcher_->OAuth2RefreshToken();
   oauth_fetcher_.reset(policy::PolicyOAuth2TokenFetcher::CreateInstance());
   oauth_fetcher_->StartWithRefreshToken(
-      refresh_token, g_browser_process->system_request_context(),
+      refresh_token,
+      g_browser_process->system_network_context_manager()
+          ->GetSharedURLLoaderFactory(),
       base::Bind(&EnterpriseEnrollmentHelperImpl::OnTokenFetched,
                  weak_ptr_factory_.GetWeakPtr(),
                  false /* is_additional_token */));
@@ -479,6 +501,10 @@ void EnterpriseEnrollmentHelperImpl::ReportEnrollmentStatus(
       break;
     case policy::EnrollmentStatus::LICENSE_REQUEST_FAILED:
       UMA(policy::kMetricEnrollmentLicenseRequestFailed);
+      break;
+    case policy::EnrollmentStatus::OFFLINE_POLICY_LOAD_FAILED:
+    case policy::EnrollmentStatus::OFFLINE_POLICY_DECODING_FAILED:
+      UMA(policy::kMetricEnrollmentRegisterPolicyResponseInvalid);
       break;
   }
 }

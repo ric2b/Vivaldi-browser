@@ -9,9 +9,9 @@
 #include "base/callback.h"
 #include "components/nacl/renderer/nexe_load_manager.h"
 #include "net/base/net_errors.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
-#include "third_party/WebKit/public/platform/WebURLResponse.h"
-#include "third_party/WebKit/public/web/WebAssociatedURLLoader.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/platform/web_url_response.h"
+#include "third_party/blink/public/web/web_associated_url_loader.h"
 
 namespace nacl {
 
@@ -61,7 +61,7 @@ void FileDownloader::DidReceiveData(const char* data, int data_length) {
   }
 }
 
-void FileDownloader::DidFinishLoading(double finish_time) {
+void FileDownloader::DidFinishLoading() {
   if (status_ == SUCCESS) {
     // Seek back to the beginning of the file that was just written so it's
     // easy for consumers to use.

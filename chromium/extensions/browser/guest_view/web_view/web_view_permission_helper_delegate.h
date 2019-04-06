@@ -24,13 +24,7 @@ class WebViewPermissionHelperDelegate : public content::WebContentsObserver {
   virtual void CanDownload(
       const GURL& url,
       const std::string& request_method,
-      const base::Callback<void(bool)>& callback);
-
-  virtual void CanDownload(
-      const GURL& url,
-      const std::string& request_method,
-      const content::DownloadInformation& info,
-      const base::Callback<void(const content::DownloadItemAction&)>& callback);
+      const base::Callback<void(bool)>& callback) {}
 
   virtual void RequestPointerLockPermission(
       bool user_gesture,
@@ -79,6 +73,12 @@ class WebViewPermissionHelperDelegate : public content::WebContentsObserver {
   WebViewPermissionHelper* web_view_permission_helper() const {
     return web_view_permission_helper_;
   }
+
+  void SetDownloadInformation(const content::DownloadInformation& info);
+
+ protected:
+  // vivaldi download information
+  content::DownloadInformation download_info_;
 
  private:
   WebViewPermissionHelper* const web_view_permission_helper_;

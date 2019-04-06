@@ -6,7 +6,7 @@
 #define SERVICES_VIZ_PUBLIC_CPP_COMPOSITING_LOCAL_SURFACE_ID_STRUCT_TRAITS_H_
 
 #include "components/viz/common/surfaces/local_surface_id.h"
-#include "mojo/common/common_custom_types_struct_traits.h"
+#include "mojo/public/cpp/base/unguessable_token_mojom_traits.h"
 #include "services/viz/public/interfaces/compositing/local_surface_id.mojom-shared.h"
 
 namespace mojo {
@@ -23,16 +23,16 @@ struct StructTraits<viz::mojom::LocalSurfaceIdDataView, viz::LocalSurfaceId> {
     return local_surface_id.child_sequence_number();
   }
 
-  static const base::UnguessableToken& nonce(
+  static const base::UnguessableToken& embed_token(
       const viz::LocalSurfaceId& local_surface_id) {
-    return local_surface_id.nonce();
+    return local_surface_id.embed_token();
   }
 
   static bool Read(viz::mojom::LocalSurfaceIdDataView data,
                    viz::LocalSurfaceId* out) {
     out->parent_sequence_number_ = data.parent_sequence_number();
     out->child_sequence_number_ = data.child_sequence_number();
-    return data.ReadNonce(&out->nonce_) && out->is_valid();
+    return data.ReadEmbedToken(&out->embed_token_) && out->is_valid();
   }
 };
 

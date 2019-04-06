@@ -14,13 +14,14 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/stop_find_action.h"
-#include "third_party/WebKit/public/web/WebFindOptions.h"
+#include "third_party/blink/public/web/web_find_options.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace content {
 
 class RenderFrameHost;
+class RenderFrameHostImpl;
 class WebContentsImpl;
 
 // FindRequestManager manages all of the find-in-page requests/replies
@@ -47,16 +48,27 @@ class CONTENT_EXPORT FindRequestManager {
 
   // Called when a reply is received from a frame with the results from a
   // find request.
-  void OnFindReply(RenderFrameHost* rfh,
+  void OnFindReply(RenderFrameHostImpl* rfh,
                    int request_id,
                    int number_of_matches,
                    const gfx::Rect& selection_rect,
                    int active_match_ordinal,
                    bool final_update);
 
+  // Called when a reply for ActivateNearestFindResult is received.
+  void OnActivateNearestFindResultReply(RenderFrameHostImpl* rfh,
+                                        int request_id,
+                                        const gfx::Rect& active_match_rect,
+                                        int number_of_matches,
+                                        int active_match_ordinal,
+                                        bool final_update);
+
   // Removes a frame from the set of frames being searched. This should be
   // called whenever a frame is discovered to no longer exist.
   void RemoveFrame(RenderFrameHost* rfh);
+
+  // Tells active frame to clear the active match highlighting.
+  void ClearActiveFindMatch();
 
 #if defined(OS_ANDROID)
   // Selects and zooms to the find result nearest to the point (x, y), defined
@@ -64,9 +76,9 @@ class CONTENT_EXPORT FindRequestManager {
   void ActivateNearestFindResult(float x, float y);
 
   // Called when a reply is received from a frame in response to the
-  // GetNearestFindResult IPC.
-  void OnGetNearestFindResultReply(RenderFrameHost* rfh,
-                                   int nearest_find_result_request_id,
+  // GetNearestFindResult mojo call.
+  void OnGetNearestFindResultReply(RenderFrameHostImpl* rfh,
+                                   int request_id,
                                    float distance);
 
   // Requests the rects of the current find matches from the renderer process.
@@ -178,17 +190,13 @@ class CONTENT_EXPORT FindRequestManager {
     // its replies.
     int current_request_id = kInvalidId;
 
-    // The x value of the requested point, in find-in-page coordinates.
-    float x = 0.0f;
+    // The value of the requested point, in find-in-page coordinates.
+    gfx::PointF point = gfx::PointF(0.0f, 0.0f);
 
-    // The y value of the requested point, in find-in-page coordinates.
-    float y = 0.0f;
-
-    // The distance to the nearest result found so far.
     float nearest_distance = FLT_MAX;
 
     // The frame containing the nearest result found so far.
-    RenderFrameHost* nearest_frame = nullptr;
+    RenderFrameHostImpl* nearest_frame = nullptr;
 
     // Nearest find result replies are still pending for these frames.
     std::unordered_set<RenderFrameHost*> pending_replies;
@@ -286,7 +294,7 @@ class CONTENT_EXPORT FindRequestManager {
   int number_of_matches_;
 
   // The frame containing the active match, if one exists, or nullptr otherwise.
-  RenderFrameHost* active_frame_;
+  RenderFrameHostImpl* active_frame_;
 
   // The active match ordinal relative to the matches found in its own frame.
   int relative_active_match_ordinal_;

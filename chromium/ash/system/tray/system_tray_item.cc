@@ -4,14 +4,18 @@
 
 #include "ash/system/tray/system_tray_item.h"
 
+#include "ash/public/cpp/ash_features.h"
+#include "ash/system/status_area_widget.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/tray_constants.h"
+#include "ash/system/unified/unified_system_tray.h"
 #include "base/timer/timer.h"
 #include "ui/views/view.h"
 
 namespace ash {
 
-SystemTrayItem::SystemTrayItem(SystemTray* system_tray, UmaType uma_type)
+SystemTrayItem::SystemTrayItem(SystemTray* system_tray,
+                               SystemTrayItemUmaType uma_type)
     : system_tray_(system_tray), uma_type_(uma_type), restore_focus_(false) {}
 
 SystemTrayItem::~SystemTrayItem() = default;
@@ -60,6 +64,18 @@ void SystemTrayItem::HideDetailedView() {
 
 bool SystemTrayItem::ShouldShowShelf() const {
   return true;
+}
+
+bool SystemTrayItem::IsUnifiedBubbleShown() {
+  return features::IsSystemTrayUnifiedEnabled() && system_tray()
+                                                       ->shelf()
+                                                       ->GetStatusAreaWidget()
+                                                       ->unified_system_tray()
+                                                       ->IsBubbleShown();
+}
+
+views::View* SystemTrayItem::GetItemToRestoreFocusTo() {
+  return nullptr;
 }
 
 }  // namespace ash

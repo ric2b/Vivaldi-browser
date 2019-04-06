@@ -119,6 +119,35 @@ class SearchBox : public content::RenderFrameObserver,
   // Sends UndoMostVisitedDeletion to the browser.
   void UndoMostVisitedDeletion(InstantRestrictedID most_visited_item_id);
 
+  // Sends AddCustomLink to the browser.
+  void AddCustomLink(const GURL& url, const std::string& title);
+
+  // Sends UpdateCustomLink to the browser.
+  void UpdateCustomLink(InstantRestrictedID link_id,
+                        const GURL& new_url,
+                        const std::string& new_title);
+
+  // Sends DeleteCustomLink to the browser.
+  void DeleteCustomLink(InstantRestrictedID most_visited_item_id);
+
+  // Sends UndoCustomLinkAction to the browser.
+  void UndoCustomLinkAction();
+
+  // Sends ResetCustomLinks to the browser.
+  void ResetCustomLinks();
+
+  // Updates the NTP custom background preferences, sometimes this includes
+  // image attributions.
+  void SetCustomBackgroundURL(const GURL& background_url);
+  void SetCustomBackgroundURLWithAttributions(
+      const GURL& background_url,
+      const std::string& attribution_line_1,
+      const std::string& attribution_line_2,
+      const GURL& action_url);
+
+  // Let the user select a local file for the NTP background.
+  void SelectLocalBackgroundImage();
+
   bool is_focused() const { return is_focused_; }
   bool is_input_in_progress() const { return is_input_in_progress_; }
   bool is_key_capture_enabled() const { return is_key_capture_enabled_; }
@@ -141,6 +170,10 @@ class SearchBox : public content::RenderFrameObserver,
   void HistorySyncCheckResult(bool sync_history);
   void ChromeIdentityCheckResult(const base::string16& identity,
                                  bool identity_match);
+  void AddCustomLinkResult(bool success);
+  void UpdateCustomLinkResult(bool success);
+  void DeleteCustomLinkResult(bool success);
+  void UndoCustomLinkActionResult(bool success);
 
   // Returns the URL of the Most Visited item specified by the |item_id|.
   GURL GetURLForMostVisitedItem(InstantRestrictedID item_id) const;

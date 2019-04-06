@@ -46,6 +46,7 @@ message UserActivityEvent {
       SCREEN_OFF = 7;
       SCREEN_LOCK = 8;
       IDLE_SLEEP = 9;
+      MANUAL_SLEEP = 10;
     }
     optional Reason reason = 2;
 
@@ -53,6 +54,20 @@ message UserActivityEvent {
     // moment when the event type is known and we finish logging the complete
     // event.
     optional int32 log_duration_sec = 3;
+
+    // Whether screen dim/off occurred before final event was logged.
+    // Screen should be on (not dimmed not turned off) when an idle event is
+    // reported because we report idle event after a short period of inactivity,
+    // which isn't long enough for screen to be dimmed. However, in the unlikely
+    // event that screen is dimmed when an idle event is reported,
+    // |screen_dim_occurred| is true only if screen is subsequently turned on
+    // and dimmed again. In other words, if screen remains dimmed,
+    // |screen_dim_occurred| will be false. Similar logic for
+    // |screen_off_occurred|.
+    optional bool screen_dim_occurred = 4;
+    optional bool screen_off_occurred = 5;
+    // Whether screen lock occurred before final event was logged.
+    optional bool screen_lock_occurred = 6;
   }
 
   message Features {
@@ -84,6 +99,7 @@ message UserActivityEvent {
     // on what the last activity is.
     optional int32 time_since_last_mouse_sec = 6;
     optional int32 time_since_last_key_sec = 7;
+    optional int32 time_since_last_touch_sec = 21;
 
     // Duration of activity (user or video) up to last_activity_time_sec. If
     // activity starts at time t1, then recent_time_active_sec =
@@ -129,9 +145,53 @@ message UserActivityEvent {
 
     // Whether network is connected.
     optional bool is_online = 15;
+
+    // Duration of latest non-stop video playing before the current idle
+    // event. If a video paused/stopped temporarily (i.e. less than
+    // start_delay_sec), we consider it as non-stop.
+    optional int32 video_playing_time_sec = 16;
+    // Duration from the time video ended to the time of idle event.
+    optional int32 time_since_video_ended_sec = 17;
+
+    // Number of key/mouse/touch events in the past hour.
+    optional int32 key_events_in_last_hour = 18;
+    optional int32 mouse_events_in_last_hour = 19;
+    optional int32 touch_events_in_last_hour = 20;
+
+    // Whether screen was dimmed/turned off when an idle event was reported.
+    optional bool screen_dimmed_initially = 22;
+    optional bool screen_off_initially = 23;
+    optional bool screen_locked_initially = 24;
+
+    // Properties associated with the active tab of the visible focused/topmost
+    // browser. Unset if there's no such tab.
+    optional int32 engagement_score = 25;
+    optional bool has_form_entry = 26;
+    optional int64 source_id = 27;
+    // A valid URL could still have empty domain.
+    optional string tab_domain = 28;
+
+    // Number of times user reactivated and thus undimmed the screen before
+    // system was suspended.
+    optional int32 previous_negative_actions_count = 29;
+    // Number of times user remained idle after dim until system was suspended
+    // or closed.
+    optional int32 previous_positive_actions_count = 30;
+  }  // next id = 31
+
+  message ModelPrediction {
+    // If |inactivity_score| < |decision_threshold| then dim will be deferred.
+    optional int32 decision_threshold = 1;
+    // How likely user will remain inactive if screen is dimmed.
+    optional int32 inactivity_score = 2;
+    // Whether model decision (regardless if dim is to be deferred) is
+    // taken by powerd.
+    optional bool model_applied = 3;
   }
 
   optional ModelParams params = 1;
   optional Event event = 2;
   optional Features features = 3;
+  // Unset if model prediction is disabled in an experiment.
+  optional ModelPrediction model_prediction = 4;
 }

@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -39,14 +38,24 @@ class ProfileContentSettingObserver : public content_settings::Observer {
   explicit ProfileContentSettingObserver(Profile* profile)
       : profile_(profile) {}
   ~ProfileContentSettingObserver() override {}
-  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
-                               const ContentSettingsPattern& secondary_pattern,
-                               ContentSettingsType content_type,
-                               std::string resource_identifier) override {
-    if (content_type == CONTENT_SETTINGS_TYPE_PLUGINS &&
-        PluginUtils::ShouldPreferHtmlOverPlugins(
-            HostContentSettingsMapFactory::GetForProfile(profile_))) {
+  void OnContentSettingChanged(
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern,
+      ContentSettingsType content_type,
+      const std::string& resource_identifier) override {
+    if (content_type != CONTENT_SETTINGS_TYPE_PLUGINS)
+      return;
+
+    HostContentSettingsMap* map =
+        HostContentSettingsMapFactory::GetForProfile(profile_);
+    if (PluginUtils::ShouldPreferHtmlOverPlugins(map))
       PluginService::GetInstance()->PurgePluginListCache(profile_, false);
+
+    const GURL primary(primary_pattern.ToString());
+    if (primary.is_valid()) {
+      DCHECK_EQ(ContentSettingsPattern::Relation::IDENTITY,
+                ContentSettingsPattern::Wildcard().Compare(secondary_pattern));
+      PluginUtils::RememberFlashChangedForSite(map, primary);
     }
   }
 
@@ -118,7 +127,7 @@ void ChromePluginServiceFilter::RegisterResourceContext(Profile* profile,
                                                         const void* context) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::AutoLock lock(lock_);
-  resource_context_map_[context] = base::MakeUnique<ContextInfo>(
+  resource_context_map_[context] = std::make_unique<ContextInfo>(
       PluginPrefs::GetForProfile(profile),
       HostContentSettingsMapFactory::GetForProfile(profile),
       FlashTemporaryPermissionTracker::Get(profile), profile);

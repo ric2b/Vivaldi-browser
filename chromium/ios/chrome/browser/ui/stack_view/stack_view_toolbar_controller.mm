@@ -12,9 +12,10 @@
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/image_util/image_util.h"
 #import "ios/chrome/browser/ui/rtl_geometry.h"
-#import "ios/chrome/browser/ui/toolbar/new_tab_button.h"
-#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_constants.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_controller+protected.h"
+#import "ios/chrome/browser/ui/stack_view/new_tab_button.h"
+#import "ios/chrome/browser/ui/toolbar/buttons/toolbar_constants.h"
+#import "ios/chrome/browser/ui/toolbar/legacy/toolbar_controller+protected.h"
+#import "ios/chrome/browser/ui/toolbar/legacy/toolbar_controller_constants.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -35,8 +36,11 @@ const CGFloat kBackgroundViewColorAlpha = 0.95;
   __weak id<ApplicationCommands, BrowserCommands> _dispatcher;
 }
 
+@synthesize delegate = _delegate;
+
 - (instancetype)initWithDispatcher:
-    (id<ApplicationCommands, BrowserCommands, ToolbarCommands>)dispatcher {
+    (id<ApplicationCommands, BrowserCommands, OmniboxFocuser, ToolbarCommands>)
+        dispatcher {
   self = [super initWithStyle:ToolbarControllerStyleDarkMode
                    dispatcher:dispatcher];
   if (self) {
@@ -73,8 +77,8 @@ const CGFloat kBackgroundViewColorAlpha = 0.95;
     [_stackViewToolbar addSubview:_openNewTabButton];
     [self.contentView addSubview:_stackViewToolbar];
 
-    [[self stackButton] addTarget:_dispatcher
-                           action:@selector(dismissTabSwitcher)
+    [[self stackButton] addTarget:self
+                           action:@selector(shouldDismissTabSwitcher:)
                  forControlEvents:UIControlEventTouchUpInside];
   }
   return self;
@@ -94,9 +98,13 @@ const CGFloat kBackgroundViewColorAlpha = 0.95;
       [_openNewTabButton.superview convertPoint:_openNewTabButton.center
                                          toView:_openNewTabButton.window];
   OpenNewTabCommand* command =
-      [[OpenNewTabCommand alloc] initWithIncognito:_openNewTabButton.isIncognito
-                                       originPoint:center];
+      [OpenNewTabCommand commandWithIncognito:_openNewTabButton.isIncognito
+                                  originPoint:center];
   [_dispatcher openNewTab:command];
+}
+
+- (void)shouldDismissTabSwitcher:(id)sender {
+  [self.delegate stackViewToolbarControllerShouldDismiss:self];
 }
 
 #pragma mark - Overridden protected superclass methods.

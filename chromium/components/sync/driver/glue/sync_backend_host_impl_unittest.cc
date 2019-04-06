@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <utility>
 
+#include "base/bind_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
@@ -14,8 +15,8 @@
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/invalidation/impl/invalidator_storage.h"
 #include "components/invalidation/impl/profile_invalidation_provider.h"
@@ -58,10 +59,6 @@ namespace {
 static const base::FilePath::CharType kTestSyncDir[] =
     FILE_PATH_LITERAL("sync-test");
 
-void EmptyNetworkTimeUpdate(const base::Time&,
-                            const base::TimeDelta&,
-                            const base::TimeDelta&) {}
-
 class TestSyncEngineHost : public SyncEngineHostStub {
  public:
   explicit TestSyncEngineHost(
@@ -75,16 +72,21 @@ class TestSyncEngineHost : public SyncEngineHostStub {
                            bool success) override {
     EXPECT_EQ(expect_success_, success);
     set_engine_types_.Run(initial_types);
-    base::RunLoop::QuitCurrentWhenIdleDeprecated();
+    std::move(quit_closure_).Run();
   }
 
   void SetExpectSuccess(bool expect_success) {
     expect_success_ = expect_success;
   }
 
+  void set_quit_closure(base::OnceClosure quit_closure) {
+    quit_closure_ = std::move(quit_closure);
+  }
+
  private:
   base::Callback<void(ModelTypeSet)> set_engine_types_;
   bool expect_success_ = false;
+  base::OnceClosure quit_closure_;
 };
 
 class FakeSyncManagerFactory : public SyncManagerFactory {
@@ -214,7 +216,7 @@ class SyncEngineTest : public testing::Test {
         http_post_provider_factory_getter =
             base::Bind(&NetworkResources::GetHttpPostProviderFactory,
                        base::Unretained(network_resources_.get()), nullptr,
-                       base::Bind(&EmptyNetworkTimeUpdate));
+                       base::DoNothing());
 
     SyncEngine::InitParams params;
     params.sync_task_runner = sync_thread_.task_runner();
@@ -276,7 +278,7 @@ class SyncEngineTest : public testing::Test {
  protected:
   void DownloadReady(ModelTypeSet succeeded_types, ModelTypeSet failed_types) {
     engine_types_.PutAll(succeeded_types);
-    base::RunLoop::QuitCurrentWhenIdleDeprecated();
+    std::move(quit_loop_).Run();
   }
 
   void OnDownloadRetry() { NOTIMPLEMENTED(); }
@@ -288,7 +290,9 @@ class SyncEngineTest : public testing::Test {
 
   void PumpSyncThread() {
     base::RunLoop run_loop;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    quit_loop_ = run_loop.QuitClosure();
+    host_.set_quit_closure(run_loop.QuitClosure());
+    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), TestTimeouts::action_timeout());
     run_loop.Run();
   }
@@ -309,6 +313,7 @@ class SyncEngineTest : public testing::Test {
   ModelTypeSet enabled_types_;
   std::unique_ptr<NetworkResources> network_resources_;
   std::unique_ptr<SyncEncryptionHandler::NigoriState> saved_nigori_state_;
+  base::OnceClosure quit_loop_;
 };
 
 // Test basic initialization with no initial types (first time initialization).

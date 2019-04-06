@@ -12,10 +12,6 @@
 class ProfileOAuth2TokenService;
 class Profile;
 
-namespace vivaldi {
-class VivaldiProfileOAuth2TokenServiceFactory;
-}
-
 // Singleton that owns all ProfileOAuth2TokenServices and associates them with
 // Profiles. Listens for the Profile's destruction notification and cleans up
 // the associated ProfileOAuth2TokenService.
@@ -33,7 +29,6 @@ class ProfileOAuth2TokenServiceFactory
 
  private:
   friend struct base::DefaultSingletonTraits<ProfileOAuth2TokenServiceFactory>;
-  friend vivaldi::VivaldiProfileOAuth2TokenServiceFactory;
 
   ProfileOAuth2TokenServiceFactory();
   ~ProfileOAuth2TokenServiceFactory() override;

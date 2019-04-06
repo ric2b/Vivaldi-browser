@@ -124,6 +124,9 @@ const char kRemoveChromeRegistration[] = "remove-chrome-registration";
 // line flag so that we try the launch only once.
 const char kRunAsAdmin[] = "run-as-admin";
 
+// Saves the specified device management token to the registry.
+const char kStoreDMToken[] = "store-dmtoken";
+
 // Combined with --uninstall, signals to setup.exe that this uninstall was
 // triggered by a self-destructing Chrome.
 const char kSelfDestruct[] = "self-destruct";
@@ -161,15 +164,6 @@ const char kInputFile[] = "input-file";
 const char kPatchFile[] = "patch-file";
 const char kOutputFile[] = "output-file";
 
-// Vivaldi customization.
-const char kVivaldi[] = "vivaldi";
-const char kVivaldiInstallDir[] = "vivaldi-install-dir";
-const char kVivaldiStandalone[] = "vivaldi-standalone";
-const char kVivaldiForceLaunch[] = "vivaldi-force-launch";
-const char kVivaldiUpdate[] = "vivaldi-update";
-const char kVivaldiRegisterStandalone[] = "vivaldi-register-standalone";
-const char kVivaldiSilent[] = "vivaldi-silent";
-
 }  // namespace switches
 
 namespace env_vars {
@@ -197,39 +191,28 @@ const wchar_t kChromeExe[] = L"vivaldi.exe";
 const wchar_t kChromeNewExe[] = L"new_vivaldi.exe";
 const wchar_t kChromeOldExe[] = L"old_vivaldi.exe";
 const wchar_t kCmdOnOsUpgrade[] = L"on-os-upgrade";
+const wchar_t kCmdStoreDMToken[] = L"store-dmtoken";
 const wchar_t kEULASentinelFile[] = L"EULA Accepted";
 const wchar_t kInstallBinaryDir[] = L"Application";
 const wchar_t kInstallerDir[] = L"Installer";
 const wchar_t kInstallTempDir[] = L"Temp";
 const wchar_t kLnkExt[] = L".lnk";
 const wchar_t kNaClExe[] = L"nacl64.exe";
+const wchar_t kNotificationHelperExe[] = L"notification_helper.exe";
 const wchar_t kSetupExe[] = L"setup.exe";
 const wchar_t kUninstallStringField[] = L"UninstallString";
 const wchar_t kUninstallArgumentsField[] = L"UninstallArguments";
 const wchar_t kUninstallDisplayNameField[] = L"DisplayName";
 const char kUninstallMetricsName[] = "uninstall_metrics";
 const wchar_t kUninstallInstallationDate[] = L"installation_date";
+
+// Google Update installer result API.
 const wchar_t kInstallerError[] = L"InstallerError";
 const wchar_t kInstallerExtraCode1[] = L"InstallerExtraCode1";
 const wchar_t kInstallerResult[] = L"InstallerResult";
 const wchar_t kInstallerResultUIString[] = L"InstallerResultUIString";
 const wchar_t kInstallerSuccessLaunchCmdLine[] =
     L"InstallerSuccessLaunchCmdLine";
-
-const wchar_t kVivaldiAutoUpdate[] = L"AutoUpdate";
-const wchar_t kVivaldiDeltaPatchFailed[] = L"DeltaPatchFailed";
-const wchar_t kVivaldiKey[] = L"Software\\Vivaldi";
-const wchar_t kVivaldiPinToTaskbarValue[] = L"EnablePinToTaskbar";
-
-// Vivaldi installer settings from last install.
-const wchar_t kVivaldiInstallerDestinationFolder[] = L"DestinationFolder";
-const wchar_t kVivaldiInstallerInstallType[] = L"InstallType";
-const wchar_t kVivaldiInstallerDefaultBrowser[] = L"DefaultBrowser";
-const wchar_t kVivaldiInstallerRegisterBrowser[] = L"RegisterBrowser";
-
-// Vivaldi paths and filenames
-const wchar_t kVivaldiUpdateNotifierExe[] = L"update_notifier.exe";
-const wchar_t kVivaldiUpdateNotifierOldExe[] = L"update_notifier.old";
 
 // Chrome channel display names.
 const wchar_t kChromeChannelUnknown[] = L"unknown";
@@ -240,9 +223,6 @@ const wchar_t kChromeChannelStable[] = L"";
 const wchar_t kChromeChannelStableExplicit[] = L"stable";
 
 const size_t kMaxAppModelIdLength = 64U;
-
-const char kCourgette[] = "courgette";
-const char kBsdiff[] = "bsdiff";
 
 const char kSetupHistogramAllocatorName[] = "SetupMetrics";
 

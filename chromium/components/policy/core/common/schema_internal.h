@@ -70,6 +70,19 @@ struct POLICY_EXPORT PropertiesNode {
   // defined. It's not required to be sorted.
   int pattern_end;
 
+  // An offset into SchemaData::required_properties that indexes the first
+  // required property of this map policy.
+  int required_begin;
+
+  // An offset into SchemaData::required_properties that indexes the property
+  // right beyond the last required property.
+  //
+  // If |required_begin == required_end|, then the map policy that this
+  // PropertiesNode corresponds to does not have any required properties.
+  //
+  // Note that the range [required_begin, required_end) is not sorted.
+  int required_end;
+
   // If this map policy supports keys with any value (besides the well-known
   // values described in the range [begin, end)) then |additional| is an offset
   // into SchemaData::schema_nodes that indexes the SchemaNode describing the
@@ -109,6 +122,11 @@ union POLICY_EXPORT RestrictionNode {
   } string_pattern_restriction;
 };
 
+// Contains metadata for a SchemaNode. This is separate from SchemaNode, because
+// schemas which don't use metadata will not have this.
+struct SchemaNodeMetadata {
+  bool is_sensitive_value;
+};
 
 // Contains arrays of related nodes. All of the offsets in these nodes reference
 // other nodes in these arrays.
@@ -117,9 +135,15 @@ struct POLICY_EXPORT SchemaData {
   const PropertyNode* property_nodes;
   const PropertiesNode* properties_nodes;
   const RestrictionNode* restriction_nodes;
+  const char* const* required_properties;
 
   const int* int_enums;
   const char* const* string_enums;
+  int validation_schema_root_index;
+
+  // May be nullptr. If this is not nullptr, uses the same indices as
+  // |schema_nodes|.
+  const SchemaNodeMetadata* schema_nodes_metadata;
 };
 
 }  // namespace internal

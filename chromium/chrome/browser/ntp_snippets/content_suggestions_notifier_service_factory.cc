@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ntp_snippets/content_suggestions_notifier_service_factory.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/ntp_snippets/content_suggestions_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -66,7 +65,7 @@ KeyedService* ContentSuggestionsNotifierServiceFactory::BuildServiceInstanceFor(
         ContentSuggestionsServiceFactory::GetForProfile(profile);
     return new ContentSuggestionsNotifierService(
         profile->GetPrefs(), suggestions,
-        base::MakeUnique<AndroidContentSuggestionsNotifier>());
+        std::make_unique<AndroidContentSuggestionsNotifier>());
   } else {
     AndroidContentSuggestionsNotifier().UnregisterChannel();
   }

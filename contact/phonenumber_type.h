@@ -51,14 +51,14 @@ class PhonenumberRow {
   std::string type() const { return type_; }
   void set_type(std::string type) { type_ = type; }
 
-  bool is_default() const { return is_default_; }
-  void set_is_default(bool is_default) { is_default_ = is_default; }
+  bool is_favorite() const { return favorite_; }
+  void set_favorite(bool favorite) { favorite_ = favorite; }
 
   PhonenumberID phonenumber_id_;
   ContactID contact_id_;
   std::string phonenumber_;
   std::string type_;
-  bool is_default_;
+  bool favorite_;
 
  protected:
   void Swap(PhonenumberRow* other);

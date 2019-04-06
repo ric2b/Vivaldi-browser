@@ -8,7 +8,7 @@ import("//testing/test.gni")
 group("all_tests") {
   testonly = true
   deps = [
-    ":ocmock_support_unittest",
+    ":ocmock_support_unittests",
   ]
 }
 
@@ -23,6 +23,19 @@ source_set("ios_test_support") {
   sources = [
     "wait_util.h",
     "wait_util.mm",
+  ]
+}
+
+source_set("embedded_test_server_support") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  testonly = true
+
+  deps = [
+    "//net:test_support",
+  ]
+  sources = [
+    "embedded_test_server_handlers.cc",
+    "embedded_test_server_handlers.h",
   ]
 }
 
@@ -45,7 +58,7 @@ source_set("ocmock_support") {
   ]
 }
 
-test("ocmock_support_unittest") {
+test("ocmock_support_unittests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   deps = [
     ":ocmock_support",
@@ -78,6 +91,8 @@ bundle_data("http_server_bundle_data") {
     "data/http_server_files/history.js",
     "data/http_server_files/history_go.html",
     "data/http_server_files/history_go.js",
+    "data/http_server_files/iframe_host.html",
+    "data/http_server_files/links.html",
     "data/http_server_files/memory_usage.html",
     "data/http_server_files/multi_field_form.html",
     "data/http_server_files/onload_replacestate_reload.html",

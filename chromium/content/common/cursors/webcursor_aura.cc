@@ -5,7 +5,7 @@
 #include "content/common/cursors/webcursor.h"
 
 #include "base/logging.h"
-#include "third_party/WebKit/public/platform/WebCursorInfo.h"
+#include "third_party/blink/public/platform/web_cursor_info.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/cursor_util.h"
 
@@ -104,6 +104,11 @@ gfx::NativeCursor WebCursor::GetNativeCursor() {
     case WebCursorInfo::kTypeCustom: {
       ui::Cursor cursor(ui::CursorType::kCustom);
       cursor.SetPlatformCursor(GetPlatformCursor());
+      SkBitmap bitmap;
+      gfx::Point hotspot;
+      CreateScaledBitmapAndHotspotFromCustomData(&bitmap, &hotspot);
+      cursor.set_custom_bitmap(bitmap);
+      cursor.set_custom_hotspot(hotspot);
       return cursor;
     }
     default:

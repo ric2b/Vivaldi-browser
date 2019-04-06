@@ -5,17 +5,15 @@
 #include "content/browser/compositor/reflector_impl.h"
 
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
-#include "cc/test/test_context_provider.h"
-#include "cc/test/test_web_graphics_context_3d.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
 #include "components/viz/service/display/output_surface_frame.h"
 #include "components/viz/service/display_embedder/compositor_overlay_candidate_validator.h"
+#include "components/viz/test/test_context_provider.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "content/browser/compositor/reflector_texture.h"
 #include "content/browser/compositor/test/test_image_transport_factory.h"
@@ -25,7 +23,7 @@
 #include "ui/compositor/test/context_factories_for_test.h"
 
 #if defined(USE_OZONE)
-#include "cc/output/overlay_candidate.h"
+#include "components/viz/service/display/overlay_candidate.h"
 #include "components/viz/service/display_embedder/compositor_overlay_candidate_validator_ozone.h"
 #include "ui/ozone/public/overlay_candidates_ozone.h"
 #endif  // defined(USE_OZONE)
@@ -103,7 +101,6 @@ class TestOutputSurface : public BrowserCompositorOutputSurface {
   gfx::BufferFormat GetOverlayBufferFormat() const override {
     return gfx::BufferFormat::RGBX_8888;
   }
-  bool SurfaceIsSuspendForRecycle() const override { return false; }
 
   void OnReflectorChanged() override {
     if (!reflector_) {
@@ -114,13 +111,10 @@ class TestOutputSurface : public BrowserCompositorOutputSurface {
     }
   }
 
-#if defined(OS_MACOSX)
-  void SetSurfaceSuspendedForRecycle(bool suspended) override {}
-#endif
-
 #if BUILDFLAG(ENABLE_VULKAN)
   gpu::VulkanSurface* GetVulkanSurface() override { return nullptr; }
 #endif
+  unsigned UpdateGpuFence() override { return 0; }
 
  private:
   std::unique_ptr<ReflectorTexture> reflector_texture_;
@@ -156,7 +150,7 @@ class ReflectorImplTest : public testing::Test {
         false /* enable_pixel_canvas */));
     compositor_->SetAcceleratedWidget(gfx::kNullAcceleratedWidget);
 
-    auto context_provider = cc::TestContextProvider::Create();
+    auto context_provider = viz::TestContextProvider::Create();
     context_provider->BindToCurrentThread();
     output_surface_ =
         std::make_unique<TestOutputSurface>(std::move(context_provider));
@@ -181,7 +175,8 @@ class ReflectorImplTest : public testing::Test {
       reflector_->RemoveMirroringLayer(mirroring_layer_.get());
     viz::TransferableResource resource;
     std::unique_ptr<viz::SingleReleaseCallback> release;
-    if (mirroring_layer_->PrepareTransferableResource(&resource, &release)) {
+    if (mirroring_layer_->PrepareTransferableResource(nullptr, &resource,
+                                                      &release)) {
       release->Run(gpu::SyncToken(), false);
     }
     compositor_.reset();
@@ -226,8 +221,8 @@ TEST_F(ReflectorImplTest, CheckInvertedOutputSurface) {
 
 #if defined(USE_OZONE)
 TEST_F(ReflectorImplTest, CheckOverlayNoReflector) {
-  cc::OverlayCandidateList list;
-  cc::OverlayCandidate plane_1, plane_2;
+  viz::OverlayCandidateList list;
+  viz::OverlayCandidate plane_1, plane_2;
   plane_1.plane_z_order = 0;
   plane_2.plane_z_order = 1;
   list.push_back(plane_1);
@@ -238,8 +233,8 @@ TEST_F(ReflectorImplTest, CheckOverlayNoReflector) {
 
 TEST_F(ReflectorImplTest, CheckOverlaySWMirroring) {
   SetUpReflector();
-  cc::OverlayCandidateList list;
-  cc::OverlayCandidate plane_1, plane_2;
+  viz::OverlayCandidateList list;
+  viz::OverlayCandidate plane_1, plane_2;
   plane_1.plane_z_order = 0;
   plane_2.plane_z_order = 1;
   list.push_back(plane_1);

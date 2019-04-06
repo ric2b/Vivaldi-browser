@@ -10,12 +10,12 @@
 
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "third_party/WebKit/public/platform/modules/keyboard_lock/keyboard_lock.mojom.h"
+#include "third_party/blink/public/platform/modules/keyboard_lock/keyboard_lock.mojom.h"
 
 namespace content {
 
 class RenderFrameHost;
-class WebContents;
+class RenderFrameHostImpl;
 
 class CONTENT_EXPORT KeyboardLockServiceImpl
     : public blink::mojom::KeyboardLockService {
@@ -27,15 +27,16 @@ class CONTENT_EXPORT KeyboardLockServiceImpl
       RenderFrameHost* render_frame_host,
       blink::mojom::KeyboardLockServiceRequest request);
 
-  // blink::mojom::KeyboardLockService implementations.
+  // blink::mojom::KeyboardLockService implementation.
   void RequestKeyboardLock(const std::vector<std::string>& key_codes,
                            RequestKeyboardLockCallback callback) override;
   void CancelKeyboardLock() override;
+  void GetKeyboardLayoutMap(GetKeyboardLayoutMapCallback callback) override;
 
  private:
-  WebContents* const web_contents_;
+  RenderFrameHostImpl* const render_frame_host_;
 };
 
-}  // namespace
+}  // namespace content
 
 #endif  // CONTENT_BROWSER_KEYBOARD_LOCK_KEYBOARD_LOCK_SERVICE_IMPL_H_

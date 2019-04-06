@@ -53,6 +53,12 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
+  // Returns whether DevTools are allowed for the specified
+  // |profile| and |web_contents|. If |web_contents| is null,
+  // only checks for |profile| in general.
+  static bool AllowDevToolsFor(Profile* profile,
+                               content::WebContents* web_contents);
+
   // Return the DevToolsWindow for the given WebContents if one exists,
   // otherwise NULL.
   static DevToolsWindow* GetInstanceForInspectedWebContents(
@@ -89,12 +95,17 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   static void OpenDevToolsWindow(
       scoped_refptr<content::DevToolsAgentHost> host,
       Profile* profile);
+  // Similar to previous one, but forces the bundled frontend to be used.
+  static void OpenDevToolsWindowWithBundledFrontend(
+      scoped_refptr<content::DevToolsAgentHost> host,
+      Profile* profile);
 
   // Perform specified action for current WebContents inside a |browser|.
   // This may close currently open DevTools window.
-  // If DeveloperToolsDisabled policy is set, no DevTools window created.
-  // In case if needed pointer to the created window one should use
-  // DevToolsAgentHost and DevToolsWindow::FindDevToolsWindow(). E.g.:
+  // If DeveloperToolsAvailability policy disallows developer tools for the
+  // current WebContents, no DevTools window created. In case if needed pointer
+  // to the created window one should use DevToolsAgentHost and
+  // DevToolsWindow::FindDevToolsWindow(). E.g.:
   //
   // scoped_refptr<content::DevToolsAgentHost> agent(
   //   content::DevToolsAgentHost::GetOrCreateFor(inspected_web_contents));
@@ -257,15 +268,16 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
 
   enum FrontendType {
     kFrontendDefault,
-    kFrontendRemote,
     kFrontendWorker,
     kFrontendV8,
-    kFrontendNode
+    kFrontendNode,
+    kFrontendRemote,
+    kFrontendRemoteWorker,
   };
 
   DevToolsWindow(FrontendType frontend_type,
                  Profile* profile,
-                 content::WebContents* main_web_contents,
+                 std::unique_ptr<content::WebContents> main_web_contents,
                  DevToolsUIBindings* bindings,
                  content::WebContents* inspected_web_contents,
                  bool can_dock);
@@ -275,7 +287,10 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
       Profile* profile,
       const std::string& frontend_uri,
       const scoped_refptr<content::DevToolsAgentHost>& agent_host,
-      FrontendType frontend_type);
+      bool use_bundled_frontend);
+  static void OpenDevToolsWindow(scoped_refptr<content::DevToolsAgentHost> host,
+                                 Profile* profile,
+                                 bool use_bundled_frontend);
 
   static DevToolsWindow* Create(Profile* profile,
                                 content::WebContents* inspected_web_contents,
@@ -301,7 +316,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   // content::WebContentsDelegate:
   void ActivateContents(content::WebContents* contents) override;
   void AddNewContents(content::WebContents* source,
-                      content::WebContents* new_contents,
+                      std::unique_ptr<content::WebContents> new_contents,
                       WindowOpenDisposition disposition,
                       const gfx::Rect& initial_rect,
                       bool user_gesture,
@@ -356,6 +371,9 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   void ShowCertificateViewer(const std::string& cert_viewer) override;
 
   void ColorPickedInEyeDropper(int r, int g, int b, int a);
+
+  // This method create a new Browser object, and passes ownership of
+  // owned_main_web_contents_ to the tab strip of the Browser.
   void CreateDevToolsBrowser();
   BrowserWindow* GetInspectedBrowserWindow();
   void ScheduleShow(const DevToolsToggleAction& action);
@@ -370,10 +388,25 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   FrontendType frontend_type_;
   Profile* profile_;
   content::WebContents* main_web_contents_;
+
+  // DevToolsWindow is informed of the creation of the |toolbox_web_contents_|
+  // in WebContentsCreated right before ownership is passed to to DevToolsWindow
+  // in AddNewContents(). The former call has information not available in the
+  // latter, so it's easiest to record a raw pointer first in
+  // |toolbox_web_contents_|, and then update ownership immediately afterwards.
+  // TODO(erikchen): If we updated AddNewContents() to also pass back the
+  // target url, then we wouldn't need to listen to WebContentsCreated at all.
   content::WebContents* toolbox_web_contents_;
+  std::unique_ptr<content::WebContents> owned_toolbox_web_contents_;
+
   DevToolsUIBindings* bindings_;
   Browser* browser_;
+
+  // When DevToolsWindow is docked, it owns main_web_contents_. When it isn't
+  // docked, the tab strip model owns the main_web_contents_.
   bool is_docked_;
+  std::unique_ptr<content::WebContents> owned_main_web_contents_;
+
   const bool can_dock_;
   bool close_on_detach_;
   LifeStage life_stage_;

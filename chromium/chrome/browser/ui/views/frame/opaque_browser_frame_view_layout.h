@@ -28,7 +28,7 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
   static const int kContentEdgeShadowThickness;
 
   // Constants public for testing only.
-  static const int kNonClientRestoredExtraThickness;
+  static constexpr int kRefreshNonClientExtraTopThickness = 1;
   static const int kFrameBorderThickness;
   static const int kTitlebarTopEdgeThickness;
   static const int kIconLeftSpacing;
@@ -55,6 +55,9 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
 
   gfx::Size GetMinimumSize(int available_width) const;
 
+  // Distance between the left edge of the NonClientFrameView and the tab strip.
+  int GetTabStripLeftInset() const;
+
   // Returns the bounds of the window required to display the content area at
   // the specified bounds.
   gfx::Rect GetWindowBoundsForClientBounds(
@@ -64,6 +67,11 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
   // This does not include any client edge.  If |restored| is true, acts as if
   // the window is restored regardless of the real mode.
   int FrameBorderThickness(bool restored) const;
+
+  // Returns the thickness of the border that makes up the window frame edge
+  // along the top of the frame. If |restored| is true, this acts as if the
+  // window is restored regardless of the actual mode.
+  int FrameTopBorderThickness(bool restored) const;
 
   // Returns the thickness of the entire nonclient left, right, and bottom
   // borders, including both the window frame and any client edge.
@@ -132,6 +140,12 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
   // the thick frame border and rounded corners.
   bool IsTitleBarCondensed() const;
 
+  // Returns the extra thickness of the area above the tabs. The value returned
+  // is dependent on whether in material refresh mode or not.
+  int GetNonClientRestoredExtraThickness() const;
+
+  bool HasClientEdge() const;
+
  protected:
   // Whether a specific button should be inserted on the leading or trailing
   // side.
@@ -166,9 +180,9 @@ class OpaqueBrowserFrameViewLayout : public views::LayoutManager {
   // the tab strip (instead of the usual left).
   bool ShouldIncognitoIconBeOnRight() const;
 
-  // Determines the amount of spacing between the New Tab button and the element
-  // to its immediate right.
-  int NewTabCaptionSpacing() const;
+  // Determines the amount of spacing between the tabstrip and the caption
+  // buttons.
+  int TabStripCaptionSpacing() const;
 
   // Layout various sub-components of this view.
   void LayoutWindowControls(views::View* host);

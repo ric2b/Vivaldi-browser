@@ -28,7 +28,7 @@ bool SyncedWindowDelegateAndroid::HasWindow() const {
   return !tab_model_->IsOffTheRecord();
 }
 
-SessionID::id_type SyncedWindowDelegateAndroid::GetSessionId() const {
+SessionID SyncedWindowDelegateAndroid::GetSessionId() const {
   return tab_model_->GetSessionId();
 }
 
@@ -63,9 +63,9 @@ SyncedTabDelegate* SyncedWindowDelegateAndroid::GetTabAt(int index) const {
   return tab ? tab->GetSyncedTabDelegate() : nullptr;
 }
 
-SessionID::id_type SyncedWindowDelegateAndroid::GetTabIdAt(int index) const {
+SessionID SyncedWindowDelegateAndroid::GetTabIdAt(int index) const {
   SyncedTabDelegate* tab = GetTabAt(index);
-  return tab ? tab->GetSessionId() : -1;
+  return tab ? tab->GetSessionId() : SessionID::InvalidValue();
 }
 
 bool SyncedWindowDelegateAndroid::IsSessionRestoreInProgress() const {
@@ -73,6 +73,16 @@ bool SyncedWindowDelegateAndroid::IsSessionRestoreInProgress() const {
 }
 
 bool SyncedWindowDelegateAndroid::ShouldSync() const {
+  // We consider a window non-syncable if it contains at least one null tab.
+  // This is sometimes the case during shutdown: on Android, when Custom Tab
+  // windows are open as well as the browser itself when the browser is closed,
+  // the window-closing transition exposes this weird state that, unless
+  // filtered out, would cause tabs to be closed.
+  for (int i = 0; i < tab_model_->GetTabCount(); ++i) {
+    if (tab_model_->GetTabAt(i) == nullptr) {
+      return false;
+    }
+  }
   return true;
 }
 

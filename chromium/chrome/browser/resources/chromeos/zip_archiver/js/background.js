@@ -4,29 +4,47 @@
 
 'use strict';
 
+function setupZipArchiver() {
+  chrome.fileSystemProvider.onUnmountRequested.addListener(
+      unpacker.app.onUnmountRequested);
+  chrome.fileSystemProvider.onGetMetadataRequested.addListener(
+      unpacker.app.onGetMetadataRequested);
+  chrome.fileSystemProvider.onReadDirectoryRequested.addListener(
+      unpacker.app.onReadDirectoryRequested);
+  chrome.fileSystemProvider.onOpenFileRequested.addListener(
+      unpacker.app.onOpenFileRequested);
+  chrome.fileSystemProvider.onCloseFileRequested.addListener(
+      unpacker.app.onCloseFileRequested);
+  chrome.fileSystemProvider.onReadFileRequested.addListener(
+      unpacker.app.onReadFileRequested);
+
+  // Load the PNaCl module.
+  unpacker.app.loadNaclModule('module.nmf', 'application/x-pnacl');
+
+  // Load translations
+  unpacker.app.loadStringData();
+
+  // Clean all temporary files inside the work directory, just in case the
+  // extension aborted previously without removing ones.
+  unpacker.app.cleanWorkDirectory();
+}
+
 // Event called on opening a file with the extension or mime type
 // declared in the manifest file.
 chrome.app.runtime.onLaunched.addListener(unpacker.app.onLaunched);
 
-// Save the state before suspending the event page, so we can resume it
-// once new events arrive.
-chrome.runtime.onSuspend.addListener(unpacker.app.onSuspend);
-
-chrome.fileSystemProvider.onUnmountRequested.addListener(
-    unpacker.app.onUnmountRequested);
-chrome.fileSystemProvider.onGetMetadataRequested.addListener(
-    unpacker.app.onGetMetadataRequested);
-chrome.fileSystemProvider.onReadDirectoryRequested.addListener(
-    unpacker.app.onReadDirectoryRequested);
-chrome.fileSystemProvider.onOpenFileRequested.addListener(
-    unpacker.app.onOpenFileRequested);
-chrome.fileSystemProvider.onCloseFileRequested.addListener(
-    unpacker.app.onCloseFileRequested);
-chrome.fileSystemProvider.onReadFileRequested.addListener(
-    unpacker.app.onReadFileRequested);
-
-// Load the PNaCl module.
-unpacker.app.loadNaclModule('module.nmf', 'application/x-pnacl');
-
-// Load translations
-unpacker.app.loadStringData();
+// Avoid handling events duplicatedly if this is in incognito context in a
+// regular session. https://crbug.com/833603
+// onLaunched must be registered without waiting for the profile to resolved,
+// or otherwise it misses the first onLaunched event sent right after the
+// extension is loaded. https://crbug.com/837251
+chrome.fileManagerPrivate.getProfiles((profiles) => {
+  if ((profiles[0] && profiles[0].profileId == '$guest') ||
+      !chrome.extension.inIncognitoContext) {
+    setupZipArchiver();
+  } else {
+    console.info(
+        'The extension was silenced ' +
+        'because this is in the incognito context of a regular session.');
+  }
+});

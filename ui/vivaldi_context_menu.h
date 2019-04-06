@@ -5,7 +5,7 @@
 #define UI_VIVALDI_CONTEXT_MENU_H_
 
 namespace content {
-class RenderFrameHost;
+class WebContents;
 struct ContextMenuParams;
 }
 
@@ -23,7 +23,7 @@ class VivaldiContextMenu;
 
 namespace vivaldi {
 VivaldiContextMenu* CreateVivaldiContextMenu(
-    content::RenderFrameHost* render_frame_host,
+    content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
     const content::ContextMenuParams& params);
 

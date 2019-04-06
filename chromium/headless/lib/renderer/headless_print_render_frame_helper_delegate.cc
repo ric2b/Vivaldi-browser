@@ -4,7 +4,7 @@
 
 #include "headless/lib/renderer/headless_print_render_frame_helper_delegate.h"
 
-#include "third_party/WebKit/public/web/WebElement.h"
+#include "third_party/blink/public/web/web_element.h"
 
 namespace headless {
 
@@ -31,10 +31,6 @@ bool HeadlessPrintRenderFrameHelperDelegate::IsPrintPreviewEnabled() {
 bool HeadlessPrintRenderFrameHelperDelegate::OverridePrint(
     blink::WebLocalFrame* frame) {
   return false;
-}
-
-bool HeadlessPrintRenderFrameHelperDelegate::IsAskPrintSettingsEnabled() {
-  return true;
 }
 
 }  // namespace headless

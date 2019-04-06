@@ -16,6 +16,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/test/chromedriver/chrome/status.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -35,7 +36,7 @@ TEST(ProcessExtensions, NoExtension) {
 bool AddExtensionForInstall(const std::string& relative_path,
                             std::vector<std::string>* extensions) {
   base::FilePath source_root;
-  PathService::Get(base::DIR_SOURCE_ROOT, &source_root);
+  base::PathService::Get(base::DIR_SOURCE_ROOT, &source_root);
   base::FilePath crx_file_path = source_root.AppendASCII(
       "chrome/test/data/chromedriver/" + relative_path);
   std::string crx_contents;
@@ -200,3 +201,79 @@ TEST(PrepareUserDataDir, CustomPrefs) {
   AssertEQ(*local_state_dict, "myLocalKey", "ok");
   AssertEQ(*local_state_dict, "local.state.sub", "2");
 }
+
+TEST(DesktopLauncher, ParseDevToolsActivePortFile_Success) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  char data[] = "12345\nblahblah";
+  base::FilePath temp_file =
+      temp_dir.GetPath().Append(FILE_PATH_LITERAL("DevToolsActivePort"));
+  ASSERT_TRUE(base::WriteFile(temp_file, data, strlen(data)));
+  int port;
+  ASSERT_TRUE(
+      internal::ParseDevToolsActivePortFile(temp_dir.GetPath(), &port).IsOk());
+  ASSERT_EQ(port, 12345);
+}
+
+TEST(DesktopLauncher, ParseDevToolsActivePortFile_NoNewline) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  char data[] = "12345";
+  base::FilePath temp_file =
+      temp_dir.GetPath().Append(FILE_PATH_LITERAL("DevToolsActivePort"));
+  ASSERT_TRUE(base::WriteFile(temp_file, data, strlen(data)));
+  int port = 1111;
+  ASSERT_FALSE(
+      internal::ParseDevToolsActivePortFile(temp_dir.GetPath(), &port).IsOk());
+  ASSERT_EQ(port, 1111);
+}
+
+TEST(DesktopLauncher, ParseDevToolsActivePortFile_NotNumber) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  char data[] = "12345asdf\nblahblah";
+  base::FilePath temp_file =
+      temp_dir.GetPath().Append(FILE_PATH_LITERAL("DevToolsActivePort"));
+  ASSERT_TRUE(base::WriteFile(temp_file, data, strlen(data)));
+  int port;
+  ASSERT_FALSE(
+      internal::ParseDevToolsActivePortFile(temp_dir.GetPath(), &port).IsOk());
+}
+
+TEST(DesktopLauncher, ParseDevToolsActivePortFile_NoFile) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  base::FilePath temp_file =
+      temp_dir.GetPath().Append(FILE_PATH_LITERAL("DevToolsActivePort"));
+  int port = 1111;
+  ASSERT_FALSE(
+      internal::ParseDevToolsActivePortFile(temp_dir.GetPath(), &port).IsOk());
+  ASSERT_EQ(port, 1111);
+}
+
+TEST(DesktopLauncher, RemoveOldDevToolsActivePortFile_Success) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  base::FilePath temp_file =
+      temp_dir.GetPath().Append(FILE_PATH_LITERAL("DevToolsActivePort"));
+  char data[] = "12345asdf\nblahblah";
+  base::WriteFile(temp_file, data, strlen(data));
+  ASSERT_TRUE(
+      internal::RemoveOldDevToolsActivePortFile(temp_dir.GetPath()).IsOk());
+  ASSERT_FALSE(base::PathExists(temp_file));
+  ASSERT_TRUE(base::PathExists(temp_dir.GetPath()));
+}
+
+#if defined(OS_WIN)
+TEST(DesktopLauncher, RemoveOldDevToolsActivePortFile_Failure) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  base::FilePath temp_file =
+      temp_dir.GetPath().Append(FILE_PATH_LITERAL("DevToolsActivePort"));
+  FILE* fd = base::OpenFile(temp_file, "w");
+  ASSERT_FALSE(
+      internal::RemoveOldDevToolsActivePortFile(temp_dir.GetPath()).IsOk());
+  ASSERT_TRUE(base::PathExists(temp_file));
+  base::CloseFile(fd);
+}
+#endif

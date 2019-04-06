@@ -8,6 +8,8 @@
 #include "build/build_config.h"
 #include "chromecast/media/base/media_codec_support.h"
 #include "media/base/channel_layout.h"
+#include "media/base/encryption_pattern.h"
+#include "media/base/encryption_scheme.h"
 
 namespace chromecast {
 namespace media {
@@ -36,6 +38,8 @@ AudioCodec ToAudioCodec(const ::media::AudioCodec audio_codec) {
       return kCodecEAC3;
     case ::media::kCodecAC3:
       return kCodecAC3;
+    case ::media::kCodecMpegHAudio:
+      return kCodecMpegHAudio;
     default:
       LOG(ERROR) << "Unsupported audio codec " << audio_codec;
   }
@@ -47,6 +51,7 @@ SampleFormat ToSampleFormat(const ::media::SampleFormat sample_format) {
     case ::media::kUnknownSampleFormat:
     case ::media::kSampleFormatAc3:
     case ::media::kSampleFormatEac3:
+    case ::media::kSampleFormatMpegHAudio:
       return kUnknownSampleFormat;
     case ::media::kSampleFormatU8:
       return kSampleFormatU8;
@@ -131,6 +136,8 @@ SampleFormat ToSampleFormat(const ::media::SampleFormat sample_format) {
       return ::media::kCodecEAC3;
     case kCodecAC3:
       return ::media::kCodecAC3;
+    case kCodecMpegHAudio:
+      return ::media::kCodecMpegHAudio;
     default:
       return ::media::kUnknownAudioCodec;
   }
@@ -167,15 +174,15 @@ EncryptionScheme::CipherMode ToCipherMode(
 }
 
 EncryptionScheme::Pattern ToPatternSpec(
-    const ::media::EncryptionScheme::Pattern& pattern) {
-  return EncryptionScheme::Pattern(
-      pattern.encrypt_blocks(), pattern.skip_blocks());
+    const ::media::EncryptionPattern& pattern) {
+  return EncryptionScheme::Pattern(pattern.crypt_byte_block(),
+                                   pattern.skip_byte_block());
 }
 
-::media::EncryptionScheme::Pattern ToMediaPatternSpec(
+::media::EncryptionPattern ToMediaPatternSpec(
     const EncryptionScheme::Pattern& pattern) {
-  return ::media::EncryptionScheme::Pattern(
-      pattern.encrypt_blocks, pattern.skip_blocks);
+  return ::media::EncryptionPattern(pattern.encrypt_blocks,
+                                    pattern.skip_blocks);
 }
 
 EncryptionScheme ToEncryptionScheme(

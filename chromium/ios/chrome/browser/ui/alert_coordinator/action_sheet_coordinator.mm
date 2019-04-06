@@ -10,16 +10,33 @@
 #error "This file requires ARC support."
 #endif
 
+namespace {
+
+enum class AnchorMode {
+  VIEW,
+  BAR_BUTTON_ITEM,
+};
+
+}  // namespace
+
 @interface ActionSheetCoordinator () {
-  // Rectangle for the popover alert.
+  // The anchor mode for the popover alert.
+  AnchorMode _anchorMode;
+
+  // Rectangle for the popover alert. Only used when |_anchorMode| is VIEW.
   CGRect _rect;
-  // View for the popovert alert.
+  // View for the popovert alert. Only used when |_anchorMode| is VIEW.
   UIView* _view;
+
+  // Bar button item for the popover alert.  Only used when |_anchorMode| is
+  // BAR_BUTTON_ITEM.
+  UIBarButtonItem* _barButtonItem;
 }
 
 @end
 
 @implementation ActionSheetCoordinator
+@synthesize popoverArrowDirection = _popoverArrowDirection;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                      title:(NSString*)title
@@ -37,8 +54,25 @@
                                      title:title
                                    message:message];
   if (self) {
+    _anchorMode = AnchorMode::VIEW;
     _rect = rect;
     _view = view;
+    _popoverArrowDirection = UIPopoverArrowDirectionAny;
+  }
+  return self;
+}
+
+- (instancetype)initWithBaseViewController:(UIViewController*)viewController
+                                     title:(NSString*)title
+                                   message:(NSString*)message
+                             barButtonItem:(UIBarButtonItem*)barButtonItem {
+  self = [super initWithBaseViewController:viewController
+                                     title:title
+                                   message:message];
+  if (self) {
+    _anchorMode = AnchorMode::BAR_BUTTON_ITEM;
+    _barButtonItem = barButtonItem;
+    _popoverArrowDirection = UIPopoverArrowDirectionAny;
   }
   return self;
 }
@@ -49,9 +83,18 @@
       alertControllerWithTitle:title
                        message:message
                 preferredStyle:UIAlertControllerStyleActionSheet];
+  alert.popoverPresentationController.permittedArrowDirections =
+      _popoverArrowDirection;
 
-  alert.popoverPresentationController.sourceView = _view;
-  alert.popoverPresentationController.sourceRect = _rect;
+  switch (_anchorMode) {
+    case AnchorMode::VIEW:
+      alert.popoverPresentationController.sourceView = _view;
+      alert.popoverPresentationController.sourceRect = _rect;
+      break;
+    case AnchorMode::BAR_BUTTON_ITEM:
+      alert.popoverPresentationController.barButtonItem = _barButtonItem;
+      break;
+  }
 
   return alert;
 }

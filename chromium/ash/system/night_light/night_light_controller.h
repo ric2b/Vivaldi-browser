@@ -18,6 +18,7 @@
 #include "chromeos/dbus/power_manager_client.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "ui/aura/env_observer.h"
 
 class PrefRegistrySimple;
 class PrefService;
@@ -27,10 +28,18 @@ namespace ash {
 class ColorTemperatureAnimation;
 
 // Controls the NightLight feature that adjusts the color temperature of the
-// screen.
+// screen. It uses the display's hardware CRTC (Cathode Ray Tube Controller)
+// color transform matrix (CTM) when possible for efficiency, and can fall back
+// to setting a color matrix on the compositor if the display doesn't support
+// color transformation.
+// For Unified Desktop mode, the color matrix is set on the mirroring actual
+// displays' hosts, rather than on the Unified host, so that we can use the
+// CRTC matrix if available (the Unified host doesn't correspond to an actual
+// display).
 class ASH_EXPORT NightLightController
     : public mojom::NightLightController,
       public WindowTreeHostManager::Observer,
+      public aura::EnvObserver,
       public SessionObserver,
       public chromeos::PowerManagerClient::Observer {
  public:
@@ -84,16 +93,32 @@ class ASH_EXPORT NightLightController
   // Convenience functions for converting between the color temperature value,
   // and the blue and green color scales. Note that the red color scale remains
   // unaffected (i.e. its scale remains 1.0f);
+  // When these color scales are to be applied in the linear color space (i.e.
+  // after gamma decoding), |temperature| should be the non-linear temperature
+  // (see GetNonLinearTemperature() below), the blue scale uses the same
+  // attenuation, while the green scale is attenuated a bit more than it
+  // normally is when the scales are meant for the compressed gamma space.
   static float BlueColorScaleFromTemperature(float temperature);
-  static float GreenColorScaleFromTemperature(float temperature);
-  static float TemperatureFromBlueColorScale(float blue_scale);
-  static float TemperatureFromGreenColorScale(float green_scale);
+  static float GreenColorScaleFromTemperature(float temperature,
+                                              bool in_linear_space);
+
+  // When using the CRTC color correction, depending on the hardware, the matrix
+  // may be applied in the linear gamma space (i.e. after gamma decoding), or in
+  // the non-linear gamma compressed space (i.e. after degamma encoding). Our
+  // standard temperature we use here, which the user changes, follow a linear
+  // slope from 0.0f to 1.0f. This won't give the same linear rate of change in
+  // colors as the temperature changes in the linear color space. To account for
+  // this, we want the temperature to follow the same slope as that of the gamma
+  // factor.
+  // This function returns the non-linear temperature that corresponds to the
+  // linear |temperature| value.
+  static float GetNonLinearTemperature(float temperature);
 
   AnimationDuration animation_duration() const { return animation_duration_; }
   AnimationDuration last_animation_duration() const {
     return last_animation_duration_;
   }
-  const base::OneShotTimer& timer() const { return timer_; }
+  base::OneShotTimer* timer() { return &timer_; }
 
   void BindRequest(mojom::NightLightControllerRequest request);
 
@@ -120,6 +145,10 @@ class ASH_EXPORT NightLightController
 
   // ash::WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanged() override;
+
+  // aura::EnvObserver:
+  void OnWindowInitialized(aura::Window* window) override {}
+  void OnHostInitialized(aura::WindowTreeHost* host) override;
 
   // SessionObserver:
   void OnActiveUserPrefServiceChanged(PrefService* pref_service) override;

@@ -4,17 +4,21 @@
 
 package org.chromium.base;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
-import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Environment;
 import android.os.SystemClock;
+import android.system.Os;
+import android.text.TextUtils;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.MainDex;
 import org.chromium.base.metrics.RecordHistogram;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -24,6 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @MainDex
 public abstract class PathUtils {
+    private static final String TAG = "PathUtils";
     private static final String THUMBNAIL_DIRECTORY_NAME = "textures";
 
     private static final int DATA_DIRECTORY = 0;
@@ -83,6 +88,18 @@ public abstract class PathUtils {
         return null;
     }
 
+    @SuppressLint("NewApi")
+    private static void chmod(String path, int mode) {
+        // Both Os.chmod and ErrnoException require SDK >= 21. But while Dalvik on < 21 tolerates
+        // Os.chmod, it throws VerifyError for ErrnoException, so catch Exception instead.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return;
+        try {
+            Os.chmod(path, mode);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to set permissions for path \"" + path + "\"");
+        }
+    }
+
     /**
      * Fetch the path of the directory where private data is to be stored by the application. This
      * is meant to be called in an AsyncTask in setPrivateDataDirectorySuffix(), but if we need the
@@ -96,6 +113,8 @@ public abstract class PathUtils {
         Context appContext = ContextUtils.getApplicationContext();
         paths[DATA_DIRECTORY] = appContext.getDir(
                 sDataDirectorySuffix, Context.MODE_PRIVATE).getPath();
+        // MODE_PRIVATE results in rwxrwx--x, but we want rwx------, as a defence-in-depth measure.
+        chmod(paths[DATA_DIRECTORY], 0700);
         paths[THUMBNAIL_DIRECTORY] = appContext.getDir(
                 THUMBNAIL_DIRECTORY_NAME, Context.MODE_PRIVATE).getPath();
         if (appContext.getCacheDir() != null) {
@@ -190,6 +209,32 @@ public abstract class PathUtils {
                     SystemClock.elapsedRealtime() - time, TimeUnit.MILLISECONDS);
             return downloadsPath;
         }
+    }
+
+    /**
+     * @return Download directories including the default storage directory on SD card, and a
+     * private directory on external SD card.
+     */
+    @SuppressWarnings("unused")
+    @CalledByNative
+    public static String[] getAllPrivateDownloadsDirectories() {
+        File[] files;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            try (StrictModeContext unused = StrictModeContext.allowDiskWrites()) {
+                files = ContextUtils.getApplicationContext().getExternalFilesDirs(
+                        Environment.DIRECTORY_DOWNLOADS);
+            }
+        } else {
+            files = new File[] {Environment.getExternalStorageDirectory()};
+        }
+
+        ArrayList<String> absolutePaths = new ArrayList<String>();
+        for (int i = 0; i < files.length; ++i) {
+            if (files[i] == null || TextUtils.isEmpty(files[i].getAbsolutePath())) continue;
+            absolutePaths.add(files[i].getAbsolutePath());
+        }
+
+        return absolutePaths.toArray(new String[absolutePaths.size()]);
     }
 
     /**

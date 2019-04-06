@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <string>
@@ -16,6 +17,7 @@
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -31,9 +33,10 @@
 #include "ui/display/unified_desktop_utils.h"
 
 #if defined(OS_CHROMEOS)
+#include "base/cancelable_callback.h"
 #include "base/optional.h"
-#include "ui/display/manager/chromeos/display_configurator.h"
-#include "ui/display/manager/chromeos/touch_device_manager.h"
+#include "ui/display/manager/display_configurator.h"
+#include "ui/display/manager/touch_device_manager.h"
 #endif
 
 namespace gfx {
@@ -216,6 +219,8 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // |overscan_insets| is null if the display has no custom overscan insets.
   // |touch_calibration_data| is null if the display has no touch calibration
   // associated data.
+  // |ui_scale| will be negative if this is not the first boot with display zoom
+  // mode enabled.
   void RegisterDisplayProperty(int64_t display_id,
                                Display::Rotation rotation,
                                float ui_scale,
@@ -354,6 +359,17 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
     mixed_mirror_mode_params_ = mixed_params;
   }
 
+  void dec_screen_capture_active_counter() {
+    DCHECK_GT(screen_capture_active_counter_, 0);
+    screen_capture_active_counter_--;
+  }
+
+  void inc_screen_capture_active_counter() { ++screen_capture_active_counter_; }
+
+  bool screen_capture_is_active() const {
+    return screen_capture_active_counter_ > 0;
+  }
+
   // Remove mirroring source and destination displays, so that they will be
   // updated when UpdateDisplaysWith() is called.
   void ClearMirroringSourceAndDestination();
@@ -432,8 +448,6 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
       base::Optional<TouchDeviceIdentifier> touch_device_identifier);
   void UpdateZoomFactor(int64_t display_id, float zoom_factor);
 #endif
-  // Returns the zoom foactor for the display identified by |display_id|.
-  float GetZoomFactorForDisplay(int64_t display_id) const;
 
   // Sets/gets default multi display mode.
   void SetDefaultMultiDisplayModeForCurrentDisplays(MultiDisplayMode mode);
@@ -463,8 +477,16 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // Zoom the internal display.
   bool ZoomInternalDisplay(bool up);
 
+  // Zooms the display identified by |display_id| by increasing or decreasing
+  // its zoom factor value by 1 unit. Zooming in will have no effect on the
+  // display if it is already at its maximum zoom. Vice versa for zooming out.
+  bool ZoomDisplay(int64_t display_id, bool up);
+
   // Reset the internal display zoom.
   void ResetInternalDisplayZoom();
+
+  // Resets the zoom value to 1 for the display identified by |display_id|.
+  void ResetDisplayZoom(int64_t display_id);
 
   // Notifies observers of display configuration changes.
   void NotifyMetricsChanged(const Display& display, uint32_t metrics);
@@ -596,9 +618,6 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // Selected display modes for displays. Key is the displays' ID.
   std::map<int64_t, ManagedDisplayMode> display_modes_;
 
-  // Zoom level for each display.
-  std::map<int64_t, float> display_zoom_factors_;
-
   // When set to true, the host window's resize event updates the display's
   // size. This is set to true when running on desktop environment (for
   // debugging) so that resizing the host window will update the display
@@ -646,6 +665,10 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   bool internal_display_has_accelerometer_ = false;
 
+  // Set during screen capture to enable software compositing of mouse cursor,
+  // this is a counter to enable multiple active sessions at once.
+  int screen_capture_active_counter_ = 0;
+
   base::Closure created_mirror_window_;
 
   base::ObserverList<DisplayObserver> observers_;
@@ -664,6 +687,13 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
 #if defined(OS_CHROMEOS)
   std::unique_ptr<TouchDeviceManager> touch_device_manager_;
+
+  // A cancelable callback to trigger sending UMA metrics when display zoom is
+  // updated. The reason we need a cancelable callback is because we dont want
+  // to record UMA metrics for changes to the display zoom that are temporary.
+  // Temporary changes may include things like the user trying out different
+  // zoom levels before making the final decision.
+  base::CancelableCallback<void()> on_display_zoom_modify_timeout_;
 #endif
 
   // Whether mirroring across multiple displays is enabled.

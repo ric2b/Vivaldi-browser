@@ -34,9 +34,10 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
                                                    public gpu::GpuControl {
  public:
   PpapiCommandBufferProxy(const HostResource& resource,
-                          PluginDispatcher* dispatcher,
+                          InstanceData::FlushInfo* flush_info,
+                          LockedSender* sender,
                           const gpu::Capabilities& capabilities,
-                          const SerializedHandle& shared_state,
+                          SerializedHandle shared_state,
                           gpu::CommandBufferId command_buffer_id);
   ~PpapiCommandBufferProxy() override;
 
@@ -61,7 +62,7 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
                       size_t height,
                       unsigned internalformat) override;
   void DestroyImage(int32_t id) override;
-  void SignalQuery(uint32_t query, const base::Closure& callback) override;
+  void SignalQuery(uint32_t query, base::OnceClosure callback) override;
   void CreateGpuFence(uint32_t gpu_fence_id, ClientGpuFence source) override;
   void GetGpuFence(uint32_t gpu_fence_id,
                    base::OnceCallback<void(std::unique_ptr<gfx::GpuFence>)>
@@ -74,10 +75,9 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
   uint64_t GenerateFenceSyncRelease() override;
   bool IsFenceSyncReleased(uint64_t release) override;
   void SignalSyncToken(const gpu::SyncToken& sync_token,
-                       const base::Closure& callback) override;
+                       base::OnceClosure callback) override;
   void WaitSyncTokenHint(const gpu::SyncToken& sync_token) override;
   bool CanWaitUnverifiedSyncToken(const gpu::SyncToken& sync_token) override;
-  void SetSnapshotRequested() override;
 
  private:
   bool Send(IPC::Message* msg);
@@ -95,14 +95,13 @@ class PPAPI_PROXY_EXPORT PpapiCommandBufferProxy : public gpu::CommandBuffer,
 
   gpu::Capabilities capabilities_;
   State last_state_;
-  std::unique_ptr<base::SharedMemory> shared_state_shm_;
+  base::WritableSharedMemoryMapping shared_state_mapping_;
 
   HostResource resource_;
-  PluginDispatcher* dispatcher_;
+  InstanceData::FlushInfo* flush_info_;
+  LockedSender* sender_;
 
   base::Closure channel_error_callback_;
-
-  InstanceData::FlushInfo *flush_info_;
 
   uint64_t next_fence_sync_release_;
   uint64_t pending_fence_sync_release_;

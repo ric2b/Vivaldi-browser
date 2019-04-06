@@ -5,10 +5,19 @@
 #ifndef CHROME_BROWSER_UI_SYNC_BUBBLE_SYNC_PROMO_DELEGATE_H_
 #define CHROME_BROWSER_UI_SYNC_BUBBLE_SYNC_PROMO_DELEGATE_H_
 
+struct AccountInfo;
+
+// Delegate for the bubble sync promo view.
 class BubbleSyncPromoDelegate {
  public:
   virtual ~BubbleSyncPromoDelegate() {}
-  virtual void OnSignInLinkClicked() = 0;
+
+  // Informs the delegate to enable sync for |account| or to present
+  // the browser sign-in page if |account| is empty.
+  // |is_default_promo_account| is true if |account| corresponds to the default
+  // account in the promo. It is ignored if |account| is empty.
+  virtual void OnEnableSync(const AccountInfo& account,
+                            bool is_default_promo_account) = 0;
 };
 
 #endif  // CHROME_BROWSER_UI_SYNC_BUBBLE_SYNC_PROMO_DELEGATE_H_

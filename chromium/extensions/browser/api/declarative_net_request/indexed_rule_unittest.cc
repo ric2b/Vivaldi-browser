@@ -9,7 +9,6 @@
 
 #include "base/format_macros.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "components/version_info/version_info.h"
@@ -29,7 +28,7 @@ std::unique_ptr<dnr_api::Rule> CreateGenericParsedRule() {
   auto rule = std::make_unique<dnr_api::Rule>();
   rule->id = kMinValidID;
   rule->condition.url_filter = std::make_unique<std::string>("filter");
-  rule->action.type = dnr_api::RULE_ACTION_TYPE_BLACKLIST;
+  rule->action.type = dnr_api::RULE_ACTION_TYPE_BLOCK;
   return rule;
 }
 
@@ -120,10 +119,10 @@ TEST_F(IndexedRuleTest, OptionsParsing) {
     std::unique_ptr<bool> is_url_filter_case_sensitive;
     const uint8_t expected_options;
   } cases[] = {
-      {dnr_api::DOMAIN_TYPE_NONE, dnr_api::RULE_ACTION_TYPE_BLACKLIST, nullptr,
+      {dnr_api::DOMAIN_TYPE_NONE, dnr_api::RULE_ACTION_TYPE_BLOCK, nullptr,
        flat_rule::OptionFlag_APPLIES_TO_THIRD_PARTY |
            flat_rule::OptionFlag_APPLIES_TO_FIRST_PARTY},
-      {dnr_api::DOMAIN_TYPE_FIRSTPARTY, dnr_api::RULE_ACTION_TYPE_WHITELIST,
+      {dnr_api::DOMAIN_TYPE_FIRSTPARTY, dnr_api::RULE_ACTION_TYPE_ALLOW,
        std::make_unique<bool>(true),
        flat_rule::OptionFlag_IS_WHITELIST |
            flat_rule::OptionFlag_APPLIES_TO_FIRST_PARTY |
@@ -157,7 +156,8 @@ TEST_F(IndexedRuleTest, ResourceTypesParsing) {
     // Only valid if |expected_result| is SUCCESS.
     const uint16_t expected_element_types;
   } cases[] = {
-      {nullptr, nullptr, ParseResult::SUCCESS, flat_rule::ElementType_ANY},
+      {nullptr, nullptr, ParseResult::SUCCESS,
+       flat_rule::ElementType_ANY & ~flat_rule::ElementType_MAIN_FRAME},
       {nullptr,
        std::make_unique<ResourceTypeVec>(
            ResourceTypeVec({dnr_api::RESOURCE_TYPE_SCRIPT})),
@@ -175,12 +175,13 @@ TEST_F(IndexedRuleTest, ResourceTypesParsing) {
        flat_rule::ElementType_NONE},
       {nullptr,
        std::make_unique<ResourceTypeVec>(ResourceTypeVec(
-           {dnr_api::RESOURCE_TYPE_SUB_FRAME, dnr_api::RESOURCE_TYPE_STYLESHEET,
-            dnr_api::RESOURCE_TYPE_SCRIPT, dnr_api::RESOURCE_TYPE_IMAGE,
-            dnr_api::RESOURCE_TYPE_FONT, dnr_api::RESOURCE_TYPE_OBJECT,
+           {dnr_api::RESOURCE_TYPE_MAIN_FRAME, dnr_api::RESOURCE_TYPE_SUB_FRAME,
+            dnr_api::RESOURCE_TYPE_STYLESHEET, dnr_api::RESOURCE_TYPE_SCRIPT,
+            dnr_api::RESOURCE_TYPE_IMAGE, dnr_api::RESOURCE_TYPE_FONT,
+            dnr_api::RESOURCE_TYPE_OBJECT,
             dnr_api::RESOURCE_TYPE_XMLHTTPREQUEST, dnr_api::RESOURCE_TYPE_PING,
-            dnr_api::RESOURCE_TYPE_MEDIA, dnr_api::RESOURCE_TYPE_WEBSOCKET,
-            dnr_api::RESOURCE_TYPE_OTHER})),
+            dnr_api::RESOURCE_TYPE_CSP_REPORT, dnr_api::RESOURCE_TYPE_MEDIA,
+            dnr_api::RESOURCE_TYPE_WEBSOCKET, dnr_api::RESOURCE_TYPE_OTHER})),
        ParseResult::ERROR_NO_APPLICABLE_RESOURCE_TYPES,
        flat_rule::ElementType_NONE},
       {std::make_unique<ResourceTypeVec>(ResourceTypeVec()),

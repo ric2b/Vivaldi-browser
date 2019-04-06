@@ -65,12 +65,12 @@ SoftwareImageDecodeCacheUtils::DoDecodeImage(const CacheKey& key,
   SkImageInfo target_info = CreateImageInfo(target_size, color_type);
   std::unique_ptr<base::DiscardableMemory> target_pixels =
       AllocateDiscardable(target_info);
-  DCHECK(target_pixels);
+  if (!target_pixels || !target_pixels->data())
+    return nullptr;
 
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                "SoftwareImageDecodeCacheUtils::DoDecodeImage - "
                "decode");
-  DCHECK_EQ(key.type(), CacheKey::kOriginal);
   bool result = paint_image.Decode(target_pixels->data(), &target_info,
                                    key.target_color_space().ToSkColorSpace(),
                                    key.frame_key().frame_index());
@@ -148,7 +148,10 @@ SoftwareImageDecodeCacheUtils::GenerateCacheEntryFromCandidate(
 SoftwareImageDecodeCacheUtils::CacheKey
 SoftwareImageDecodeCacheUtils::CacheKey::FromDrawImage(const DrawImage& image,
                                                        SkColorType color_type) {
+  DCHECK(!image.paint_image().GetSkImage()->isTextureBacked());
+
   const PaintImage::FrameKey frame_key = image.frame_key();
+  const PaintImage::Id stable_id = image.paint_image().stable_id();
 
   const SkSize& scale = image.scale();
   // If the src_rect falls outside of the image, we need to clip it since
@@ -167,8 +170,8 @@ SoftwareImageDecodeCacheUtils::CacheKey::FromDrawImage(const DrawImage& image,
   // If the target size is empty, then we'll be skipping the decode anyway, so
   // the filter quality doesn't matter. Early out instead.
   if (target_size.IsEmpty()) {
-    return CacheKey(frame_key, kOriginal, false, src_rect, target_size,
-                    image.target_color_space());
+    return CacheKey(frame_key, stable_id, kSubrectAndScale, false, src_rect,
+                    target_size, image.target_color_space());
   }
 
   ProcessingType type = kOriginal;
@@ -229,18 +232,20 @@ SoftwareImageDecodeCacheUtils::CacheKey::FromDrawImage(const DrawImage& image,
     }
   }
 
-  return CacheKey(frame_key, type, is_nearest_neighbor, src_rect, target_size,
-                  image.target_color_space());
+  return CacheKey(frame_key, stable_id, type, is_nearest_neighbor, src_rect,
+                  target_size, image.target_color_space());
 }
 
 SoftwareImageDecodeCacheUtils::CacheKey::CacheKey(
     PaintImage::FrameKey frame_key,
+    PaintImage::Id stable_id,
     ProcessingType type,
     bool is_nearest_neighbor,
     const gfx::Rect& src_rect,
     const gfx::Size& target_size,
     const gfx::ColorSpace& target_color_space)
     : frame_key_(frame_key),
+      stable_id_(stable_id),
       type_(type),
       is_nearest_neighbor_(is_nearest_neighbor),
       src_rect_(src_rect),

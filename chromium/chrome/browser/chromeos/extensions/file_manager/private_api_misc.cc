@@ -7,18 +7,25 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
 
+#include "base/base64.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/crostini/crostini_manager.h"
+#include "chrome/browser/chromeos/crostini/crostini_package_installer_service.h"
+#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_util.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
+#include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/chromeos/file_manager/volume_manager.h"
 #include "chrome/browser/chromeos/file_system_provider/mount_path_util.h"
 #include "chrome/browser/chromeos/file_system_provider/service.h"
@@ -29,6 +36,7 @@
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/devtools_util.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -36,15 +44,16 @@
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/extensions/api/file_manager_private_internal.h"
 #include "chrome/common/extensions/api/manifest_types.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/services/file_util/public/cpp/zip_file_creator.h"
 #include "chromeos/settings/timezone_settings.h"
+#include "components/account_id/account_id.h"
 #include "components/drive/drive_pref_names.h"
 #include "components/drive/event_logger.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/user_manager/user_manager.h"
@@ -56,6 +65,8 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "google_apis/drive/auth_service.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "storage/browser/fileapi/external_mount_points.h"
 #include "storage/common/fileapi/file_system_types.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "url/gurl.h"
@@ -245,10 +256,10 @@ FileManagerPrivateSetPreferencesFunction::Run() {
 }
 
 FileManagerPrivateInternalZipSelectionFunction::
-    FileManagerPrivateInternalZipSelectionFunction() {}
+    FileManagerPrivateInternalZipSelectionFunction() = default;
 
 FileManagerPrivateInternalZipSelectionFunction::
-    ~FileManagerPrivateInternalZipSelectionFunction() {}
+    ~FileManagerPrivateInternalZipSelectionFunction() = default;
 
 bool FileManagerPrivateInternalZipSelectionFunction::RunAsync() {
   using extensions::api::file_manager_private_internal::ZipSelection::Params;
@@ -337,21 +348,17 @@ ExtensionFunction::ResponseAction FileManagerPrivateZoomFunction::Run() {
 }
 
 FileManagerPrivateRequestWebStoreAccessTokenFunction::
-    FileManagerPrivateRequestWebStoreAccessTokenFunction() {
-}
+    FileManagerPrivateRequestWebStoreAccessTokenFunction() = default;
 
 FileManagerPrivateRequestWebStoreAccessTokenFunction::
-    ~FileManagerPrivateRequestWebStoreAccessTokenFunction() {
-}
+    ~FileManagerPrivateRequestWebStoreAccessTokenFunction() = default;
 
 bool FileManagerPrivateRequestWebStoreAccessTokenFunction::RunAsync() {
   std::vector<std::string> scopes;
-  scopes.push_back(kCWSScope);
+  scopes.emplace_back(kCWSScope);
 
   ProfileOAuth2TokenService* oauth_service =
       ProfileOAuth2TokenServiceFactory::GetForProfile(GetProfile());
-  net::URLRequestContextGetter* url_request_context_getter =
-      g_browser_process->system_request_context();
 
   if (!oauth_service) {
     drive::EventLogger* logger = file_manager::util::GetLogger(GetProfile());
@@ -366,11 +373,11 @@ bool FileManagerPrivateRequestWebStoreAccessTokenFunction::RunAsync() {
 
   SigninManagerBase* signin_manager =
       SigninManagerFactory::GetForProfile(GetProfile());
-  auth_service_.reset(new google_apis::AuthService(
-      oauth_service,
-      signin_manager->GetAuthenticatedAccountId(),
-      url_request_context_getter,
-      scopes));
+  auth_service_ = std::make_unique<google_apis::AuthService>(
+      oauth_service, signin_manager->GetAuthenticatedAccountId(),
+      g_browser_process->system_network_context_manager()
+          ->GetSharedURLLoaderFactory(),
+      scopes);
   auth_service_->StartAuthentication(base::Bind(
       &FileManagerPrivateRequestWebStoreAccessTokenFunction::
           OnAccessTokenFetched,
@@ -459,13 +466,22 @@ FileManagerPrivateOpenInspectorFunction::Run() {
   return RespondNow(NoArguments());
 }
 
-FileManagerPrivateInternalGetMimeTypeFunction::
-    FileManagerPrivateInternalGetMimeTypeFunction() {
+ExtensionFunction::ResponseAction
+FileManagerPrivateOpenSettingsSubpageFunction::Run() {
+  using extensions::api::file_manager_private::OpenSettingsSubpage::Params;
+  const std::unique_ptr<Params> params(Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  chrome::ShowSettingsSubPageForProfile(ProfileManager::GetActiveUserProfile(),
+                                        params->sub_page);
+  return RespondNow(NoArguments());
 }
 
 FileManagerPrivateInternalGetMimeTypeFunction::
-    ~FileManagerPrivateInternalGetMimeTypeFunction() {
-}
+    FileManagerPrivateInternalGetMimeTypeFunction() = default;
+
+FileManagerPrivateInternalGetMimeTypeFunction::
+    ~FileManagerPrivateInternalGetMimeTypeFunction() = default;
 
 bool FileManagerPrivateInternalGetMimeTypeFunction::RunAsync() {
   using extensions::api::file_manager_private_internal::GetMimeType::Params;
@@ -628,6 +644,179 @@ void FileManagerPrivateConfigureVolumeFunction::OnCompleted(
   Respond(NoArguments());
 }
 
+namespace {
+bool IsCrostiniEnabledForProfile(Profile* profile) {
+  return IsCrostiniUIAllowedForProfile(profile) && IsCrostiniEnabled(profile);
+}
+}  // namespace
+
+ExtensionFunction::ResponseAction
+FileManagerPrivateIsCrostiniEnabledFunction::Run() {
+  return RespondNow(
+      OneArgument(std::make_unique<base::Value>(IsCrostiniEnabledForProfile(
+          Profile::FromBrowserContext(browser_context())))));
+}
+
+FileManagerPrivateMountCrostiniContainerFunction::
+    FileManagerPrivateMountCrostiniContainerFunction() = default;
+
+FileManagerPrivateMountCrostiniContainerFunction::
+    ~FileManagerPrivateMountCrostiniContainerFunction() = default;
+
+bool FileManagerPrivateMountCrostiniContainerFunction::RunAsync() {
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  DCHECK(IsCrostiniEnabledForProfile(profile));
+  crostini::CrostiniManager::GetInstance()->RestartCrostini(
+      profile, kCrostiniDefaultVmName, kCrostiniDefaultContainerName,
+      base::BindOnce(
+          &FileManagerPrivateMountCrostiniContainerFunction::RestartCallback,
+          this));
+  return true;
+}
+
+void FileManagerPrivateMountCrostiniContainerFunction::RestartCallback(
+    crostini::ConciergeClientResult result) {
+  if (result != crostini::ConciergeClientResult::SUCCESS) {
+    Respond(Error(
+        base::StringPrintf("Error restarting crostini container: %d", result)));
+    return;
+  }
+
+  crostini::CrostiniManager::GetInstance()->GetContainerSshKeys(
+      kCrostiniDefaultVmName, kCrostiniDefaultContainerName,
+      CryptohomeIdForProfile(Profile::FromBrowserContext(browser_context())),
+      base::BindOnce(
+          &FileManagerPrivateMountCrostiniContainerFunction::SshKeysCallback,
+          this));
+}
+
+void FileManagerPrivateMountCrostiniContainerFunction::SshKeysCallback(
+    crostini::ConciergeClientResult result,
+    const std::string& container_public_key,
+    const std::string& host_private_key,
+    const std::string& hostname) {
+  if (result != crostini::ConciergeClientResult::SUCCESS) {
+    Respond(Error(
+        base::StringPrintf("Error fetching crostini ssh keys: %d", result)));
+    return;
+  }
+
+  // Add an observer for OnMountEvent and keep this object alive to receive it.
+  chromeos::disks::DiskMountManager* manager =
+      chromeos::disks::DiskMountManager::GetInstance();
+  manager->AddObserver(this);
+  self_ = this;
+
+  // Call to sshfs to mount.
+  // Path = sshfs://<username>@<hostname>:
+  // Label = crostini_<cryptohome_id>_<vm_name>_<container_name>
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  std::string port = "2222";
+  source_path_ = base::StringPrintf(
+      "sshfs://%s@%s:", ContainerUserNameForProfile(profile).c_str(),
+      hostname.c_str());
+  mount_label_ = file_manager::util::GetCrostiniMountPointName(profile);
+  std::vector<std::string> mount_options;
+  std::string base64_known_hosts;
+  std::string base64_identity;
+  base::Base64Encode(host_private_key, &base64_identity);
+  base::Base64Encode(
+      base::StringPrintf("[%s]:%s %s", hostname.c_str(), port.c_str(),
+                         container_public_key.c_str()),
+      &base64_known_hosts);
+  mount_options.push_back("UserKnownHostsBase64=" + base64_known_hosts);
+  mount_options.push_back("IdentityBase64=" + base64_identity);
+  mount_options.push_back("Port=" + port);
+  manager->MountPath(source_path_, "", mount_label_, mount_options,
+                     chromeos::MOUNT_TYPE_NETWORK_STORAGE,
+                     chromeos::MOUNT_ACCESS_MODE_READ_WRITE);
+}
+
+void FileManagerPrivateMountCrostiniContainerFunction::OnMountEvent(
+    chromeos::disks::DiskMountManager::MountEvent event,
+    chromeos::MountError error_code,
+    const chromeos::disks::DiskMountManager::MountPointInfo& mount_info) {
+  // Ignore any other mount/unmount events.
+  if (event != chromeos::disks::DiskMountManager::MountEvent::MOUNTING ||
+      mount_info.source_path != source_path_) {
+    return;
+  }
+  // Remove observer and self ref.
+  chromeos::disks::DiskMountManager::GetInstance()->RemoveObserver(this);
+  auto self = std::move(self_);
+
+  if (error_code != chromeos::MountError::MOUNT_ERROR_NONE) {
+    Respond(Error(base::StringPrintf(
+        "Error mounting crostini container: error_code=%d, "
+        "source_path=%s, mount_path=%s, mount_type=%d, mount_condition=%d",
+        error_code, mount_info.source_path.c_str(),
+        mount_info.mount_path.c_str(), mount_info.mount_type,
+        mount_info.mount_condition)));
+    return;
+  }
+
+  // Register filesystem and add volume to VolumeManager.
+  base::FilePath mount_path =
+      base::FilePath(FILE_PATH_LITERAL(mount_info.mount_path));
+  storage::ExternalMountPoints::GetSystemInstance()->RegisterFileSystem(
+      mount_label_, storage::kFileSystemTypeNativeLocal,
+      storage::FileSystemMountOption(), mount_path);
+
+  file_manager::VolumeManager::Get(browser_context())
+      ->AddSshfsCrostiniVolume(mount_path);
+  Respond(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+FileManagerPrivateInternalInstallLinuxPackageFunction::Run() {
+  using extensions::api::file_manager_private_internal::InstallLinuxPackage::
+      Params;
+  const std::unique_ptr<Params> params(Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  const scoped_refptr<storage::FileSystemContext> file_system_context =
+      file_manager::util::GetFileSystemContextForRenderFrameHost(
+          profile, render_frame_host());
+
+  std::string url =
+      file_manager::util::ConvertFileSystemURLToPathInsideCrostini(
+          profile, file_system_context->CrackURL(GURL(params->url)));
+  crostini::CrostiniPackageInstallerService::GetForProfile(profile)
+      ->InstallLinuxPackage(
+          kCrostiniDefaultVmName, kCrostiniDefaultContainerName, url,
+          base::BindOnce(
+              &FileManagerPrivateInternalInstallLinuxPackageFunction::
+                  OnInstallLinuxPackage,
+              this));
+  return RespondLater();
+}
+
+void FileManagerPrivateInternalInstallLinuxPackageFunction::
+    OnInstallLinuxPackage(crostini::ConciergeClientResult result,
+                          const std::string& failure_reason) {
+  extensions::api::file_manager_private::InstallLinuxPackageResponse response;
+  switch (result) {
+    case crostini::ConciergeClientResult::SUCCESS:
+      response = extensions::api::file_manager_private::
+          INSTALL_LINUX_PACKAGE_RESPONSE_STARTED;
+      break;
+    case crostini::ConciergeClientResult::INSTALL_LINUX_PACKAGE_FAILED:
+      response = extensions::api::file_manager_private::
+          INSTALL_LINUX_PACKAGE_RESPONSE_FAILED;
+      break;
+    case crostini::ConciergeClientResult::INSTALL_LINUX_PACKAGE_ALREADY_ACTIVE:
+      response = extensions::api::file_manager_private::
+          INSTALL_LINUX_PACKAGE_RESPONSE_INSTALL_ALREADY_ACTIVE;
+      break;
+    default:
+      NOTREACHED();
+  }
+  Respond(ArgumentList(
+      extensions::api::file_manager_private_internal::InstallLinuxPackage::
+          Results::Create(response, failure_reason)));
+}
+
 FileManagerPrivateInternalGetCustomActionsFunction::
     FileManagerPrivateInternalGetCustomActionsFunction()
     : chrome_details_(this) {}
@@ -675,7 +864,7 @@ void FileManagerPrivateInternalGetCustomActionsFunction::OnCompleted(
   for (const auto& action : actions) {
     Action item;
     item.id = action.id;
-    item.title.reset(new std::string(action.title));
+    item.title = std::make_unique<std::string>(action.title);
     items.push_back(std::move(item));
   }
 

@@ -42,9 +42,15 @@ void ClientHintsObserver::PersistClientHints(
   if (!primary_url.is_valid() || !content::IsOriginSecure(primary_url))
     return;
 
+  DCHECK(!client_hints.empty());
+  DCHECK_LE(
+      client_hints.size(),
+      static_cast<size_t>(blink::mojom::WebClientHintsType::kMaxValue) + 1);
+
   if (client_hints.empty() ||
       client_hints.size() >
-          static_cast<int>(blink::mojom::WebClientHintsType::kLast)) {
+          (static_cast<size_t>(blink::mojom::WebClientHintsType::kMaxValue) +
+           1)) {
     // Return early if the list does not have the right number of values.
     // Persisting wrong number of values to the disk may cause errors when
     // reading them back in the future.
@@ -71,7 +77,7 @@ void ClientHintsObserver::PersistClientHints(
       HostContentSettingsMapFactory::GetForProfile(profile);
 
   std::unique_ptr<base::ListValue> expiration_times_list =
-      base::MakeUnique<base::ListValue>();
+      std::make_unique<base::ListValue>();
   expiration_times_list->Reserve(client_hints.size());
 
   // Use wall clock since the expiration time would be persisted across embedder

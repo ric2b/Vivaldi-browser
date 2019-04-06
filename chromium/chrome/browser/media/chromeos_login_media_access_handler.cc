@@ -14,6 +14,7 @@
 #include "chrome/common/url_constants.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "content/public/browser/render_frame_host.h"
 #include "url/gurl.h"
 
 ChromeOSLoginMediaAccessHandler::ChromeOSLoginMediaAccessHandler() {}
@@ -26,17 +27,12 @@ bool ChromeOSLoginMediaAccessHandler::SupportsStreamType(
     const extensions::Extension* extension) {
   if (!web_contents)
     return false;
-  chromeos::LoginDisplayHost* login_display_host =
-      chromeos::LoginDisplayHost::default_host();
-  chromeos::WebUILoginView* webui_login_view =
-      login_display_host ? login_display_host->GetWebUILoginView() : nullptr;
-  content::WebContents* login_web_contents =
-      webui_login_view ? webui_login_view->GetWebContents() : nullptr;
-  return web_contents == login_web_contents;
+  chromeos::LoginDisplayHost* host = chromeos::LoginDisplayHost::default_host();
+  return host && web_contents == host->GetOobeWebContents();
 }
 
 bool ChromeOSLoginMediaAccessHandler::CheckMediaAccessPermission(
-    content::WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
     const GURL& security_origin,
     content::MediaStreamType type,
     const extensions::Extension* extension) {
@@ -82,15 +78,17 @@ bool ChromeOSLoginMediaAccessHandler::CheckMediaAccessPermission(
 void ChromeOSLoginMediaAccessHandler::HandleRequest(
     content::WebContents* web_contents,
     const content::MediaStreamRequest& request,
-    const content::MediaResponseCallback& callback,
+    content::MediaResponseCallback callback,
     const extensions::Extension* extension) {
   bool audio_allowed = false;
   bool video_allowed =
       request.video_type == content::MEDIA_DEVICE_VIDEO_CAPTURE &&
-      CheckMediaAccessPermission(web_contents, request.security_origin,
-                                 content::MEDIA_DEVICE_VIDEO_CAPTURE,
-                                 extension);
+      CheckMediaAccessPermission(
+          content::RenderFrameHost::FromID(request.render_process_id,
+                                           request.render_frame_id),
+          request.security_origin, content::MEDIA_DEVICE_VIDEO_CAPTURE,
+          extension);
 
-  CheckDevicesAndRunCallback(web_contents, request, callback, audio_allowed,
-                             video_allowed);
+  CheckDevicesAndRunCallback(web_contents, request, std::move(callback),
+                             audio_allowed, video_allowed);
 }

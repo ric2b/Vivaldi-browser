@@ -13,6 +13,7 @@
 #include "base/strings/string16.h"
 #include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/stub_notification_display_service.h"
+#include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
 
 class Profile;
 
@@ -21,8 +22,7 @@ class Notification;
 }
 
 // Helper class that enables use of the NotificationDisplayService in tests. The
-// Profile* passed when constructing an instance must outlive this class, as
-// the service (or internals of the service) may be overridden.
+// Profile* passed when constructing an instance may outlive this class.
 //
 // This class must only be used for testing purposes. Unlike most production
 // NotificationDisplayService implementations, all operations on this tester are
@@ -79,8 +79,12 @@ class NotificationDisplayServiceTester {
           ProcessNotificationOperationCallback& delegate);
 
  private:
+  void OnProfileShutdown();
+
   Profile* profile_;
   StubNotificationDisplayService* display_service_;
+  std::unique_ptr<KeyedServiceShutdownNotifier::Subscription>
+      profile_shutdown_subscription_;
 
   DISALLOW_COPY_AND_ASSIGN(NotificationDisplayServiceTester);
 };

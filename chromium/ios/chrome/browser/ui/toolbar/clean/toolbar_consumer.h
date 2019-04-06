@@ -17,14 +17,18 @@
 - (void)setLoadingState:(BOOL)loading;
 // Updates the toolbar with the current progress of the loading WebState.
 - (void)setLoadingProgressFraction:(double)progress;
-// Updates the toolbar with the current number of total tabs.
-- (void)setTabCount:(int)tabCount;
+// Updates the toolbar with the current number of total tabs. If the tab is
+// added, |addedInBackground| is set to YES if the tab is added in background.
+// NO otherwise.
+- (void)setTabCount:(int)tabCount addedInBackground:(BOOL)addedInBackground;
 // Sets the bookmarks status of the page.
 - (void)setPageBookmarked:(BOOL)bookmarked;
 // Sets whether the voice search is enabled or not.
 - (void)setVoiceSearchEnabled:(BOOL)enabled;
 // Sets whether the share menu is enabled.
 - (void)setShareMenuEnabled:(BOOL)enabled;
+// Sets whether the toolbar is displaying for an NTP.
+- (void)setIsNTP:(BOOL)isNTP;
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_CLEAN_TOOLBAR_CONSUMER_H_

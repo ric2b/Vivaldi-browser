@@ -28,6 +28,9 @@ class SyntheticGestureTargetAura : public SyntheticGestureTargetBase {
   void DispatchWebMouseWheelEventToPlatform(
       const blink::WebMouseWheelEvent& web_wheel,
       const ui::LatencyInfo& latency_info) override;
+  void DispatchWebGestureEventToPlatform(
+      const blink::WebGestureEvent& web_gesture,
+      const ui::LatencyInfo& latency_info) override;
   void DispatchWebMouseEventToPlatform(
       const blink::WebMouseEvent& web_mouse,
       const ui::LatencyInfo& latency_info) override;
@@ -37,6 +40,8 @@ class SyntheticGestureTargetAura : public SyntheticGestureTargetBase {
   GetDefaultSyntheticGestureSourceType() const override;
 
   float GetTouchSlopInDips() const override;
+
+  float GetSpanSlopInDips() const override;
 
   float GetMinScalingSpanInDips() const override;
 

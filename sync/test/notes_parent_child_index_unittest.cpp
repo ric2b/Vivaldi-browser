@@ -9,10 +9,10 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "components/sync/base/hash_util.h"
 #include "components/sync/syncable/entry_kernel.h"
 #include "components/sync/syncable/parent_child_index.h"
 #include "components/sync/syncable/syncable_util.h"
+#include "sync/vivaldi_hash_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using syncer::GenerateSyncableNotesHash;

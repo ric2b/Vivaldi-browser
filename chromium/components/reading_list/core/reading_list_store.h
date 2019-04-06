@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "components/reading_list/core/reading_list_model_storage.h"
 #include "components/reading_list/core/reading_list_store_delegate.h"
@@ -22,13 +23,10 @@ class ReadingListModel;
 
 // A ReadingListModelStorage storing and syncing data in protobufs.
 class ReadingListStore : public ReadingListModelStorage {
-  using StoreFactoryFunction = base::Callback<void(
-      syncer::ModelType type,
-      const syncer::ModelTypeStore::InitCallback& callback)>;
-
  public:
-  ReadingListStore(StoreFactoryFunction create_store_callback,
-                   const ChangeProcessorFactory& change_processor_factory);
+  ReadingListStore(
+      syncer::OnceModelTypeStoreFactory create_store_callback,
+      std::unique_ptr<syncer::ModelTypeChangeProcessor> change_processor);
   ~ReadingListStore() override;
 
   std::unique_ptr<ScopedBatchUpdate> EnsureBatchCreated() override;
@@ -109,7 +107,7 @@ class ReadingListStore : public ReadingListModelStorage {
   void GetData(StorageKeyList storage_keys, DataCallback callback) override;
 
   // Asynchronously retrieve all of the local sync data.
-  void GetAllData(DataCallback callback) override;
+  void GetAllDataForDebugging(DataCallback callback) override;
 
   // Get or generate a client tag for |entity_data|. This must be the same tag
   // that was/would have been generated in the SyncableService/Directory world
@@ -129,7 +127,7 @@ class ReadingListStore : public ReadingListModelStorage {
   std::string GetStorageKey(const syncer::EntityData& entity_data) override;
 
   // Methods used as callbacks given to DataTypeStore.
-  void OnStoreCreated(syncer::ModelTypeStore::Result result,
+  void OnStoreCreated(const base::Optional<syncer::ModelError>& error,
                       std::unique_ptr<syncer::ModelTypeStore> store);
 
   class ScopedBatchUpdate : public ReadingListModelStorage::ScopedBatchUpdate {
@@ -149,10 +147,10 @@ class ReadingListStore : public ReadingListModelStorage {
   void CommitTransaction();
   // Callbacks needed for the database handling.
   void OnDatabaseLoad(
-      syncer::ModelTypeStore::Result result,
+      const base::Optional<syncer::ModelError>& error,
       std::unique_ptr<syncer::ModelTypeStore::RecordList> entries);
-  void OnDatabaseSave(syncer::ModelTypeStore::Result result);
-  void OnReadAllMetadata(base::Optional<syncer::ModelError> error,
+  void OnDatabaseSave(const base::Optional<syncer::ModelError>& error);
+  void OnReadAllMetadata(const base::Optional<syncer::ModelError>& error,
                          std::unique_ptr<syncer::MetadataBatch> metadata_batch);
 
   void AddEntryToBatch(syncer::MutableDataBatch* batch,
@@ -161,7 +159,7 @@ class ReadingListStore : public ReadingListModelStorage {
   std::unique_ptr<syncer::ModelTypeStore> store_;
   ReadingListModel* model_;
   ReadingListStoreDelegate* delegate_;
-  StoreFactoryFunction create_store_callback_;
+  syncer::OnceModelTypeStoreFactory create_store_callback_;
 
   int pending_transaction_count_;
   std::unique_ptr<syncer::ModelTypeStore::WriteBatch> batch_;
@@ -169,6 +167,8 @@ class ReadingListStore : public ReadingListModelStorage {
   base::Clock* clock_;
 
   SEQUENCE_CHECKER(sequence_checker_);
+
+  base::WeakPtrFactory<ReadingListStore> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ReadingListStore);
 };

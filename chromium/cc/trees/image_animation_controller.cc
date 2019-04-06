@@ -21,8 +21,10 @@ const base::TimeDelta kAnimationResyncCutoff = base::TimeDelta::FromMinutes(5);
 
 ImageAnimationController::ImageAnimationController(
     base::SingleThreadTaskRunner* task_runner,
-    base::Closure invalidation_callback)
-    : notifier_(task_runner, invalidation_callback) {}
+    base::RepeatingClosure invalidation_callback,
+    bool enable_image_animation_resync)
+    : notifier_(task_runner, invalidation_callback),
+      enable_image_animation_resync_(enable_image_animation_resync) {}
 
 ImageAnimationController::~ImageAnimationController() = default;
 
@@ -71,7 +73,7 @@ const PaintImageIdFlatSet& ImageAnimationController::AnimateForSyncTree(
 
     // If we were able to advance this animation, invalidate it on the sync
     // tree.
-    if (state.AdvanceFrame(now))
+    if (state.AdvanceFrame(now, enable_image_animation_resync_))
       images_animated_on_sync_tree_.insert(id);
 
     // Update the next invalidation time to the earliest time at which we need
@@ -137,8 +139,21 @@ void ImageAnimationController::DidActivate() {
     DCHECK(it != animation_state_map_.end());
     it->second.PushPendingToActive();
   }
-
   images_animated_on_sync_tree_.clear();
+
+  // We would retain state for images with no drivers (no recordings) to allow
+  // resuming of animations. However, since the animation will be re-started
+  // from the beginning after navigation, we can avoid maintaining the state.
+  if (did_navigate_) {
+    for (auto it = animation_state_map_.begin();
+         it != animation_state_map_.end();) {
+      if (it->second.has_drivers())
+        it++;
+      else
+        it = animation_state_map_.erase(it);
+    }
+    did_navigate_ = false;
+  }
 }
 
 size_t ImageAnimationController::GetFrameIndexForImage(
@@ -216,7 +231,8 @@ bool ImageAnimationController::AnimationState::ShouldAnimate() const {
 }
 
 bool ImageAnimationController::AnimationState::AdvanceFrame(
-    base::TimeTicks now) {
+    base::TimeTicks now,
+    bool enable_image_animation_resync) {
   DCHECK(ShouldAnimate());
 
   // Start the animation from the first frame, if not yet started. We don't need
@@ -240,7 +256,8 @@ bool ImageAnimationController::AnimationState::AdvanceFrame(
   // up and start again from the current frame.
   // Note that we don't need to invalidate this image since the active tree
   // is already displaying the current frame.
-  if (now - next_desired_frame_time_ > kAnimationResyncCutoff) {
+  if (enable_image_animation_resync &&
+      now - next_desired_frame_time_ > kAnimationResyncCutoff) {
     DCHECK_EQ(pending_index_, active_index_);
     next_desired_frame_time_ = now + frames_[pending_index_].duration;
     return false;
@@ -268,8 +285,8 @@ bool ImageAnimationController::AnimationState::AdvanceFrame(
     // pages that try to sync an image and some other resource (e.g. audio),
     // especially if users switch tabs (and thus stop drawing the animation,
     // which will pause it) during that initial loop, then switch back later.
-    if (next_frame_index == 0u && repetitions_completed_ == 1 &&
-        next_desired_frame_time <= now) {
+    if (enable_image_animation_resync && next_frame_index == 0u &&
+        repetitions_completed_ == 1 && next_desired_frame_time <= now) {
       pending_index_ = 0u;
       next_desired_frame_time_ = now + frames_[0].duration;
       repetitions_completed_ = 0;
@@ -369,7 +386,7 @@ size_t ImageAnimationController::AnimationState::NextFrameIndex() const {
 
 ImageAnimationController::DelayedNotifier::DelayedNotifier(
     base::SingleThreadTaskRunner* task_runner,
-    base::Closure closure)
+    base::RepeatingClosure closure)
     : task_runner_(task_runner),
       closure_(std::move(closure)),
       weak_factory_(this) {

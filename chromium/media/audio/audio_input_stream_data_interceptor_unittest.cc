@@ -28,7 +28,7 @@ const double kVolume = 0.3456;
 class MockStream : public AudioInputStream {
  public:
   MockStream() = default;
-  ~MockStream() = default;
+  ~MockStream() override = default;
   MOCK_METHOD0(Open, bool());
   MOCK_METHOD1(Start, void(AudioInputStream::AudioInputCallback*));
   MOCK_METHOD0(Stop, void());
@@ -39,19 +39,20 @@ class MockStream : public AudioInputStream {
   MOCK_METHOD1(SetAutomaticGainControl, bool(bool));
   MOCK_METHOD0(GetAutomaticGainControl, bool());
   MOCK_METHOD0(IsMuted, bool());
+  MOCK_METHOD1(SetOutputDeviceForAec, void(const std::string&));
 };
 
 class MockDebugRecorder : public AudioDebugRecorder {
  public:
   MockDebugRecorder() = default;
-  ~MockDebugRecorder() = default;
+  ~MockDebugRecorder() override = default;
   MOCK_METHOD1(OnData, void(const AudioBus* source));
 };
 
 class MockCallback : public AudioInputStream::AudioInputCallback {
  public:
   MockCallback() = default;
-  ~MockCallback() = default;
+  ~MockCallback() override = default;
 
   MOCK_METHOD3(OnData, void(const AudioBus*, base::TimeTicks, double));
   MOCK_METHOD0(OnError, void());

@@ -10,16 +10,19 @@
 #include "base/memory/ptr_util.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/common/intent_helper.mojom.h"
+#include "components/arc/intent_helper/open_url_delegate.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace arc {
 
 namespace {
 
+constexpr char kPackageName[] = "default.package.name";
+
 IntentFilter GetIntentFilter(const std::string& host) {
   std::vector<IntentFilter::AuthorityEntry> authorities;
   authorities.emplace_back(host, -1);
-  return IntentFilter(std::move(authorities),
+  return IntentFilter(kPackageName, std::move(authorities),
                       std::vector<IntentFilter::PatternMatcher>());
 }
 
@@ -29,12 +32,12 @@ class ArcIntentHelperTest : public testing::Test {
  protected:
   ArcIntentHelperTest() = default;
 
-  class TestOpenUrlDelegate : public ArcIntentHelperBridge::OpenUrlDelegate {
+  class TestOpenUrlDelegate : public OpenUrlDelegate {
    public:
     ~TestOpenUrlDelegate() override = default;
 
-    // ArcIntentHelperBridge::OpenUrlDelegate:
-    void OpenUrl(const GURL& url) override { last_opened_url_ = url; }
+    // OpenUrlDelegate:
+    void OpenUrlFromArc(const GURL& url) override { last_opened_url_ = url; }
 
     GURL TakeLastOpenedUrl() {
       GURL result = std::move(last_opened_url_);
@@ -47,21 +50,22 @@ class ArcIntentHelperTest : public testing::Test {
   };
 
   std::unique_ptr<ArcBridgeService> arc_bridge_service_;
-  TestOpenUrlDelegate* test_open_url_delegate_;  // owned by |instance_|
+  std::unique_ptr<TestOpenUrlDelegate> test_open_url_delegate_;
   std::unique_ptr<ArcIntentHelperBridge> instance_;
 
  private:
   void SetUp() override {
     arc_bridge_service_ = std::make_unique<ArcBridgeService>();
+    test_open_url_delegate_ = std::make_unique<TestOpenUrlDelegate>();
     instance_ = std::make_unique<ArcIntentHelperBridge>(
         nullptr /* context */, arc_bridge_service_.get());
-    test_open_url_delegate_ = new TestOpenUrlDelegate();
-    instance_->SetOpenUrlDelegateForTesting(
-        base::WrapUnique(test_open_url_delegate_));
+    ArcIntentHelperBridge::SetOpenUrlDelegate(test_open_url_delegate_.get());
   }
 
   void TearDown() override {
+    ArcIntentHelperBridge::SetOpenUrlDelegate(nullptr);
     instance_.reset();
+    test_open_url_delegate_.reset();
     arc_bridge_service_.reset();
   }
 

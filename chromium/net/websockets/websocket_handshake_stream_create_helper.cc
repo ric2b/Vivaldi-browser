@@ -4,13 +4,13 @@
 
 #include "net/websockets/websocket_handshake_stream_create_helper.h"
 
-#include <memory>
 #include <utility>
 
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/websockets/websocket_basic_handshake_stream.h"
+#include "net/websockets/websocket_http2_handshake_stream.h"
 
 namespace net {
 
@@ -29,7 +29,8 @@ WebSocketHandshakeStreamCreateHelper::~WebSocketHandshakeStreamCreateHelper() =
 std::unique_ptr<WebSocketHandshakeStreamBase>
 WebSocketHandshakeStreamCreateHelper::CreateBasicStream(
     std::unique_ptr<ClientSocketHandle> connection,
-    bool using_proxy) {
+    bool using_proxy,
+    WebSocketEndpointLockManager* websocket_endpoint_lock_manager) {
   DCHECK(request_) << "set_request() must be called";
 
   // The list of supported extensions and parameters is hard-coded.
@@ -39,13 +40,24 @@ WebSocketHandshakeStreamCreateHelper::CreateBasicStream(
       1, "permessage-deflate; client_max_window_bits");
   auto stream = std::make_unique<WebSocketBasicHandshakeStream>(
       std::move(connection), connect_delegate_, using_proxy,
-      requested_subprotocols_, extensions, request_);
-  OnBasicStreamCreated(stream.get());
-  request_->OnHandshakeStreamCreated(stream.get());
+      requested_subprotocols_, extensions, request_,
+      websocket_endpoint_lock_manager);
+  request_->OnBasicHandshakeStreamCreated(stream.get());
   return std::move(stream);
 }
 
-void WebSocketHandshakeStreamCreateHelper::OnBasicStreamCreated(
-    WebSocketBasicHandshakeStream* stream) {}
+std::unique_ptr<WebSocketHandshakeStreamBase>
+WebSocketHandshakeStreamCreateHelper::CreateHttp2Stream(
+    base::WeakPtr<SpdySession> session) {
+  DCHECK(request_) << "set_request() must be called";
+
+  std::vector<std::string> extensions(
+      1, "permessage-deflate; client_max_window_bits");
+  auto stream = std::make_unique<WebSocketHttp2HandshakeStream>(
+      session, connect_delegate_, requested_subprotocols_, extensions,
+      request_);
+  request_->OnHttp2HandshakeStreamCreated(stream.get());
+  return stream;
+}
 
 }  // namespace net

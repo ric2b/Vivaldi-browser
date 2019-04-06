@@ -4,7 +4,6 @@
 
 #include "extensions/common/api/declarative_net_request/dnr_manifest_handler.h"
 
-#include "base/memory/ptr_util.h"
 #include "extensions/common/api/declarative_net_request/constants.h"
 #include "extensions/common/api/declarative_net_request/dnr_manifest_data.h"
 #include "extensions/common/api/declarative_net_request/utils.h"
@@ -84,8 +83,9 @@ bool DNRManifestHandler::Validate(const Extension* extension,
   return false;
 }
 
-const std::vector<std::string> DNRManifestHandler::Keys() const {
-  return SingleKey(keys::kDeclarativeNetRequestKey);
+base::span<const char* const> DNRManifestHandler::Keys() const {
+  static constexpr const char* kKeys[] = {keys::kDeclarativeNetRequestKey};
+  return kKeys;
 }
 
 }  // namespace declarative_net_request

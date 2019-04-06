@@ -44,8 +44,6 @@ class ChromeNativeAppWindowViewsWin : public ChromeNativeAppWindowViewsAura {
   // Overridden from views::WidgetDelegate:
   bool CanMinimize() const override;
 
-  void UpdateEventTargeterWithInset() override;
-
   // Populated if there is a glass frame, which provides special information
   // to the native widget implementation. This will be NULL if there is no
   // glass frame. Note, this can change from NULL to non-NULL and back again

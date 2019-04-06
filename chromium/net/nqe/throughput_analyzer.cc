@@ -46,7 +46,7 @@ ThroughputAnalyzer::ThroughputAnalyzer(
     const NetworkQualityEstimatorParams* params,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     ThroughputObservationCallback throughput_observation_callback,
-    base::TickClock* tick_clock,
+    const base::TickClock* tick_clock,
     const NetLogWithSource& net_log)
     : network_quality_provider_(network_quality_provider),
       params_(params),
@@ -118,7 +118,8 @@ bool ThroughputAnalyzer::IsCurrentlyTrackingThroughput() const {
   return true;
 }
 
-void ThroughputAnalyzer::SetTickClockForTesting(base::TickClock* tick_clock) {
+void ThroughputAnalyzer::SetTickClockForTesting(
+    const base::TickClock* tick_clock) {
   DCHECK(thread_checker_.CalledOnValidThread());
   tick_clock_ = tick_clock;
   DCHECK(tick_clock_);
@@ -221,6 +222,9 @@ bool ThroughputAnalyzer::IsHangingWindow(int64_t bits_received,
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (params_->throughput_hanging_requests_cwnd_size_multiplier() <= 0)
+    return false;
+
+  if (params_->use_small_responses())
     return false;
 
   // Initial congestion window size for TCP connections.
@@ -346,8 +350,7 @@ bool ThroughputAnalyzer::DegradesAccuracy(const URLRequest& request) const {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   bool private_network_request = nqe::internal::IsPrivateHost(
-      request.context()->host_resolver(),
-      HostPortPair(request.url().host(), request.url().EffectiveIntPort()));
+      request.context()->host_resolver(), HostPortPair::FromURL(request.url()));
 
   return !(use_localhost_requests_for_tests_ || !private_network_request) ||
          request.creation_time() < last_connection_change_;

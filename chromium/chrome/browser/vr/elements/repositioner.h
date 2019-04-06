@@ -9,41 +9,55 @@
 
 #include "base/macros.h"
 #include "chrome/browser/vr/elements/ui_element.h"
-#include "chrome/browser/vr/model/reticle_model.h"
+#include "chrome/browser/vr/vr_ui_export.h"
 #include "ui/gfx/transform.h"
 
 namespace vr {
 
 // A repositioner adjusts the position of its children by rotation. The
-// reposition is driven by controller.
-class Repositioner : public UiElement {
+// reposition is driven by controller. It maintains a transform and updates it
+// when enabled as either the head or the controller move. In a nutshell, it
+// rotates the elements per the angular change in the controller orientation,
+// adjusting the up vector of the content so that it aligns with the head's up
+// vector. As the window is being repositioned, we rotate it so that it remains
+// pointing upward.
+class VR_UI_EXPORT Repositioner : public UiElement {
  public:
-  explicit Repositioner(float content_depth);
+  Repositioner();
   ~Repositioner() override;
-
-  void set_laser_origin(const gfx::Point3F& laser_origin) {
-    laser_origin_ = laser_origin;
-  }
 
   void set_laser_direction(const gfx::Vector3dF& laser_direction) {
     laser_direction_ = laser_direction;
   }
 
-  void set_enable(bool enable) { enabled_ = enable; }
+  void SetEnabled(bool enabled);
+  void Reset();
+
+  // This method returns true if the user has repositioned far enough that we
+  // should consider it an intentional drag (and the UI may want to respond
+  // different if this has happened).
+  bool HasMovedBeyondThreshold() const { return has_moved_beyond_threshold_; }
+
+  bool ShouldUpdateWorldSpaceTransform(
+      bool parent_transform_changed) const override;
 
  private:
   gfx::Transform LocalTransform() const override;
   gfx::Transform GetTargetLocalTransform() const override;
   void UpdateTransform(const gfx::Transform& head_pose);
-  bool OnBeginFrame(const base::TimeTicks& time,
-                    const gfx::Transform& head_pose) override;
+  bool OnBeginFrame(const gfx::Transform& head_pose) override;
+#ifndef NDEBUG
   void DumpGeometry(std::ostringstream* os) const override;
+#endif
 
-  gfx::Transform transform_;
   bool enabled_ = false;
-  float content_depth_;
-  gfx::Point3F laser_origin_;
+  bool has_moved_beyond_threshold_ = false;
+  bool reset_yaw_ = false;
+  gfx::Transform transform_;
   gfx::Vector3dF laser_direction_;
+
+  gfx::Transform initial_transform_;
+  gfx::Vector3dF initial_laser_direction_;
 
   DISALLOW_COPY_AND_ASSIGN(Repositioner);
 };

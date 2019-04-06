@@ -10,12 +10,12 @@
 #include "content/common/content_export.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
-#include "content/public/common/service_worker_modes.h"
 #include "net/http/http_request_headers.h"
 #include "services/network/public/cpp/resource_request_body.h"
-#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
-#include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
+#include "services/network/public/mojom/request_context_frame_type.mojom.h"
+#include "third_party/blink/public/mojom/blob/blob_registry.mojom.h"
+#include "third_party/blink/public/platform/web_mixed_content_context_type.h"
+#include "third_party/blink/public/platform/web_url_request.h"
 
 namespace blink {
 class WebHTTPBody;
@@ -41,6 +41,19 @@ int GetLoadFlagsForWebURLRequest(const blink::WebURLRequest& request);
 blink::WebHTTPBody GetWebHTTPBodyForRequestBody(
     const network::ResourceRequestBody& input);
 
+// Takes a ResourceRequestBody with additional |blob_ptrs| which corresponds to
+// each Blob entries, and converts into WebHTTPBody.
+// TODO(kinuko): Remove this once Network Service is shipped.
+blink::WebHTTPBody GetWebHTTPBodyForRequestBodyWithBlobPtrs(
+    const network::ResourceRequestBody& input,
+    std::vector<blink::mojom::BlobPtrInfo> blob_ptrs);
+
+// Takes a ResourceRequestBody and gets blob pointers for Blob entries.
+// Used only in non-NetworkService cases but with S13nServiceWorker.
+// TODO(kinuko): Remove this once Network Service is shipped.
+std::vector<blink::mojom::BlobPtrInfo> GetBlobPtrsForRequestBody(
+    const network::ResourceRequestBody& input);
+
 // Takes a WebHTTPBody and converts into a ResourceRequestBody.
 scoped_refptr<network::ResourceRequestBody> GetRequestBodyForWebHTTPBody(
     const blink::WebHTTPBody& httpBody);
@@ -58,8 +71,6 @@ std::string GetFetchIntegrityForWebURLRequest(
 RequestContextType GetRequestContextTypeForWebURLRequest(
     const blink::WebURLRequest& request);
 blink::WebMixedContentContextType GetMixedContentContextTypeForWebURLRequest(
-    const blink::WebURLRequest& request);
-ServiceWorkerMode GetServiceWorkerModeForWebURLRequest(
     const blink::WebURLRequest& request);
 
 }  // namespace content

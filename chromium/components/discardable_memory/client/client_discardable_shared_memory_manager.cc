@@ -7,6 +7,7 @@
 #include <inttypes.h>
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "base/atomic_sequence_num.h"
@@ -14,7 +15,6 @@
 #include "base/macros.h"
 #include "base/memory/discardable_memory.h"
 #include "base/memory/discardable_shared_memory.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/memory.h"
 #include "base/process/process_metrics.h"
@@ -25,7 +25,6 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "components/crash/core/common/crash_key.h"
-#include "mojo/public/cpp/system/platform_handle.h"
 
 namespace discardable_memory {
 namespace {
@@ -108,8 +107,8 @@ ClientDiscardableSharedMemoryManager::ClientDiscardableSharedMemoryManager(
       base::ThreadTaskRunnerHandle::Get());
   mojom::DiscardableSharedMemoryManagerPtrInfo info = manager.PassInterface();
   io_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&InitManagerMojoOnIO, manager_mojo_.get(),
-                            base::Passed(&info)));
+      FROM_HERE, base::BindOnce(&InitManagerMojoOnIO, manager_mojo_.get(),
+                                std::move(info)));
 }
 
 ClientDiscardableSharedMemoryManager::~ClientDiscardableSharedMemoryManager() {
@@ -168,7 +167,7 @@ ClientDiscardableSharedMemoryManager::AllocateLockedDiscardableMemory(
     // Search free lists for suitable span.
     std::unique_ptr<DiscardableSharedMemoryHeap::Span> free_span =
         heap_->SearchFreeLists(pages, slack);
-    if (!free_span.get())
+    if (!free_span)
       break;
 
     // Attempt to lock |free_span|. Delete span and search free lists again
@@ -191,7 +190,7 @@ ClientDiscardableSharedMemoryManager::AllocateLockedDiscardableMemory(
     // at least one span from the free lists.
     MemoryUsageChanged(heap_->GetSize(), heap_->GetSizeOfFreeLists());
 
-    return base::MakeUnique<DiscardableMemoryImpl>(this, std::move(free_span));
+    return std::make_unique<DiscardableMemoryImpl>(this, std::move(free_span));
   }
 
   // Release purged memory to free up the address space before we attempt to
@@ -237,7 +236,7 @@ ClientDiscardableSharedMemoryManager::AllocateLockedDiscardableMemory(
 
   MemoryUsageChanged(heap_->GetSize(), heap_->GetSizeOfFreeLists());
 
-  return base::MakeUnique<DiscardableMemoryImpl>(this, std::move(new_span));
+  return std::make_unique<DiscardableMemoryImpl>(this, std::move(new_span));
 }
 
 bool ClientDiscardableSharedMemoryManager::OnMemoryDump(
@@ -357,18 +356,20 @@ ClientDiscardableSharedMemoryManager::AllocateLockedDiscardableSharedMemory(
                "ClientDiscardableSharedMemoryManager::"
                "AllocateLockedDiscardableSharedMemory",
                "size", size, "id", id);
-  base::SharedMemoryHandle handle;
+  base::UnsafeSharedMemoryRegion region;
   base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
                             base::WaitableEvent::InitialState::NOT_SIGNALED);
   base::ScopedClosureRunner event_signal_runner(
       base::Bind(&base::WaitableEvent::Signal, base::Unretained(&event)));
   io_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&ClientDiscardableSharedMemoryManager::AllocateOnIO,
-                            base::Unretained(this), size, id, &handle,
-                            base::Passed(&event_signal_runner)));
+      FROM_HERE,
+      base::BindOnce(&ClientDiscardableSharedMemoryManager::AllocateOnIO,
+                     base::Unretained(this), size, id, &region,
+                     std::move(event_signal_runner)));
   // Waiting until IPC has finished on the IO thread.
   event.Wait();
-  auto memory = base::MakeUnique<base::DiscardableSharedMemory>(handle);
+  auto memory =
+      std::make_unique<base::DiscardableSharedMemory>(std::move(region));
   if (!memory->Map(size))
     base::TerminateBecauseOutOfMemory(size);
   return memory;
@@ -377,25 +378,21 @@ ClientDiscardableSharedMemoryManager::AllocateLockedDiscardableSharedMemory(
 void ClientDiscardableSharedMemoryManager::AllocateOnIO(
     size_t size,
     int32_t id,
-    base::SharedMemoryHandle* handle,
+    base::UnsafeSharedMemoryRegion* region,
     base::ScopedClosureRunner closure_runner) {
   (*manager_mojo_)
       ->AllocateLockedDiscardableSharedMemory(
           static_cast<uint32_t>(size), id,
-          base::Bind(
+          base::BindOnce(
               &ClientDiscardableSharedMemoryManager::AllocateCompletedOnIO,
-              base::Unretained(this), handle, base::Passed(&closure_runner)));
+              base::Unretained(this), region, std::move(closure_runner)));
 }
 
 void ClientDiscardableSharedMemoryManager::AllocateCompletedOnIO(
-    base::SharedMemoryHandle* handle,
+    base::UnsafeSharedMemoryRegion* region,
     base::ScopedClosureRunner closure_runner,
-    mojo::ScopedSharedBufferHandle mojo_handle) {
-  if (!mojo_handle.is_valid())
-    return;
-  auto result = mojo::UnwrapSharedMemoryHandle(std::move(mojo_handle), handle,
-                                               nullptr, nullptr);
-  DCHECK_EQ(result, MOJO_RESULT_OK);
+    base::UnsafeSharedMemoryRegion ret_region) {
+  *region = std::move(ret_region);
 }
 
 void ClientDiscardableSharedMemoryManager::DeletedDiscardableSharedMemory(

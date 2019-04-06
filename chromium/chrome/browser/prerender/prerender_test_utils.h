@@ -16,8 +16,9 @@
 #include "base/containers/circular_deque.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
+#include "base/scoped_observer.h"
 #include "base/synchronization/lock.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
 #include "chrome/browser/prerender/prerender_contents.h"
 #include "chrome/browser/prerender/prerender_manager.h"
@@ -25,6 +26,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/safe_browsing/db/test_database_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/render_widget_host_observer.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/url_request/url_request_interceptor.h"
 #include "url/gurl.h"
@@ -99,7 +101,8 @@ class FakeSafeBrowsingDatabaseManager
 };
 
 // PrerenderContents that stops the UI message loop on DidStopLoading().
-class TestPrerenderContents : public PrerenderContents {
+class TestPrerenderContents : public PrerenderContents,
+                              public content::RenderWidgetHostObserver {
  public:
   TestPrerenderContents(PrerenderManager* prerender_manager,
                         Profile* profile,
@@ -125,12 +128,15 @@ class TestPrerenderContents : public PrerenderContents {
  private:
   void OnRenderViewHostCreated(
       content::RenderViewHost* new_render_view_host) override;
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
+  void RenderWidgetHostVisibilityChanged(content::RenderWidgetHost* widget_host,
+                                         bool became_visible) override;
+  void RenderWidgetHostDestroyed(
+      content::RenderWidgetHost* widget_host) override;
 
   FinalStatus expected_final_status_;
 
+  ScopedObserver<content::RenderWidgetHost, content::RenderWidgetHostObserver>
+      observer_;
   // The RenderViewHost created for the prerender, if any.
   content::RenderViewHost* new_render_view_host_;
   // Set to true when the prerendering RenderWidget is hidden.
@@ -410,18 +416,14 @@ class PrerenderInProcessBrowserTest : virtual public InProcessBrowserTest {
 // RAII class to save and restore the prerender mode.
 class RestorePrerenderMode {
  public:
-  RestorePrerenderMode()
-      : prev_mode_(PrerenderManager::GetMode(ORIGIN_NONE)),
-        prev_omnibox_mode_(PrerenderManager::GetMode(ORIGIN_OMNIBOX)) {}
+  RestorePrerenderMode() : prev_mode_(PrerenderManager::GetMode()) {}
 
   ~RestorePrerenderMode() {
     PrerenderManager::SetMode(prev_mode_);
-    PrerenderManager::SetOmniboxMode(prev_omnibox_mode_);
   }
 
  private:
   PrerenderManager::PrerenderManagerMode prev_mode_;
-  PrerenderManager::PrerenderManagerMode prev_omnibox_mode_;
 
   DISALLOW_COPY_AND_ASSIGN(RestorePrerenderMode);
 };
@@ -433,30 +435,8 @@ void CreateCountingInterceptorOnIO(
     const base::FilePath& file,
     const base::WeakPtr<RequestCounter>& counter);
 
-// When the |url| hits the net::URLRequestFilter (on the IO thread), executes
-// the |callback_io| providing the request to it. Does not modify the behavior
-// or the request job.
-void InterceptRequest(const GURL& url,
-                      base::Callback<void(net::URLRequest*)> callback_io);
-
-// When the |url| hits the net::URLRequestFilter (on the IO thread), executes
-// the |callback_io| providing the request to it, also pings the |counter| on UI
-// thread. Does not modify the behavior or the request job.
-void InterceptRequestAndCount(
-    const GURL& url,
-    RequestCounter* counter,
-    base::Callback<void(net::URLRequest*)> callback_io);
-
 // Makes |url| respond to requests with the contents of |file|.
 void CreateMockInterceptorOnIO(const GURL& url, const base::FilePath& file);
-
-// Makes |url| never respond on the first load, and then with the contents of
-// |file| afterwards. When the first load has been scheduled, runs |callback_io|
-// on the IO thread.
-void CreateHangingFirstRequestInterceptor(
-    const GURL& url,
-    const base::FilePath& file,
-    base::Callback<void(net::URLRequest*)> callback_io);
 
 }  // namespace test_utils
 

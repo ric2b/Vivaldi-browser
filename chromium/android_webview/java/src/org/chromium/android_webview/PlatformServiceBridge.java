@@ -8,17 +8,13 @@ import android.content.Context;
 import android.support.annotation.NonNull;
 
 import org.chromium.base.Callback;
-import org.chromium.base.Log;
-import org.chromium.base.StrictModeContext;
 import org.chromium.base.ThreadUtils;
-
-import java.lang.reflect.InvocationTargetException;
 
 /**
  * This class manages platform-specific services. (i.e. Google Services) The platform
  * should extend this class and use this base class to fetch their specialized version.
  */
-public class PlatformServiceBridge {
+public abstract class PlatformServiceBridge {
     private static final String TAG = "PlatformServiceBrid-";
     private static final String PLATFORM_SERVICE_BRIDGE =
             "com.android.webview.chromium.PlatformServiceBridgeGoogle";
@@ -31,27 +27,12 @@ public class PlatformServiceBridge {
     @SuppressWarnings("unused")
     public static PlatformServiceBridge getInstance() {
         synchronized (sInstanceLock) {
-            if (sInstance != null) return sInstance;
-
-            // Try to get a specialized service bridge. Starting with Android O, failed reflection
-            // may cause file reads. The reflection will go away soon: https://crbug.com/682070
-            try (StrictModeContext unused = StrictModeContext.allowDiskReads()) {
-                Class<?> cls = Class.forName(PLATFORM_SERVICE_BRIDGE);
-                sInstance = (PlatformServiceBridge) cls.getDeclaredConstructor().newInstance();
-                return sInstance;
-            } catch (ClassNotFoundException e) {
-                // This is not an error; it just means this device doesn't have specialized
-                // services.
-            } catch (IllegalAccessException | IllegalArgumentException | InstantiationException
-                    | NoSuchMethodException e) {
-                Log.e(TAG, "Failed to get " + PLATFORM_SERVICE_BRIDGE + ": " + e);
-            } catch (InvocationTargetException e) {
-                Log.e(TAG, "Failed invocation to get " + PLATFORM_SERVICE_BRIDGE + ": ",
-                        e.getCause());
+            if (sInstance == null) {
+                // Load an instance of PlatformServiceBridgeImpl. Because this can change
+                // depending on the GN configuration, this may not be the PlatformServiceBridgeImpl
+                // defined upstream.
+                sInstance = new PlatformServiceBridgeImpl();
             }
-
-            // Otherwise, get the generic service bridge.
-            sInstance = new PlatformServiceBridge();
             return sInstance;
         }
     }
@@ -70,8 +51,8 @@ public class PlatformServiceBridge {
         return false;
     }
 
-    public void querySafeBrowsingUserConsent(
-            Context context, @NonNull final Callback<Boolean> callback) {
+    // Overriding implementations may call "callback" asynchronously, on any thread.
+    public void querySafeBrowsingUserConsent(@NonNull final Callback<Boolean> callback) {
         // User opt-in preference depends on a SafetyNet API.
     }
 

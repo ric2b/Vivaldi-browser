@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_util.h"
 #include "base/time/clock.h"
@@ -35,7 +34,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
@@ -118,12 +117,13 @@ bool SiteEngagementService::IsEnabled() {
 double SiteEngagementService::GetScoreFromSettings(
     HostContentSettingsMap* settings,
     const GURL& origin) {
-  auto clock = base::MakeUnique<base::DefaultClock>();
-  return SiteEngagementScore(clock.get(), origin, settings).GetTotalScore();
+  return SiteEngagementScore(base::DefaultClock::GetInstance(), origin,
+                             settings)
+      .GetTotalScore();
 }
 
 SiteEngagementService::SiteEngagementService(Profile* profile)
-    : SiteEngagementService(profile, base::MakeUnique<base::DefaultClock>()) {
+    : SiteEngagementService(profile, base::DefaultClock::GetInstance()) {
   content::BrowserThread::PostAfterStartupTask(
       FROM_HERE,
       content::BrowserThread::GetTaskRunnerForThread(
@@ -137,7 +137,11 @@ SiteEngagementService::SiteEngagementService(Profile* profile)
   }
 }
 
-SiteEngagementService::~SiteEngagementService() = default;
+SiteEngagementService::~SiteEngagementService() {
+  // Clear any observers to avoid dangling pointers back to this object.
+  for (auto& observer : observer_list_)
+    observer.Observe(nullptr);
+}
 
 void SiteEngagementService::Shutdown() {
   history::HistoryService* history = HistoryServiceFactory::GetForProfile(
@@ -278,6 +282,11 @@ double SiteEngagementService::GetTotalEngagementPoints() const {
   return total_score;
 }
 
+void SiteEngagementService::AddPointsForTesting(const GURL& url,
+                                                double points) {
+  AddPoints(url, points);
+}
+
 #if defined(OS_ANDROID)
 SiteEngagementServiceAndroid* SiteEngagementService::GetAndroidService() const {
   return android_service_.get();
@@ -290,8 +299,8 @@ void SiteEngagementService::SetAndroidService(
 #endif
 
 SiteEngagementService::SiteEngagementService(Profile* profile,
-                                             std::unique_ptr<base::Clock> clock)
-    : profile_(profile), clock_(std::move(clock)), weak_factory_(this) {
+                                             base::Clock* clock)
+    : profile_(profile), clock_(clock), weak_factory_(this) {
   // May be null in tests.
   history::HistoryService* history = HistoryServiceFactory::GetForProfile(
       profile, ServiceAccessType::IMPLICIT_ACCESS);
@@ -565,21 +574,13 @@ bool SiteEngagementService::IsLastEngagementStale() const {
 
 void SiteEngagementService::OnURLsDeleted(
     history::HistoryService* history_service,
-    bool all_history,
-    bool expired,
-    const history::URLRows& deleted_rows,
-    const std::set<GURL>& favicon_urls) {
+    const history::DeletionInfo& deletion_info) {
   std::multiset<GURL> origins;
-  for (const history::URLRow& row : deleted_rows)
+  for (const history::URLRow& row : deletion_info.deleted_rows())
     origins.insert(row.url().GetOrigin());
 
-  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
-      profile_, ServiceAccessType::EXPLICIT_ACCESS);
-  hs->GetCountsAndLastVisitForOrigins(
-      std::set<GURL>(origins.begin(), origins.end()),
-      base::Bind(
-          &SiteEngagementService::GetCountsAndLastVisitForOriginsComplete,
-          weak_factory_.GetWeakPtr(), hs, origins, expired));
+  UpdateEngagementScores(origins, deletion_info.is_from_expiration(),
+                         deletion_info.deleted_urls_origin_map());
 }
 
 SiteEngagementScore SiteEngagementService::CreateEngagementScore(
@@ -588,8 +589,7 @@ SiteEngagementScore SiteEngagementService::CreateEngagementScore(
   // the original profile migrated in, so all engagement scores in incognito
   // will be initialised to the values from the original profile.
   return SiteEngagementScore(
-      clock_.get(), origin,
-      HostContentSettingsMapFactory::GetForProfile(profile_));
+      clock_, origin, HostContentSettingsMapFactory::GetForProfile(profile_));
 }
 
 int SiteEngagementService::OriginsWithMaxDailyEngagement() const {
@@ -621,8 +621,7 @@ int SiteEngagementService::OriginsWithMaxEngagement(
   return total_origins;
 }
 
-void SiteEngagementService::GetCountsAndLastVisitForOriginsComplete(
-    history::HistoryService* history_service,
+void SiteEngagementService::UpdateEngagementScores(
     const std::multiset<GURL>& deleted_origins,
     bool expired,
     const history::OriginCountAndLastVisitMap& remaining_origins) {
@@ -632,6 +631,9 @@ void SiteEngagementService::GetCountsAndLastVisitForOriginsComplete(
   base::Time now = clock_->Now();
   base::Time four_weeks_ago =
       now - base::TimeDelta::FromDays(FOUR_WEEKS_IN_DAYS);
+
+  HostContentSettingsMap* settings_map =
+      HostContentSettingsMapFactory::GetForProfile(profile_);
 
   for (const auto& origin_to_count : remaining_origins) {
     GURL origin = origin_to_count.first;
@@ -648,6 +650,14 @@ void SiteEngagementService::GetCountsAndLastVisitForOriginsComplete(
     // URL still has entries in history.
     if ((expired && remaining != 0) || deleted == 0)
       continue;
+
+    // Remove origins that have no urls left.
+    if (remaining == 0) {
+      settings_map->SetWebsiteSettingDefaultScope(
+          origin, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT,
+          content_settings::ResourceIdentifier(), nullptr);
+      continue;
+    }
 
     // Remove engagement proportional to the urls expired from the origin's
     // entire history.

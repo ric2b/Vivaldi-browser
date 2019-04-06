@@ -24,13 +24,13 @@ void FillPhonenumberRow(sql::Statement& statement,
   int contact_id = statement.ColumnInt(1);
   std::string phonenumber = statement.ColumnString(2);
   std::string type = statement.ColumnString(3);
-  bool is_default = statement.ColumnInt(4) == 1 ? true : false;
+  bool favorite = statement.ColumnInt(4) == 1 ? true : false;
 
   phonenumber_row->set_phonenumber_id(phonenumber_id);
   phonenumber_row->set_contact_id(contact_id);
   phonenumber_row->set_phonenumber(phonenumber);
   phonenumber_row->set_type(type);
-  phonenumber_row->set_is_default(is_default);
+  phonenumber_row->set_favorite(favorite);
 }
 
 // static
@@ -68,7 +68,7 @@ bool PhonenumberTable::CreatePhonenumberTable() {
       "contact_id INTEGER,"
       "phonenumber LONGVARCHAR,"
       "type LONGVARCHAR,"
-      "is_default integer,"
+      "is_default integer DEFAULT 0,"
       "created INTEGER,"
       "last_modified INTEGER"
       ")");
@@ -88,7 +88,7 @@ PhonenumberID PhonenumberTable::AddPhoneNumber(AddPropertyObject row) {
   statement.BindInt64(0, row.contact_id);
   statement.BindString16(1, row.value);
   statement.BindString(2, row.type);
-  statement.BindInt(3, row.is_default ? 1 : 0);
+  statement.BindInt(3, row.favorite ? 1 : 0);
 
   int created = base::Time().Now().ToInternalValue();
   statement.BindInt64(4, created);
@@ -109,7 +109,7 @@ bool PhonenumberTable::UpdatePhoneNumber(UpdatePropertyObject row) {
   int modified = base::Time().Now().ToInternalValue();
   statement.BindString16(0, row.value);
   statement.BindString(1, row.type);
-  statement.BindInt(2, row.is_default ? 1 : 0);
+  statement.BindInt(2, row.favorite ? 1 : 0);
   statement.BindInt64(3, modified);
   statement.BindInt64(4, row.property_id);
   statement.BindInt64(5, row.contact_id);

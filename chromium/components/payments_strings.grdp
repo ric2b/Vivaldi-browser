@@ -1,14 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <grit-part>
 
-  <!-- Titles and buttons which are title-cased on certain platforms. Make sure to keep the title-cased and sentence-cased variants in sync. -->
+  <!-- Dialog titles, sentence-cased -->
+  <message name="IDS_PAYMENTS_TITLE" desc="Title of the dialog that presents a request for payment for some good or service. Sentence-cased.">
+    Review your payment
+  </message>
+  <message name="IDS_PAYMENTS_ERROR_MESSAGE_DIALOG_TITLE" desc="The title of the dialog that informs the user that there is error in verifying and charging the payment.">
+    Payment not completed
+  </message>
 
+  <!-- Section labels and buttons which are title-cased on certain platforms. Make sure to keep the title-cased and sentence-cased variants in sync. -->
 
   <!-- General titles, sentence-cased -->
   <if expr="not use_titlecase">
-    <message name="IDS_PAYMENTS_TITLE" desc="Title of the dialog that presents a request for payment for some good or service. Sentence-cased.">
-      Your payment
-    </message>
     <message name="IDS_PAYMENTS_METHOD_OF_PAYMENT_LABEL" desc="The title for the section that lets the user select the method of payment. Sentence-cased." formatter_data="android_java">
       Payment method
     </message>
@@ -75,9 +79,6 @@
   </if>  <!-- not use_titlecase -->
   <!-- General Titles, Title-Cased -->
   <if expr="use_titlecase">
-    <message name="IDS_PAYMENTS_TITLE" desc="Title of the dialog that presents a request for payment for some good or service. Title-Cased.">
-      Your Payment
-    </message>
     <message name="IDS_PAYMENTS_METHOD_OF_PAYMENT_LABEL" desc="The title for the section that lets the user select the method of payment. Title-Cased.">
       Payment Method
     </message>
@@ -286,9 +287,6 @@
     <message name="IDS_PAYMENTS_PROCESSING_MESSAGE" desc="The text that informs the user that payment is being processed. Sentence-cased.">
       Processing
     </message>
-    <message name="IDS_PAYMENTS_ERROR_MESSAGE_DIALOG_TITLE" desc="The title of the dialog that informs the user that there is error in verifying and charging the payment. Sentence-cased.">
-      Payment not completed
-    </message>
      <message name="IDS_PAYMENTS_CHECKING_OPTION" desc="Text explaining that the option the user selected is being checked and verified. Sentence-cased." formatter_data="android_java">
       Checking
     </message>
@@ -340,9 +338,6 @@
     <message name="IDS_PAYMENTS_PROCESSING_MESSAGE" desc="The text that informs the user that payment is being processed. Title-Cased.">
       Processing
     </message>
-    <message name="IDS_PAYMENTS_ERROR_MESSAGE_DIALOG_TITLE" desc="The title of the dialog that informs the user that there is error in verifying and charging the payment. Title-Cased.">
-      Payment Not Completed
-    </message>
      <message name="IDS_PAYMENTS_CHECKING_OPTION" desc="Text explaining that the option the user selected is being checked and verified. Title-Cased." formatter_data="android_java">
       Checking
     </message>
@@ -388,6 +383,9 @@
   </if>
   <message name="IDS_PAYMENTS_CARD_AND_ADDRESS_SETTINGS_SIGNED_OUT" desc="Label of the section containing the origin description and the link to go to the settings page for card and address options. This label is used when the user is not signed in." formatter_data="android_java">
     Cards and addresses are from Chrome. You can manage them in <ph name="BEGIN_LINK">BEGIN_LINK</ph>Settings<ph name="END_LINK">END_LINK</ph>.
+  </message>
+  <message name="IDS_SETTINGS_CAN_MAKE_PAYMENT_TOGGLE_LABEL" desc="Label of the toggle which disables canMakePayment" formatter_data="android_java">
+    Allow sites to check if you have payment methods saved
   </message>
 
   <!-- iOS Credit Card form -->
@@ -516,13 +514,13 @@
 
   <!-- Validation, sentence-cased -->
   <if expr="not use_titlecase">
-    <message name="IDS_PAYMENTS_FIELD_REQUIRED_VALIDATION_MESSAGE" desc="The text that informs the user that an input field is required. 'Required' is an adjective. Sentence-cased." formatter_data="android_java">
+    <message name="IDS_PREF_EDIT_DIALOG_FIELD_REQUIRED_VALIDATION_MESSAGE" desc="The text that informs the user that an input field is required. 'Required' is an adjective. Sentence-cased." formatter_data="android_java">
       Required field
     </message>
   </if>  <!-- not use_titlecase -->
   <!-- Validation, Title-Cased -->
   <if expr="use_titlecase">
-    <message name="IDS_PAYMENTS_FIELD_REQUIRED_VALIDATION_MESSAGE" desc="The text that informs the user that an input field is required. 'Required' is an adjective. Title-Cased.">
+    <message name="IDS_PREF_EDIT_DIALOG_FIELD_REQUIRED_VALIDATION_MESSAGE" desc="The text that informs the user that an input field is required. 'Required' is an adjective. Title-Cased.">
       Required Field
     </message>
   </if>  <!-- use_titlecase -->
@@ -635,5 +633,8 @@
   </message>
   <message name="IDS_PAYMENTS_ACCESSIBLE_LABEL_WITH_ERROR" desc="The format to append an error message to a screen reader string describing a profile or payment method">
     <ph name="LABEL">$1<ex>Homer Simpson 123 Fake Street</ex></ph> <ph name="ERROR">$2<ex>Phone number required</ex></ph>
+  </message>
+  <message name="IDS_PAYMENTS_ORDER_SUMMARY_ACCESSIBLE_LABEL" desc="The string used to format what the screenreader reads out for the order summary section of the Payment Sheet.">
+    Order Summary, <ph name="TOTAL_LABEL">$1<ex>Total, USD $10.00</ex></ph>, More Details
   </message>
 </grit-part>

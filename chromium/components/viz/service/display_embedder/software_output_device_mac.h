@@ -14,17 +14,15 @@
 #include "components/viz/service/viz_service_export.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkRegion.h"
-#include "ui/gfx/native_widget_types.h"
-#include "ui/gfx/vsync_provider.h"
 
 class SkCanvas;
 
 namespace viz {
 
-class VIZ_SERVICE_EXPORT SoftwareOutputDeviceMac : public SoftwareOutputDevice,
-                                                   public gfx::VSyncProvider {
+class VIZ_SERVICE_EXPORT SoftwareOutputDeviceMac : public SoftwareOutputDevice {
  public:
-  explicit SoftwareOutputDeviceMac(gfx::AcceleratedWidget widget);
+  explicit SoftwareOutputDeviceMac(
+      scoped_refptr<base::SequencedTaskRunner> task_runner);
   ~SoftwareOutputDeviceMac() override;
 
   // SoftwareOutputDevice implementation.
@@ -34,13 +32,6 @@ class VIZ_SERVICE_EXPORT SoftwareOutputDeviceMac : public SoftwareOutputDevice,
   void DiscardBackbuffer() override;
   void EnsureBackbuffer() override;
   gfx::VSyncProvider* GetVSyncProvider() override;
-
-  // gfx::VSyncProvider implementation.
-  void GetVSyncParameters(
-      const gfx::VSyncProvider::UpdateVSyncCallback& callback) override;
-  bool GetVSyncParametersIfAvailable(base::TimeTicks* timebase,
-                                     base::TimeDelta* interval) override;
-  bool SupportGetVSyncParametersIfAvailable() override;
 
   // Testing methods.
   SkRegion LastCopyRegionForTesting() const {
@@ -65,7 +56,6 @@ class VIZ_SERVICE_EXPORT SoftwareOutputDeviceMac : public SoftwareOutputDevice,
   void UpdateAndCopyBufferDamage(Buffer* previous_paint_buffer,
                                  const SkRegion& new_damage_rect);
 
-  gfx::AcceleratedWidget widget_ = gfx::kNullAcceleratedWidget;
   gfx::Size pixel_size_;
   float scale_factor_ = 1;
 
@@ -81,8 +71,6 @@ class VIZ_SERVICE_EXPORT SoftwareOutputDeviceMac : public SoftwareOutputDevice,
   // The SkCanvas wraps the mapped |current_paint_buffer_|'s IOSurface. It is
   // valid only between BeginPaint and EndPaint.
   std::unique_ptr<SkCanvas> current_paint_canvas_;
-
-  gfx::VSyncProvider::UpdateVSyncCallback update_vsync_callback_;
 
   SkRegion last_copy_region_for_testing_;
 

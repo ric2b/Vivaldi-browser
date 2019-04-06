@@ -47,7 +47,7 @@ suite('AndroidAppsPageTests', function() {
       assertTrue(!!button);
       assertFalse(!!androidAppsPage.$$('.subpage-arrow'));
 
-      MockInteractions.tap(button);
+      button.click();
       Polymer.dom.flush();
       assertTrue(androidAppsPage.prefs.arc.enabled.value);
 
@@ -84,7 +84,7 @@ suite('AndroidAppsPageTests', function() {
       androidAppsPage.prefs = {arc: {enabled: {value: true}}};
       setAndroidAppsState(true, false);
       settings.navigateTo(settings.routes.ANDROID_APPS);
-      MockInteractions.tap(androidAppsPage.$$('#android-apps'));
+      androidAppsPage.$$('#android-apps').click();
       return flushAsync().then(() => {
         subpage = androidAppsPage.$$('settings-android-apps-subpage');
         assertTrue(!!subpage);
@@ -100,20 +100,19 @@ suite('AndroidAppsPageTests', function() {
       assertTrue(!subpage.$$('settings-android-settings-element'));
       setAndroidAppsState(true, true);
       assertTrue(!!subpage.$$('settings-android-settings-element'));
-      assertTrue(!!subpage.$$('settings-android-settings-element').
-          $$('#manageApps'));
+      assertTrue(
+          !!subpage.$$('settings-android-settings-element').$$('#manageApps'));
       setAndroidAppsState(true, false);
       assertTrue(!subpage.$$('settings-android-settings-element'));
     });
 
     test('ManageAppsOpenRequest', function() {
       setAndroidAppsState(true, true);
-      const button = subpage.$$('settings-android-settings-element').
-          $$('#manageApps');
+      const button =
+          subpage.$$('settings-android-settings-element').$$('#manageApps');
       assertTrue(!!button);
-      const promise = androidAppsBrowserProxy.whenCalled(
-          'showAndroidAppsSettings');
-      // MockInteractions.tap does not work here due style is not updated.
+      const promise =
+          androidAppsBrowserProxy.whenCalled('showAndroidAppsSettings');
       button.click();
       Polymer.dom.flush();
       return promise;
@@ -157,7 +156,7 @@ suite('AndroidAppsPageTests', function() {
         }
       };
       setAndroidAppsState(true, true);
-      MockInteractions.tap(androidAppsPage.$$('#android-apps'));
+      androidAppsPage.$$('#android-apps').click();
       Polymer.dom.flush();
       subpage = androidAppsPage.$$('settings-android-apps-subpage');
       assertTrue(!!subpage);
@@ -167,8 +166,8 @@ suite('AndroidAppsPageTests', function() {
       Polymer.dom.flush();
       assertFalse(!!subpage.$$('#remove'));
       assertTrue(!!subpage.$$('settings-android-settings-element'));
-      assertTrue(!!subpage.$$('settings-android-settings-element').
-          $$('#manageApps'));
+      assertTrue(
+          !!subpage.$$('settings-android-settings-element').$$('#manageApps'));
     });
   });
 
@@ -181,17 +180,16 @@ suite('AndroidAppsPageTests', function() {
 
     test('Sanity', function() {
       assertTrue(!!androidAppsPage.$$('settings-android-settings-element'));
-      assertTrue(!!androidAppsPage.$$('settings-android-settings-element').
-          $$("#manageApps"));
+      assertTrue(!!androidAppsPage.$$('settings-android-settings-element')
+                       .$$('#manageApps'));
     });
 
     test('ManageAppsOpenRequest', function() {
-      const button = androidAppsPage.$$('settings-android-settings-element').
-          $$('#manageApps');
+      const button = androidAppsPage.$$('settings-android-settings-element')
+                         .$$('#manageApps');
       assertTrue(!!button);
-      const promise = androidAppsBrowserProxy.whenCalled(
-          'showAndroidAppsSettings');
-      // MockInteractions.tap does not work here due style is not updated.
+      const promise =
+          androidAppsBrowserProxy.whenCalled('showAndroidAppsSettings');
       button.click();
       Polymer.dom.flush();
       return promise;

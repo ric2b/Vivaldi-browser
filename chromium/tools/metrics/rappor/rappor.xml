@@ -1361,6 +1361,9 @@ components/rappor/rappor_parameters.h.
 </rappor-metric>
 
 <rappor-metric name="Media.OriginUrl.EME" type="ETLD_PLUS_ONE">
+  <obsolete>
+    Superseded by media UKM metrics. No longer being logged.
+  </obsolete>
   <owner>xhwang@chromium.org</owner>
   <summary>
     The domain and registry of the URL that uses Encrypted Media Extensions
@@ -1369,6 +1372,9 @@ components/rappor/rappor_parameters.h.
 </rappor-metric>
 
 <rappor-metric name="Media.OriginUrl.EME.Insecure" type="ETLD_PLUS_ONE">
+  <obsolete>
+    Superseded by media UKM metrics. No longer being logged.
+  </obsolete>
   <owner>xhwang@chromium.org</owner>
   <summary>
     The domain and registry of the URL that uses Encrypted Media Extensions
@@ -1674,6 +1680,9 @@ now we are only interested in H264, VP8 and VP9.
 
 <rappor-metric name="PageLoad.CoarseTiming.NavigationToFirstContentfulPaint"
     type="UMA_RAPPOR_TYPE">
+  <obsolete>
+    Deprecated May 2018
+  </obsolete>
   <owner>csharrison@chromium.org</owner>
   <owner>bmcquade@chromium.org</owner>
   <summary>
@@ -1717,6 +1726,9 @@ now we are only interested in H264, VP8 and VP9.
 <rappor-metric
     name="PageLoad.Experimental.PaintTiming.FirstMeaningfulPaintNotRecorded"
     type="ETLD_PLUS_ONE">
+  <obsolete>
+    Deprecated May 2018
+  </obsolete>
   <owner>ksakamoto@chromium.org</owner>
   <summary>
     The domain and registry of the URL of a page which did not report
@@ -2420,6 +2432,9 @@ now we are only interested in H264, VP8 and VP9.
 </rappor-metric>
 
 <rappor-metric name="SubresourceFilter.UIShown" type="UMA_RAPPOR_TYPE">
+  <obsolete>
+    Deprecated May 2018 in favor of SubresourceFilter UKM.
+  </obsolete>
   <owner>csharrison@chromium.org</owner>
   <summary>
     The eTLD+1 that caused the SubresourceFilter UI to show that ads are being
@@ -2428,6 +2443,9 @@ now we are only interested in H264, VP8 and VP9.
 </rappor-metric>
 
 <rappor-metric name="Tab.TabUnder.Opener" type="UMA_RAPPOR_TYPE">
+  <obsolete>
+    Now logged in UKM (see AbusiveExperienceHeuristic)
+  </obsolete>
   <owner>csharrison@chromium.org</owner>
   <summary>
     The domain and registry of the URL that attempted to initiate a
@@ -2477,22 +2495,6 @@ now we are only interested in H264, VP8 and VP9.
   <owner>billorr@chromium.org</owner>
   <summary>
     The host of the URL that succeeded in presenting WebVR content.
-  </summary>
-</rappor-metric>
-
-<rappor-metric name="WebComponents.DocumentRegisterElement"
-    type="ETLD_PLUS_ONE">
-  <owner>kojii@chromium.org</owner>
-  <summary>
-    The host of a URL that used Document::RegisterElement().
-  </summary>
-</rappor-metric>
-
-<rappor-metric name="WebComponents.ElementCreateShadowRoot"
-    type="ETLD_PLUS_ONE">
-  <owner>kojii@chromium.org</owner>
-  <summary>
-    The host of a URL that used Element::CreateShadowRoot().
   </summary>
 </rappor-metric>
 

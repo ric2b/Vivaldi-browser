@@ -10,6 +10,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
@@ -18,7 +19,6 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/public/browser/browser_thread.h"
@@ -181,21 +181,23 @@ void PluginPrivateDataByOriginChecker::OnDirectoryRead(
     storage::AsyncFileUtil* file_util = filesystem_context_->GetAsyncFileUtil(
         storage::kFileSystemTypePluginPrivate);
     for (const auto& file : file_list) {
-      DVLOG(3) << __func__ << " file: " << file.name;
-      DCHECK(!file.is_directory);  // Nested directories not implemented.
+      DVLOG(3) << __func__ << " file: " << file.name.value();
+      // Nested directories not implemented.
+      DCHECK_NE(file.type, filesystem::mojom::FsFileType::DIRECTORY);
 
       std::unique_ptr<storage::FileSystemOperationContext> operation_context =
           std::make_unique<storage::FileSystemOperationContext>(
               filesystem_context_);
       storage::FileSystemURL file_url = filesystem_context_->CrackURL(
-          GURL(root + StringTypeToString(file.name)));
+          GURL(root + StringTypeToString(file.name.value())));
       IncrementTaskCount();
       file_util->GetFileInfo(
           std::move(operation_context), file_url,
           storage::FileSystemOperation::GET_METADATA_FIELD_SIZE |
               storage::FileSystemOperation::GET_METADATA_FIELD_LAST_MODIFIED,
-          base::Bind(&PluginPrivateDataByOriginChecker::OnFileInfo,
-                     base::Unretained(this), StringTypeToString(file.name)));
+          base::BindOnce(&PluginPrivateDataByOriginChecker::OnFileInfo,
+                         base::Unretained(this),
+                         StringTypeToString(file.name.value())));
     }
   }
 

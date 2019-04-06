@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+#include <algorithm>
+
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -19,7 +21,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #endif
 
 using content::WebContents;
@@ -182,9 +184,9 @@ Browser* FindBrowserWithProfile(Profile* profile) {
   return FindBrowserWithTabbedOrAnyType(profile, false, false);
 }
 
-Browser* FindBrowserWithID(SessionID::id_type desired_id) {
+Browser* FindBrowserWithID(SessionID desired_id) {
   for (auto* browser : *BrowserList::GetInstance()) {
-    if (browser->session_id().id() == desired_id)
+    if (browser->session_id() == desired_id)
       return browser;
   }
   return NULL;
@@ -207,11 +209,10 @@ Browser* FindBrowserWithActiveWindow() {
 
 Browser* FindBrowserWithWebContents(const WebContents* web_contents) {
   DCHECK(web_contents);
-  for (TabContentsIterator it; !it.done(); it.Next()) {
-    if (*it == web_contents)
-      return it.browser();
-  }
-  return NULL;
+  auto& all_tabs = AllTabContentses();
+  auto it = std::find(all_tabs.begin(), all_tabs.end(), web_contents);
+
+  return (it == all_tabs.end()) ? nullptr : it.browser();
 }
 
 Browser* FindLastActiveWithProfile(Profile* profile) {

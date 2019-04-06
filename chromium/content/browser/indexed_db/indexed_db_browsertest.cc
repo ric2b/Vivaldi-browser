@@ -148,8 +148,8 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
   virtual int64_t RequestDiskUsage() {
     PostTaskAndReplyWithResult(
         GetContext()->TaskRunner(), FROM_HERE,
-        base::BindOnce(&IndexedDBContext::GetOriginDiskUsage, GetContext(),
-                       GURL("file:///")),
+        base::BindOnce(&IndexedDBContextImpl::GetOriginDiskUsage, GetContext(),
+                       Origin::Create(GURL("file:///"))),
         base::BindOnce(&IndexedDBBrowserTest::DidGetDiskUsage,
                        base::Unretained(this)));
     scoped_refptr<base::ThreadTestHelper> helper(
@@ -828,7 +828,7 @@ IN_PROC_BROWSER_TEST_F(
   base::string16 expected_title16(ASCIIToUTF16("setVersion(3) complete"));
   TitleWatcher title_watcher(new_shell->web_contents(), expected_title16);
 
-  shell()->web_contents()->GetMainFrame()->GetProcess()->Shutdown(0, true);
+  shell()->web_contents()->GetMainFrame()->GetProcess()->Shutdown(0);
   shell()->Close();
 
   EXPECT_EQ(expected_title16, title_watcher.WaitAndGetTitle());

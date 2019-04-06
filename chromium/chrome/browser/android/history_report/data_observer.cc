@@ -25,21 +25,29 @@ DataObserver::DataObserver(
     UsageReportsBufferService* usage_reports_buffer_service,
     BookmarkModel* bookmark_model,
     history::HistoryService* history_service)
-    : data_changed_callback_(data_changed_callback),
+    : bookmark_model_(bookmark_model),
+      data_changed_callback_(data_changed_callback),
       data_cleared_callback_(data_cleared_callback),
       stop_reporting_callback_(stop_reporting_callback),
       delta_file_service_(delta_file_service),
       usage_reports_buffer_service_(usage_reports_buffer_service) {
-  bookmark_model->AddObserver(this);
+  bookmark_model_->AddObserver(this);
   history_service->AddObserver(this);
 }
 
-DataObserver::~DataObserver() {}
+DataObserver::~DataObserver() {
+  if (bookmark_model_)
+    bookmark_model_->RemoveObserver(this);
+}
 
 void DataObserver::BookmarkModelLoaded(BookmarkModel* model,
                                        bool ids_reassigned) {}
 
-void DataObserver::BookmarkModelBeingDeleted(BookmarkModel* model) {}
+void DataObserver::BookmarkModelBeingDeleted(BookmarkModel* model) {
+  DCHECK_EQ(model, bookmark_model_);
+  bookmark_model_->RemoveObserver(this);
+  bookmark_model_ = nullptr;
+}
 
 void DataObserver::BookmarkNodeMoved(BookmarkModel* model,
                                      const BookmarkNode* old_parent,
@@ -124,15 +132,12 @@ void DataObserver::OnURLsModified(history::HistoryService* history_service,
 }
 
 void DataObserver::OnURLsDeleted(history::HistoryService* history_service,
-                                 bool all_history,
-                                 bool expired,
-                                 const history::URLRows& deleted_rows,
-                                 const std::set<GURL>& favicon_urls) {
-  if (all_history) {
+                                 const history::DeletionInfo& deletion_info) {
+  if (deletion_info.IsAllHistory()) {
     delta_file_service_->Clear();
     data_cleared_callback_.Run();
   } else {
-    for (const auto& row : deleted_rows) {
+    for (const auto& row : deletion_info.deleted_rows()) {
       if (!row.hidden())
         delta_file_service_->PageDeleted(row.url());
     }

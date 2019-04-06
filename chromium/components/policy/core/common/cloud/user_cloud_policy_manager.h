@@ -6,7 +6,6 @@
 #define COMPONENTS_POLICY_CORE_COMMON_CLOUD_USER_CLOUD_POLICY_MANAGER_H_
 
 #include <memory>
-#include <string>
 
 #include "base/compiler_specific.h"
 #include "base/debug/stack_trace.h"
@@ -16,6 +15,7 @@
 #include "components/policy/core/common/cloud/cloud_policy_manager.h"
 #include "components/policy/policy_export.h"
 
+class AccountId;
 class PrefService;
 
 namespace base {
@@ -24,6 +24,9 @@ class SequencedTaskRunner;
 
 namespace net {
 class URLRequestContextGetter;
+}
+namespace network {
+class SharedURLLoaderFactory;
 }
 
 namespace policy {
@@ -49,7 +52,7 @@ class POLICY_EXPORT UserCloudPolicyManager : public CloudPolicyManager {
   // ConfigurationPolicyProvider overrides:
   void Shutdown() override;
 
-  void SetSigninUsername(const std::string& username);
+  void SetSigninAccountId(const AccountId& account_id);
 
   // Initializes the cloud connection. |local_state| must stay valid until this
   // object is deleted or DisconnectAndRemovePolicy() gets called. Virtual for
@@ -75,7 +78,8 @@ class POLICY_EXPORT UserCloudPolicyManager : public CloudPolicyManager {
   // want to check if the user's domain requires policy).
   static std::unique_ptr<CloudPolicyClient> CreateCloudPolicyClient(
       DeviceManagementService* device_management_service,
-      scoped_refptr<net::URLRequestContextGetter> request_context);
+      scoped_refptr<net::URLRequestContextGetter> request_context,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
 
  private:
   // CloudPolicyManager:

@@ -2,6 +2,7 @@
 <html dir="$i18n{textdirection}" lang="$i18n{language}">
 <head>
   <meta charset="utf-8">
+  <meta name="theme-color" content="#fff">
   <meta name="viewport"
       content="initial-scale=1, minimum-scale=1, width=device-width">
   <title>$i18n{tabTitle}</title>
@@ -30,6 +31,9 @@
           <div id="error-code" class="error-code"></div>
           <div id="error-debugging-info" class="hidden"></div>
         </div>
+      </div>
+      <div id="recurrent-error-message">
+        $i18nRaw{recurrentErrorParagraph}
       </div>
       <div id="extended-reporting-opt-in" class="hidden">
         <label>

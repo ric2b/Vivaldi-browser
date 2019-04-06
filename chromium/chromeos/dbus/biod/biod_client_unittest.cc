@@ -69,7 +69,7 @@ class BiodClientTest : public testing::Test {
     bus_ = new dbus::MockBus(options);
 
     dbus::ObjectPath fpc_bio_path = dbus::ObjectPath(base::StringPrintf(
-        "%s/%s", biod::kBiodServicePath, biod::kFpcBiometricsManagerName));
+        "%s/%s", biod::kBiodServicePath, biod::kCrosFpBiometricsManagerName));
     proxy_ = new dbus::MockObjectProxy(bus_.get(), biod::kBiodServiceName,
                                        fpc_bio_path);
 
@@ -198,7 +198,7 @@ class BiodClientTest : public testing::Test {
 
     message_loop_.task_runner()->PostTask(
         FROM_HERE, base::BindOnce(&RunResponseCallback, std::move(*callback),
-                                  base::Passed(&pending_response)));
+                                  std::move(pending_response)));
   }
 
   DISALLOW_COPY_AND_ASSIGN(BiodClientTest);

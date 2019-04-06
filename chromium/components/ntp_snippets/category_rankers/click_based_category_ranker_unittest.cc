@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/strings/string_number_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
@@ -608,13 +608,7 @@ TEST_F(ClickBasedCategoryRankerTest,
   ResetRanker(base::DefaultClock::GetInstance());
   // Make sure we have the default order.
   EXPECT_TRUE(CompareCategories(
-      Category::FromKnownCategory(KnownCategories::PHYSICAL_WEB_PAGES),
-      Category::FromKnownCategory(KnownCategories::DOWNLOADS)));
-  EXPECT_TRUE(CompareCategories(
       Category::FromKnownCategory(KnownCategories::DOWNLOADS),
-      Category::FromKnownCategory(KnownCategories::RECENT_TABS)));
-  EXPECT_TRUE(CompareCategories(
-      Category::FromKnownCategory(KnownCategories::RECENT_TABS),
       Category::FromKnownCategory(KnownCategories::FOREIGN_TABS)));
   EXPECT_TRUE(CompareCategories(
       Category::FromKnownCategory(KnownCategories::FOREIGN_TABS),
@@ -625,42 +619,42 @@ TEST_F(ClickBasedCategoryRankerTest,
 }
 
 TEST_F(ClickBasedCategoryRankerTest, ShouldEndPromotionOnSectionDismissal) {
-  const Category physical_web =
-      Category::FromKnownCategory(KnownCategories::PHYSICAL_WEB_PAGES);
+  const Category downloads =
+      Category::FromKnownCategory(KnownCategories::DOWNLOADS);
   const Category articles =
       Category::FromKnownCategory(KnownCategories::ARTICLES);
-  ASSERT_TRUE(CompareCategories(physical_web, articles));
+  ASSERT_TRUE(CompareCategories(downloads, articles));
 
   SetPromotedCategoryVariationParam(articles.id());
   ResetRanker(base::DefaultClock::GetInstance());
 
-  ASSERT_TRUE(CompareCategories(articles, physical_web));
+  ASSERT_TRUE(CompareCategories(articles, downloads));
 
   ranker()->OnCategoryDismissed(articles);
-  EXPECT_FALSE(CompareCategories(articles, physical_web));
-  EXPECT_TRUE(CompareCategories(physical_web, articles));
+  EXPECT_FALSE(CompareCategories(articles, downloads));
+  EXPECT_TRUE(CompareCategories(downloads, articles));
 }
 
 TEST_F(ClickBasedCategoryRankerTest,
        ShouldResumePromotionAfter2WeeksSinceDismissal) {
   const Category downloads =
       Category::FromKnownCategory(KnownCategories::DOWNLOADS);
-  const Category recent_tabs =
-      Category::FromKnownCategory(KnownCategories::RECENT_TABS);
-  ASSERT_TRUE(CompareCategories(downloads, recent_tabs));
+  const Category foreign_tabs =
+      Category::FromKnownCategory(KnownCategories::FOREIGN_TABS);
+  ASSERT_TRUE(CompareCategories(downloads, foreign_tabs));
 
-  SetPromotedCategoryVariationParam(recent_tabs.id());
+  SetPromotedCategoryVariationParam(foreign_tabs.id());
   ResetRanker(base::DefaultClock::GetInstance());
-  ASSERT_TRUE(CompareCategories(recent_tabs, downloads));
+  ASSERT_TRUE(CompareCategories(foreign_tabs, downloads));
 
-  ranker()->OnCategoryDismissed(recent_tabs);
-  ASSERT_FALSE(CompareCategories(recent_tabs, downloads));
+  ranker()->OnCategoryDismissed(foreign_tabs);
+  ASSERT_FALSE(CompareCategories(foreign_tabs, downloads));
 
   // Simulate a little over 2 weeks of time passing.
   base::SimpleTestClock test_clock;
   test_clock.SetNow(base::Time::Now() + base::TimeDelta::FromDays(15));
   ResetRanker(&test_clock);
-  EXPECT_TRUE(CompareCategories(recent_tabs, downloads));
+  EXPECT_TRUE(CompareCategories(foreign_tabs, downloads));
 }
 
 TEST_F(ClickBasedCategoryRankerTest,

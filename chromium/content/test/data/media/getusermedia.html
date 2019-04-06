@@ -539,6 +539,40 @@
     .catch(failTest);
   }
 
+  async function srcObjectReplaceInactiveTracks() {
+    let video = document.createElement('video');
+    video.autoplay = true;
+    assertEquals(video.srcObject, null);
+    try {
+      let stream = await navigator.mediaDevices.getUserMedia(
+          {audio: true, video: true});
+      video.onplaying = () => {
+        video.onplaying = null;
+        video.onloadstart = () => {
+          failTest("loadstart should not be fired");
+        }
+
+        assertNotEquals(video.srcObject, null);
+        assertTrue(video.videoWidth > 0);
+        assertTrue(video.videoHeight > 0);
+
+        // Stop tracks.
+        stream.getTracks().forEach(track => track.stop());
+        let onprogress_calls = 0;
+        video.onprogress = () => {
+          assertEquals(video.networkState, HTMLMediaElement.NETWORK_IDLE);
+          setTimeout(reportTestSuccess, 100);
+          if (++onprogress_calls > 1)
+            failTest('progress should not be fired more than once');
+        }
+      }
+
+      video.srcObject = stream;
+    } catch (err) {
+      failTest('getUserMedia() failed');
+    }
+  }
+
   function srcObjectRemoveVideoTrack() {
     var video = document.createElement('video');
     video.autoplay = true;
@@ -599,7 +633,7 @@
         var big_stream = new MediaStream();
         big_stream.addTrack(canvas_stream.getVideoTracks()[0]);
         big_stream.addTrack(gum_stream.getVideoTracks()[0]);
-        video.onprogress = function() {
+        video.onloadedmetadata = function() {
           assertEquals(canvas_width, video.videoWidth);
           assertEquals(canvas_height, video.videoHeight);
           assertNotEquals(video.videoWidth, gum_width)
@@ -753,7 +787,7 @@
     var video = document.createElement('video');
     video.autoplay = true;
     assertEquals(video.srcObject, null);
-    video.onprogress = () => {
+    video.onloadedmetadata = () => {
       assertEquals(video.videoWidth, canvas_width);
       assertEquals(video.videoHeight, canvas_height);
       var new_width = canvas_width - 1;
@@ -811,6 +845,77 @@
       reportTestSuccess();
     }).catch(failTest);
   }
+
+  function getUserMediaEchoCancellationOnAndOff() {
+    var stream;
+    navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: {exact: "default"},
+        echoCancellation: {exact: true}
+      }
+    }).then(s => {
+      stream = s;
+      assertTrue(stream.getAudioTracks()[0].getSettings().echoCancellation);
+      // Chromium's current implementation does not support tracks from the
+      // same source to have different echo cancellation settings. This
+      // getUserMedia() call is expected to fail.
+      navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: {exact: "default"},
+          echoCancellation: {exact: false}
+        }
+      }).then(
+          s => failTest("Unexpected accepted promise from getUserMedia()"),
+          e => {
+            assertEquals(e.name, "OverconstrainedError");
+            stream.getAudioTracks()[0].stop();
+            reportTestSuccess();
+          });
+    }).catch(failTest);
+  }
+
+  var resolveTrackEndedAfterServiceCrash;
+  var trackEndedAfterServiceCrash = new Promise(function(resolve, reject) {
+    resolveTrackEndedAfterServiceCrash = resolve;
+  });
+
+  async function setUpForAudioServiceCrash() {
+    try {
+      // Subscribe to device notifications to force immediate reconnection
+      // to the audio service and verify that the browser does not crash.
+      navigator.mediaDevices.ondevicechange = () => {};
+      let stream = await navigator.mediaDevices.getUserMedia({audio: true});
+      let track = stream.getAudioTracks()[0];
+      assertTrue(stream.active);
+      assertEquals(track.readyState, "live");
+
+      // This expects the audio track to be ended due to a crash in the audio
+      // service.
+      track.onended = () => {
+        resolveTrackEndedAfterServiceCrash(track);
+      }
+
+      sendValueToTest("OK");
+    } catch (err) {
+      failTest('getUserMedia() failed');
+    }
+  }
+
+  async function verifyAfterAudioServiceCrash() {
+    let track = await trackEndedAfterServiceCrash;
+    assertEquals(track.readyState, "ended");
+
+    // getUserMedia() should work after the service restarts.
+    try {
+      let stream = await navigator.mediaDevices.getUserMedia({audio: true});
+      assertTrue(stream.active);
+      assertEquals(stream.getAudioTracks()[0].readyState, "live");
+      reportTestSuccess();
+    } catch(err) {
+      failTest('getUserMedia() failed');
+    }
+  }
+
   </script>
 </head>
 <body>

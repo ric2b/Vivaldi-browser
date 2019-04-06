@@ -24,8 +24,10 @@ class DEVICE_VR_EXPORT OculusVRDeviceProvider : public VRDeviceProvider {
   ~OculusVRDeviceProvider() override;
 
   void Initialize(
-      base::RepeatingCallback<void(VRDevice*)> add_device_callback,
-      base::RepeatingCallback<void(VRDevice*)> remove_device_callback,
+      base::RepeatingCallback<void(unsigned int,
+                                   mojom::VRDisplayInfoPtr,
+                                   mojom::XRRuntimePtr)> add_device_callback,
+      base::RepeatingCallback<void(unsigned int)> remove_device_callback,
       base::OnceClosure initialization_complete) override;
 
   bool Initialized() override;
@@ -34,7 +36,6 @@ class DEVICE_VR_EXPORT OculusVRDeviceProvider : public VRDeviceProvider {
   void CreateDevice();
 
   bool initialized_;
-  ovrSession session_;
   std::unique_ptr<OculusDevice> device_;
 
   DISALLOW_COPY_AND_ASSIGN(OculusVRDeviceProvider);

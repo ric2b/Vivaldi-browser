@@ -14,8 +14,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "media/blink/media_blink_export.h"
-#include "third_party/WebKit/public/platform/WebContentDecryptionModule.h"
-#include "third_party/WebKit/public/platform/WebContentDecryptionModuleResult.h"
+#include "third_party/blink/public/platform/web_content_decryption_module.h"
+#include "third_party/blink/public/platform/web_content_decryption_module_result.h"
 
 namespace blink {
 class WebSecurityOrigin;
@@ -24,9 +24,9 @@ class WebSecurityOrigin;
 namespace media {
 
 struct CdmConfig;
+class CdmContextRef;
 class CdmFactory;
 class CdmSessionAdapter;
-class ContentDecryptionModule;
 
 class MEDIA_BLINK_EXPORT WebContentDecryptionModuleImpl
     : public blink::WebContentDecryptionModule {
@@ -43,18 +43,15 @@ class MEDIA_BLINK_EXPORT WebContentDecryptionModuleImpl
   // blink::WebContentDecryptionModule implementation.
   std::unique_ptr<blink::WebContentDecryptionModuleSession> CreateSession()
       override;
-
   void SetServerCertificate(
       const uint8_t* server_certificate,
       size_t server_certificate_length,
       blink::WebContentDecryptionModuleResult result) override;
-
   void GetStatusForPolicy(
       const blink::WebString& min_hdcp_version_string,
       blink::WebContentDecryptionModuleResult result) override;
 
-  // Returns a reference to the CDM used by |adapter_|.
-  scoped_refptr<ContentDecryptionModule> GetCdm();
+  std::unique_ptr<CdmContextRef> GetCdmContextRef();
 
  private:
   friend CdmSessionAdapter;

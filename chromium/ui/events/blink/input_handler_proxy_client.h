@@ -7,12 +7,6 @@
 
 #include "ui/events/blink/web_input_event_traits.h"
 
-namespace blink {
-class WebGestureCurve;
-struct WebFloatPoint;
-struct WebSize;
-}
-
 namespace ui {
 
 // All callbacks invoked from the compositor thread.
@@ -23,18 +17,10 @@ class InputHandlerProxyClient {
 
   // Dispatch a non blocking event to the main thread. This is used when a
   // gesture fling from a touchpad is processed and the target only has
-  // passive event listeners. If the target has blocking event listeners
-  // |TransferActiveWheelFlingAnimation| will be used instead.
+  // passive event listeners.
   virtual void DispatchNonBlockingEventToMainThread(
       WebScopedInputEvent event,
       const ui::LatencyInfo& latency_info) = 0;
-
-  // Creates a new fling animation curve instance for device |device_source|
-  // with |velocity| and already scrolled |cumulative_scroll| pixels.
-  virtual std::unique_ptr<blink::WebGestureCurve> CreateFlingAnimationCurve(
-      blink::WebGestureDevice device_source,
-      const blink::WebFloatPoint& velocity,
-      const blink::WebSize& cumulative_scroll) = 0;
 
   // |HandleInputEvent/WithLatencyInfo| will respond to overscroll by calling
   // the passed in callback.
@@ -46,12 +32,12 @@ class InputHandlerProxyClient {
       const gfx::PointF& causal_event_viewport_point,
       const cc::OverscrollBehavior& overscroll_behavior) = 0;
 
-  virtual void DidStopFlinging() = 0;
-
   virtual void DidAnimateForInput() = 0;
 
-  // Used to send a GSB to the main thread when the wheel scroll latching is
-  // enabled and the scrolling should switch to the main thread.
+  virtual void DidStartScrollingViewport() = 0;
+
+  // Used to send a GSB to the main thread when the scrolling should switch to
+  // the main thread.
   virtual void GenerateScrollBeginAndSendToMainThread(
       const blink::WebGestureEvent& update_event) = 0;
 

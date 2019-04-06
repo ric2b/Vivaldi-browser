@@ -78,10 +78,30 @@ void FakeArcSupport::ClickAgreeButton() {
   DCHECK_EQ(ui_page_, ArcSupportHost::UIPage::TERMS);
   base::DictionaryValue message;
   message.SetString("event", "onAgreed");
+  message.SetString("tosContent", tos_content_);
+  message.SetBoolean("tosShown", tos_shown_);
   message.SetBoolean("isMetricsEnabled", metrics_mode_);
   message.SetBoolean("isBackupRestoreEnabled", backup_and_restore_mode_);
+  message.SetBoolean("isBackupRestoreManaged", backup_and_restore_managed_);
   message.SetBoolean("isLocationServiceEnabled", location_service_mode_);
+  message.SetBoolean("isLocationServiceManaged", location_service_managed_);
   SerializeAndSend(native_message_host_.get(), message);
+}
+
+void FakeArcSupport::ClickCancelButton() {
+  DCHECK_EQ(ui_page_, ArcSupportHost::UIPage::TERMS);
+  base::DictionaryValue message;
+  message.SetString("event", "onCanceled");
+  message.SetString("tosContent", tos_content_);
+  message.SetBoolean("tosShown", tos_shown_);
+  message.SetBoolean("isMetricsEnabled", metrics_mode_);
+  message.SetBoolean("isBackupRestoreEnabled", backup_and_restore_mode_);
+  message.SetBoolean("isBackupRestoreManaged", backup_and_restore_managed_);
+  message.SetBoolean("isLocationServiceEnabled", location_service_mode_);
+  message.SetBoolean("isLocationServiceManaged", location_service_managed_);
+  SerializeAndSend(native_message_host_.get(), message);
+  // The cancel button closes the window.
+  Close();
 }
 
 void FakeArcSupport::ClickAdAuthCancelButton() {
@@ -179,6 +199,8 @@ void FakeArcSupport::PostMessageFromNativeHost(
       return;
     }
   } else if (action == "closeWindow") {
+    // Do nothing as emulation.
+  } else if (action == "setWindowBounds") {
     // Do nothing as emulation.
   } else {
     // Unknown or unsupported action.

@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/browsing_data/core/pref_names.h"
 #include "extensions/browser/extension_registry.h"
@@ -41,7 +40,7 @@ void HostedAppsCounter::Count() {
   std::sort(names.begin(), names.end());
   names.resize(std::min<size_t>(2u, names.size()));
 
-  ReportResult(base::MakeUnique<HostedAppsResult>(this, count, names));
+  ReportResult(std::make_unique<HostedAppsResult>(this, count, names));
 }
 
 // HostedAppsCounter::HostedAppsResult -----------------------------------------

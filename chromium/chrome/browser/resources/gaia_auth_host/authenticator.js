@@ -79,6 +79,7 @@ cr.define('cr.login', function() {
                      // not called before dispatching |authCopleted|.
                      // Default is |true|.
     'flow',          // One of 'default', 'enterprise', or 'theftprotection'.
+    'enterpriseDisplayDomain',     // Current domain name to be displayed.
     'enterpriseEnrollmentDomain',  // Domain in which hosting device is (or
                                    // should be) enrolled.
     'emailDomain',                 // Value used to prefill domain for email.
@@ -95,6 +96,7 @@ cr.define('cr.login', function() {
     'lsbReleaseBoard',           // Chrome OS Release board name
     'isFirstUser',               // True if this is non-enterprise device,
                                  // and there are no users yet.
+    'obfuscatedOwnerId',         // Obfuscated device owner ID, if neeed.
 
     // The email fields allow for the following possibilities:
     //
@@ -152,7 +154,23 @@ cr.define('cr.login', function() {
     this.insecureContentBlockedCallback = null;
     this.samlApiUsedCallback = null;
     this.missingGaiaInfoCallback = null;
+    /**
+     * Callback allowing to request whether the specified user which
+     * authenticates via SAML is a user without a password (neither a manually
+     * entered one nor one provided via Credentials Passing API).
+     * @type {function(string, string, function(boolean))} Arguments are the
+     * e-mail, the GAIA ID, and the response callback.
+     */
+    this.getIsSamlUserPasswordlessCallback = null;
     this.needPassword = true;
+    this.services_ = null;
+    /**
+     * Caches the result of |getIsSamlUserPasswordlessCallback| invocation for
+     * the current user. Null if no result is obtained yet.
+     * @type {?boolean}
+     * @private
+     */
+    this.isSamlUserPasswordless_ = null;
 
     this.bindToWebview_(webview);
 
@@ -185,6 +203,8 @@ cr.define('cr.login', function() {
     this.authFlow = AuthFlow.DEFAULT;
     this.samlHandler_.reset();
     this.videoEnabled = false;
+    this.services_ = null;
+    this.isSamlUserPasswordless_ = null;
   };
 
   /**
@@ -357,9 +377,8 @@ cr.define('cr.login', function() {
         url = appendParam(url, 'chrometype', data.chromeType);
       if (data.clientId)
         url = appendParam(url, 'client_id', data.clientId);
-      if (data.enterpriseEnrollmentDomain)
-        url =
-            appendParam(url, 'manageddomain', data.enterpriseEnrollmentDomain);
+      if (data.enterpriseDisplayDomain)
+        url = appendParam(url, 'manageddomain', data.enterpriseDisplayDomain);
       if (data.clientVersion)
         url = appendParam(url, 'client_version', data.clientVersion);
       if (data.platformVersion)
@@ -383,6 +402,8 @@ cr.define('cr.login', function() {
           url = appendParam(url, 'chromeos_board', data.lsbReleaseBoard);
         if (data.isFirstUser)
           url = appendParam(url, 'is_first_user', true);
+        if (data.obfuscatedOwnerId)
+          url = appendParam(url, 'obfuscated_owner_id', data.obfuscatedOwnerId);
       }
     } else {
       url = appendParam(url, 'continue', this.continueUrl_);
@@ -527,6 +548,7 @@ cr.define('cr.login', function() {
         this.email_ = signinDetails['email'].slice(1, -1);
         this.gaiaId_ = signinDetails['obfuscatedid'].slice(1, -1);
         this.sessionIndex_ = signinDetails['sessionindex'];
+        this.isSamlUserPasswordless_ = null;
       } else if (headerName == LOCATION_HEADER) {
         // If the "choose what to sync" checkbox was clicked, then the continue
         // URL will contain a source=3 field.
@@ -636,6 +658,7 @@ cr.define('cr.login', function() {
       this.email_ = msg.email;
       if (this.authMode == AuthMode.DESKTOP)
         this.password_ = msg.password;
+      this.isSamlUserPasswordless_ = null;
 
       this.chooseWhatToSync_ = msg.chooseWhatToSync;
       // We need to dispatch only first event, before user enters password.
@@ -655,6 +678,10 @@ cr.define('cr.login', function() {
       this.dispatchEvent(new CustomEvent(
           'identifierEntered',
           {detail: {accountIdentifier: msg.accountIdentifier}}));
+    } else if (msg.method == 'userInfo') {
+      this.services_ = msg.services;
+      if (this.email_ && this.gaiaId_ && this.sessionIndex_)
+        this.maybeCompleteAuth_();
     } else {
       console.warn('Unrecognized message from GAIA: ' + msg.method);
     }
@@ -695,6 +722,35 @@ cr.define('cr.login', function() {
         this.missingGaiaInfoCallback();
 
       this.webview_.src = this.initialFrameUrl_;
+      return;
+    }
+    // TODO(https://crbug.com/837107): remove this once API is fully stabilized.
+    // @example.com is used in tests.
+    if (!this.services_ && !this.email_.endsWith('@gmail.com') &&
+        !this.email_.endsWith('@example.com')) {
+      console.warn('Forcing empty services.');
+      this.services_ = [];
+    }
+    if (!this.services_)
+      return;
+
+    if (this.isSamlUserPasswordless_ === null &&
+        this.authFlow == AuthFlow.SAML && this.email_ && this.gaiaId_ &&
+        this.getIsSamlUserPasswordlessCallback) {
+      // Start a request to obtain the |isSamlUserPasswordless_| value for the
+      // current user. Once the response arrives, maybeCompleteAuth_() will be
+      // called again.
+      this.getIsSamlUserPasswordlessCallback(
+          this.email_, this.gaiaId_,
+          this.onGotIsSamlUserPasswordless_.bind(
+              this, this.email_, this.gaiaId_));
+      return;
+    }
+
+    if (this.isSamlUserPasswordless_ && this.authFlow == AuthFlow.SAML &&
+        this.email_ && this.gaiaId_) {
+      // No password needed for this user, so complete immediately.
+      this.onAuthCompleted_();
       return;
     }
 
@@ -749,6 +805,24 @@ cr.define('cr.login', function() {
   };
 
   /**
+   * Invoked when the result of |getIsSamlUserPasswordlessCallback| arrives.
+   * @param {string} email
+   * @param {string} gaiaId
+   * @param {boolean} isSamlUserPasswordless
+   * @private
+   */
+  Authenticator.prototype.onGotIsSamlUserPasswordless_ = function(
+      email, gaiaId, isSamlUserPasswordless) {
+    // Compare the request's user identifier with the currently set one, in
+    // order to ignore responses to old requests.
+    if (this.email_ && this.email_ == email && this.gaiaId_ &&
+        this.gaiaId_ == gaiaId) {
+      this.isSamlUserPasswordless_ = isSamlUserPasswordless;
+      this.maybeCompleteAuth_();
+    }
+  };
+
+  /**
    * Invoked to process authentication completion.
    * @private
    */
@@ -756,6 +830,28 @@ cr.define('cr.login', function() {
     assert(
         this.skipForNow_ ||
         (this.email_ && this.gaiaId_ && this.sessionIndex_));
+    // Chrome will crash on incorrect data type, so log some error message here.
+    if (this.services_) {
+      if (!Array.isArray(this.services_)) {
+        console.error('FATAL: Bad services type:' + typeof this.services_);
+      } else {
+        for (var i = 0; i < this.services_.length; ++i) {
+          if (typeof this.services_[i] == 'string')
+            continue;
+
+          console.error(
+              'FATAL: Bad services[' + i +
+              '] type:' + typeof this.services_[i]);
+        }
+      }
+    }
+    if (this.isSamlUserPasswordless_ && this.authFlow == AuthFlow.SAML &&
+        this.email_) {
+      // In the passwordless case, the user data will be protected by non
+      // password based mechanisms. Clear anything that got collected into
+      // |password_|, if any.
+      this.password_ = '';
+    }
     this.dispatchEvent(new CustomEvent(
         'authCompleted',
         // TODO(rsorokin): get rid of the stub values.
@@ -771,6 +867,7 @@ cr.define('cr.login', function() {
             sessionIndex: this.sessionIndex_ || '',
             trusted: this.trusted_,
             gapsCookie: this.newGapsCookie_ || this.gapsCookie_ || '',
+            services: this.services_ || [],
           }
         }));
     this.resetStates();
@@ -804,6 +901,7 @@ cr.define('cr.login', function() {
     this.authDomain = this.samlHandler_.authDomain;
     this.authFlow = AuthFlow.SAML;
 
+    this.webview_.focus();
     this.fireReadyEvent_();
   };
 

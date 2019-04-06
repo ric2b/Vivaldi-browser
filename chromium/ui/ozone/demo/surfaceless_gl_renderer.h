@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -18,7 +18,7 @@ class GLImage;
 namespace ui {
 class OverlayCandidatesOzone;
 
-class SurfacelessGlRenderer : public GlRenderer {
+class SurfacelessGlRenderer : public RendererBase {
  public:
   SurfacelessGlRenderer(gfx::AcceleratedWidget widget,
                         const scoped_refptr<gl::GLSurface>& surface,
@@ -29,9 +29,9 @@ class SurfacelessGlRenderer : public GlRenderer {
   bool Initialize() override;
 
  private:
-  // GlRenderer:
-  void RenderFrame() override;
-  void PostRenderFrameTask(gfx::SwapResult result) override;
+  void RenderFrame();
+  void PostRenderFrameTask(gfx::SwapResult result);
+  void OnPresentation(const gfx::PresentationFeedback& feedback);
 
   class BufferWrapper {
    public:
@@ -56,13 +56,17 @@ class SurfacelessGlRenderer : public GlRenderer {
 
   std::unique_ptr<BufferWrapper> buffers_[2];
 
-  std::unique_ptr<BufferWrapper> overlay_buffer_[2];
+  std::unique_ptr<BufferWrapper> overlay_buffers_[2];
   bool disable_primary_plane_ = false;
   gfx::Rect primary_plane_rect_;
+  bool use_gpu_fences_ = false;
 
   std::unique_ptr<OverlayCandidatesOzone> overlay_checker_;
 
   int back_buffer_ = 0;
+
+  scoped_refptr<gl::GLSurface> surface_;
+  scoped_refptr<gl::GLContext> context_;
 
   base::WeakPtrFactory<SurfacelessGlRenderer> weak_ptr_factory_;
 

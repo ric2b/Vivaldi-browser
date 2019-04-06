@@ -16,6 +16,7 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_main_delegate.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/url_constants.h"
@@ -68,8 +69,8 @@ void ChromeTestSuite::Initialize() {
 #endif
 
   if (!browser_dir_.empty()) {
-    PathService::Override(base::DIR_EXE, browser_dir_);
-    PathService::Override(base::DIR_MODULE, browser_dir_);
+    base::PathService::Override(base::DIR_EXE, browser_dir_);
+    base::PathService::Override(base::DIR_MODULE, browser_dir_);
   }
 
   // Disable external libraries load if we are under python process in
@@ -86,10 +87,16 @@ void ChromeTestSuite::Initialize() {
       ChromeMainDelegate::kNonWildcardDomainNonPortSchemes,
       ChromeMainDelegate::kNonWildcardDomainNonPortSchemesSize);
 
+  // Desktop Identity Consistency (a.k.a. DICE) requires OAuth client to be
+  // configured as it is needed for regular web sign-in flows to Google.
+  // Ignore this requiement for unit and browser tests to make sure that the
+  // DICE feature gets the right test coverage.
+  AccountConsistencyModeManager::SetIgnoreMissingOAuthClientForTesting();
+
 #if defined(OS_MACOSX)
   // Look in the framework bundle for resources.
   base::FilePath path;
-  PathService::Get(base::DIR_EXE, &path);
+  base::PathService::Get(base::DIR_EXE, &path);
   path = path.Append(chrome::kFrameworkName);
   base::mac::SetOverrideFrameworkBundlePath(path);
 #endif

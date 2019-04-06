@@ -7,18 +7,25 @@
 #include <memory>
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/json/json_writer.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/scoped_command_line.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/webrtc_logging_private/webrtc_logging_private_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/media/webrtc/webrtc_event_log_manager_common.h"
 #include "chrome/browser/media/webrtc/webrtc_log_uploader.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/render_view_host.h"
+#include "content/public/browser/webrtc_event_logger.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/common/extension_builder.h"
 #include "third_party/zlib/google/compression_utils.h"
@@ -36,6 +43,7 @@ using extensions::WebrtcLoggingPrivateUploadFunction;
 using extensions::WebrtcLoggingPrivateUploadStoredFunction;
 using extensions::WebrtcLoggingPrivateStartAudioDebugRecordingsFunction;
 using extensions::WebrtcLoggingPrivateStopAudioDebugRecordingsFunction;
+using extensions::WebrtcLoggingPrivateStartEventLoggingFunction;
 
 namespace utils = extension_function_test_utils;
 
@@ -65,10 +73,11 @@ void InitializeTestMetaData(base::ListValue* parameters) {
   parameters->Append(std::move(meta_data));
 }
 
-class WebrtcLoggingPrivateApiTest : public ExtensionApiTest {
+class WebrtcLoggingPrivateApiTest : public extensions::ExtensionApiTest {
  protected:
   void SetUp() override {
-    ExtensionApiTest::SetUp();
+    scoped_feature_list_.InitAndEnableFeature(features::kWebRtcRemoteEventLog);
+    extensions::ExtensionApiTest::SetUp();
     extension_ = extensions::ExtensionBuilder("Test").Build();
   }
 
@@ -80,8 +89,11 @@ class WebrtcLoggingPrivateApiTest : public ExtensionApiTest {
     return function;
   }
 
+  // Overriding can use incognito session instead, etc.
+  virtual Browser* GetBrowser() { return browser(); }
+
   content::WebContents* web_contents() {
-    return browser()->tab_strip_model()->GetActiveWebContents();
+    return GetBrowser()->tab_strip_model()->GetActiveWebContents();
   }
 
   void AppendTabIdAndUrl(base::ListValue* parameters) {
@@ -93,101 +105,284 @@ class WebrtcLoggingPrivateApiTest : public ExtensionApiTest {
     parameters->AppendString(web_contents()->GetURL().GetOrigin().spec());
   }
 
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value (NOT whether
+  // it had succeeded or failed).
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
   bool RunFunction(UIThreadExtensionFunction* function,
-                   const base::ListValue& parameters,
-                   bool expect_results) {
+                   const base::ListValue& parameters) {
     std::unique_ptr<base::Value> result(utils::RunFunctionAndReturnSingleResult(
-        function, ParamsToString(parameters), browser()));
-    if (expect_results) {
-      EXPECT_TRUE(result.get());
-      return result != nullptr;
-    }
-
-    EXPECT_FALSE(result.get());
-    return result == nullptr;
+        function, ParamsToString(parameters), GetBrowser()));
+    return (result != nullptr);
   }
 
-  template<typename Function>
-  bool RunFunction(const base::ListValue& parameters, bool expect_results) {
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value (NOT whether
+  // it had succeeded or failed).
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
+  template <typename Function>
+  bool RunFunction(const base::ListValue& parameters) {
     scoped_refptr<Function> function(CreateFunction<Function>());
-    return RunFunction(function.get(), parameters, expect_results);
+    return RunFunction(function.get(), parameters);
   }
 
-  template<typename Function>
-  bool RunNoArgsFunction(bool expect_results) {
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value (NOT whether
+  // it had succeeded or failed).
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
+  template <typename Function>
+  bool RunNoArgsFunction() {
     base::ListValue params;
     AppendTabIdAndUrl(&params);
     scoped_refptr<Function> function(CreateFunction<Function>());
-    return RunFunction(function.get(), params, expect_results);
+    return RunFunction(function.get(), params);
   }
 
+  template <typename Function>
+  void RunFunctionAndExpectError(const base::ListValue& parameters,
+                                 const std::string& expected_error) {
+    DCHECK(!expected_error.empty());
+    scoped_refptr<Function> function(CreateFunction<Function>());
+    const std::string error_message = utils::RunFunctionAndReturnError(
+        function.get(), ParamsToString(parameters), GetBrowser());
+    EXPECT_EQ(error_message, expected_error);
+  }
+
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value, or avoided
+  // returning a value, according to expectation.
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
   bool StartLogging() {
-    return RunNoArgsFunction<WebrtcLoggingPrivateStartFunction>(false);
+    constexpr bool result_expected = false;
+    const bool result_returned =
+        RunNoArgsFunction<WebrtcLoggingPrivateStartFunction>();
+    return (result_expected == result_returned);
   }
 
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value, or avoided
+  // returning a value, according to expectation.
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
   bool StopLogging() {
-    return RunNoArgsFunction<WebrtcLoggingPrivateStopFunction>(false);
+    constexpr bool result_expected = false;
+    const bool result_returned =
+        RunNoArgsFunction<WebrtcLoggingPrivateStopFunction>();
+    return (result_expected == result_returned);
   }
 
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value, or avoided
+  // returning a value, according to expectation.
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
   bool DiscardLog() {
-    return RunNoArgsFunction<WebrtcLoggingPrivateDiscardFunction>(false);
+    constexpr bool result_expected = false;
+    const bool result_returned =
+        RunNoArgsFunction<WebrtcLoggingPrivateDiscardFunction>();
+    return (result_expected == result_returned);
   }
 
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value, or avoided
+  // returning a value, according to expectation.
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
   bool UploadLog() {
-    return RunNoArgsFunction<WebrtcLoggingPrivateUploadFunction>(true);
+    constexpr bool result_expected = true;
+    const bool result_returned =
+        RunNoArgsFunction<WebrtcLoggingPrivateUploadFunction>();
+    return (result_expected == result_returned);
   }
 
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value, or avoided
+  // returning a value, according to expectation.
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
   bool SetMetaData(const base::ListValue& data) {
-    return RunFunction<WebrtcLoggingPrivateSetMetaDataFunction>(data, false);
+    constexpr bool result_expected = false;
+    const bool result_returned =
+        RunFunction<WebrtcLoggingPrivateSetMetaDataFunction>(data);
+    return (result_expected == result_returned);
   }
 
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value, or avoided
+  // returning a value, according to expectation.
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
   bool StartRtpDump(bool incoming, bool outgoing) {
     base::ListValue params;
     AppendTabIdAndUrl(&params);
     params.AppendBoolean(incoming);
     params.AppendBoolean(outgoing);
-    return RunFunction<WebrtcLoggingPrivateStartRtpDumpFunction>(params, false);
+    constexpr bool result_expected = false;
+    const bool result_returned =
+        RunFunction<WebrtcLoggingPrivateStartRtpDumpFunction>(params);
+    return (result_expected == result_returned);
   }
 
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value, or avoided
+  // returning a value, according to expectation.
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
   bool StopRtpDump(bool incoming, bool outgoing) {
     base::ListValue params;
     AppendTabIdAndUrl(&params);
     params.AppendBoolean(incoming);
     params.AppendBoolean(outgoing);
-    return RunFunction<WebrtcLoggingPrivateStopRtpDumpFunction>(params, false);
+    constexpr bool result_expected = false;
+    const bool result_returned =
+        RunFunction<WebrtcLoggingPrivateStopRtpDumpFunction>(params);
+    return (result_expected == result_returned);
   }
 
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value, or avoided
+  // returning a value, according to expectation.
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
   bool StoreLog(const std::string& log_id) {
     base::ListValue params;
     AppendTabIdAndUrl(&params);
     params.AppendString(log_id);
-    return RunFunction<WebrtcLoggingPrivateStoreFunction>(params, false);
+    constexpr bool result_expected = false;
+    const bool result_returned =
+        RunFunction<WebrtcLoggingPrivateStoreFunction>(params);
+    return (result_expected == result_returned);
   }
 
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value, or avoided
+  // returning a value, according to expectation.
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
   bool UploadStoredLog(const std::string& log_id) {
     base::ListValue params;
     AppendTabIdAndUrl(&params);
     params.AppendString(log_id);
-    return RunFunction<WebrtcLoggingPrivateUploadStoredFunction>(params, true);
+    constexpr bool result_expected = true;
+    const bool result_returned =
+        RunFunction<WebrtcLoggingPrivateUploadStoredFunction>(params);
+    return (result_expected == result_returned);
   }
 
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value, or avoided
+  // returning a value, according to expectation.
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
   bool StartAudioDebugRecordings(int seconds) {
     base::ListValue params;
     AppendTabIdAndUrl(&params);
     params.AppendInteger(seconds);
-    return RunFunction<WebrtcLoggingPrivateStartAudioDebugRecordingsFunction>(
-        params, true);
+    constexpr bool result_expected = true;
+    const bool result_returned =
+        RunFunction<WebrtcLoggingPrivateStartAudioDebugRecordingsFunction>(
+            params);
+    return (result_expected == result_returned);
   }
 
+  // This function implicitly expects the function to succeed (test failure
+  // initiated otherwise).
+  // Returns whether the function that was run returned a value, or avoided
+  // returning a value, according to expectation.
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
   bool StopAudioDebugRecordings() {
     base::ListValue params;
     AppendTabIdAndUrl(&params);
-    return RunFunction<WebrtcLoggingPrivateStopAudioDebugRecordingsFunction>(
-        params, true);
+    constexpr bool result_expected = true;
+    const bool result_returned =
+        RunFunction<WebrtcLoggingPrivateStopAudioDebugRecordingsFunction>(
+            params);
+    return (result_expected == result_returned);
+  }
+
+  // This function expects the function to succeed or fail according to
+  // |expect_success| (test failure initiated otherwise). It also implicitly
+  // expects that no value would be returned.
+  // TODO(crbug.com/829419): Return success/failure of the executed function.
+  void StartEventLogging(const std::string& peerConnectionId,
+                         int maxLogSizeBytes,
+                         bool expect_success,
+                         const std::string& expected_error = std::string()) {
+    DCHECK_EQ(expect_success, expected_error.empty());
+
+    base::ListValue params;
+    AppendTabIdAndUrl(&params);
+    params.AppendString(peerConnectionId);
+    params.AppendInteger(maxLogSizeBytes);
+
+    if (expect_success) {
+      scoped_refptr<WebrtcLoggingPrivateStartEventLoggingFunction> function(
+          CreateFunction<WebrtcLoggingPrivateStartEventLoggingFunction>());
+
+      std::unique_ptr<base::Value> result(
+          utils::RunFunctionAndReturnSingleResult(
+              function.get(), ParamsToString(params), GetBrowser()));
+
+      ASSERT_TRUE(result);
+      ASSERT_TRUE(result->is_dict());
+      ASSERT_EQ(result->DictSize(), 1u);
+
+      const base::Value* val =
+          result->FindKeyOfType("logId", base::Value::Type::STRING);
+      ASSERT_TRUE(val);
+
+      const std::string& log_id = val->GetString();
+      EXPECT_EQ(log_id.size(), 32u);
+      EXPECT_EQ(log_id.find_first_not_of("0123456789ABCDEF"),
+                std::string::npos);
+    } else {
+      RunFunctionAndExpectError<WebrtcLoggingPrivateStartEventLoggingFunction>(
+          params, expected_error);
+    }
+  }
+
+  void SetUpPeerConnection(const std::string& peer_connection_id) {
+    auto* manager = content::WebRtcEventLogger::Get();
+    auto* rph = web_contents()->GetRenderViewHost()->GetProcess();
+
+    const int render_process_id = rph->GetID();
+    const int lid = 0;
+
+    manager->PeerConnectionAdded(render_process_id, lid, peer_connection_id,
+                                 base::OnceCallback<void(bool)>());
+  }
+
+  base::test::ScopedFeatureList scoped_feature_list_;
+  base::test::ScopedCommandLine scoped_command_line_;
+  scoped_refptr<Extension> extension_;
+};
+
+class WebrtcLoggingPrivateApiTestDisabledRemoteLogging
+    : public WebrtcLoggingPrivateApiTest {
+ protected:
+  void SetUp() override {
+    scoped_feature_list_.InitAndDisableFeature(features::kWebRtcRemoteEventLog);
+    extensions::ExtensionApiTest::SetUp();
+    extension_ = extensions::ExtensionBuilder("Test").Build();
+  }
+};
+
+class WebrtcLoggingPrivateApiTestInIncognitoMode
+    : public WebrtcLoggingPrivateApiTest {
+ protected:
+  Browser* GetBrowser() override {
+    if (!browser_) {
+      browser_ = CreateIncognitoBrowser();
+    }
+    return browser_;
   }
 
  private:
-  scoped_refptr<Extension> extension_;
+  Browser* browser_{nullptr};  // Does not own the object.
 };
 
 // Helper class to temporarily tell the uploader to save the multipart buffer to
@@ -372,7 +567,7 @@ IN_PROC_BROWSER_TEST_F(WebrtcLoggingPrivateApiTest, TestStoreWithoutLog) {
   scoped_refptr<WebrtcLoggingPrivateStoreFunction> store(
       CreateFunction<WebrtcLoggingPrivateStoreFunction>());
   const std::string error = utils::RunFunctionAndReturnError(
-      store.get(), ParamsToString(parameters), browser());
+      store.get(), ParamsToString(parameters), GetBrowser());
   ASSERT_FALSE(error.empty());
 }
 
@@ -447,4 +642,106 @@ IN_PROC_BROWSER_TEST_F(WebrtcLoggingPrivateApiTest,
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kEnableAudioDebugRecordingsFromExtension);
   ASSERT_TRUE(StartAudioDebugRecordings(1));
+}
+
+IN_PROC_BROWSER_TEST_F(WebrtcLoggingPrivateApiTest,
+                       StartEventLoggingForKnownPeerConnectionSucceeds) {
+  const std::string peer_connection_id = "id";
+  SetUpPeerConnection(peer_connection_id);
+  const int max_size_bytes = kMaxRemoteLogFileSizeBytes;
+  constexpr bool expect_success = true;
+  StartEventLogging(peer_connection_id, max_size_bytes, expect_success);
+}
+
+IN_PROC_BROWSER_TEST_F(WebrtcLoggingPrivateApiTest,
+                       StartEventLoggingWithUnlimitedSizeFails) {
+  const std::string peer_connection_id = "id";
+  SetUpPeerConnection(peer_connection_id);
+  const int max_size_bytes = kWebRtcEventLogManagerUnlimitedFileSize;
+  constexpr bool expect_success = false;
+  const std::string error_message =
+      kStartRemoteLoggingFailureUnlimitedSizeDisallowed;
+  StartEventLogging(peer_connection_id, max_size_bytes, expect_success,
+                    error_message);
+}
+
+IN_PROC_BROWSER_TEST_F(WebrtcLoggingPrivateApiTest,
+                       StartEventLoggingWithExcessiveMaxSizeFails) {
+  const std::string peer_connection_id = "id";
+  SetUpPeerConnection(peer_connection_id);
+  const int max_size_bytes = kMaxRemoteLogFileSizeBytes + 1;
+  constexpr bool expect_success = false;
+  const std::string error_message = kStartRemoteLoggingFailureMaxSizeTooLarge;
+  StartEventLogging(peer_connection_id, max_size_bytes, expect_success,
+                    error_message);
+}
+
+IN_PROC_BROWSER_TEST_F(WebrtcLoggingPrivateApiTest,
+                       StartEventLoggingForNeverAddedPeerConnectionFails) {
+  // Note that manager->PeerConnectionAdded() is not called.
+  const std::string peer_connection_id = "id";
+  const int max_size_bytes = kMaxRemoteLogFileSizeBytes;
+  constexpr bool expect_success = false;
+  const std::string error_message =
+      kStartRemoteLoggingFailureUnknownOrInactivePeerConnection;
+  StartEventLogging(peer_connection_id, max_size_bytes, expect_success,
+                    error_message);
+}
+
+IN_PROC_BROWSER_TEST_F(WebrtcLoggingPrivateApiTest,
+                       StartEventLoggingForWrongPeerConnectionIdFails) {
+  const std::string peer_connection_id_1 = "id1";
+  const std::string peer_connection_id_2 = "id2";
+
+  SetUpPeerConnection(peer_connection_id_1);
+  const int max_size_bytes = kMaxRemoteLogFileSizeBytes;
+  constexpr bool expect_success = false;
+  const std::string error_message =
+      kStartRemoteLoggingFailureUnknownOrInactivePeerConnection;
+  StartEventLogging(peer_connection_id_2, max_size_bytes, expect_success,
+                    error_message);
+}
+
+IN_PROC_BROWSER_TEST_F(WebrtcLoggingPrivateApiTest,
+                       StartEventLoggingForAlreadyLoggedPeerConnectionFails) {
+  const std::string peer_connection_id = "id";
+  SetUpPeerConnection(peer_connection_id);
+
+  const int max_size_bytes = kMaxRemoteLogFileSizeBytes;
+
+  // First call succeeds.
+  {
+    constexpr bool expect_success = true;
+    StartEventLogging(peer_connection_id, max_size_bytes, expect_success);
+  }
+
+  // Second call fails.
+  {
+    constexpr bool expect_success = false;
+    const std::string error_message = kStartRemoteLoggingFailureAlreadyLogging;
+    StartEventLogging(peer_connection_id, max_size_bytes, expect_success,
+                      error_message);
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(WebrtcLoggingPrivateApiTestDisabledRemoteLogging,
+                       StartEventLoggingFails) {
+  const std::string peer_connection_id = "id";
+  SetUpPeerConnection(peer_connection_id);
+  const int max_size_bytes = kMaxRemoteLogFileSizeBytes;
+  constexpr bool expect_success = false;
+  const std::string error_message = kStartRemoteLoggingFailureFeatureDisabled;
+  StartEventLogging(peer_connection_id, max_size_bytes, expect_success,
+                    error_message);
+}
+
+IN_PROC_BROWSER_TEST_F(WebrtcLoggingPrivateApiTestInIncognitoMode,
+                       StartEventLoggingFails) {
+  const std::string peer_connection_id = "id";
+  SetUpPeerConnection(peer_connection_id);
+  const int max_size_bytes = kMaxRemoteLogFileSizeBytes;
+  constexpr bool expect_success = false;
+  const std::string error_message = kStartRemoteLoggingFailureFeatureDisabled;
+  StartEventLogging(peer_connection_id, max_size_bytes, expect_success,
+                    error_message);
 }

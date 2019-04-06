@@ -14,8 +14,8 @@
 #include "components/arc/common/power.mojom.h"
 #include "components/arc/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "services/device/public/interfaces/wake_lock.mojom.h"
-#include "ui/display/manager/chromeos/display_configurator.h"
+#include "services/device/public/mojom/wake_lock.mojom.h"
+#include "ui/display/manager/display_configurator.h"
 
 namespace content {
 class BrowserContext;
@@ -64,7 +64,8 @@ class ArcPowerBridge : public KeyedService,
   // chromeos::PowerManagerClient::Observer overrides.
   void SuspendImminent(power_manager::SuspendImminent::Reason reason) override;
   void SuspendDone(const base::TimeDelta& sleep_duration) override;
-  void BrightnessChanged(int level, bool user_initiated) override;
+  void ScreenBrightnessChanged(
+      const power_manager::BacklightBrightnessChange& change) override;
 
   // DisplayConfigurator::Observer overrides.
   void OnPowerStateChanged(chromeos::DisplayPowerState power_state) override;

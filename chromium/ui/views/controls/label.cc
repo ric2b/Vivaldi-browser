@@ -14,7 +14,6 @@
 
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -25,6 +24,7 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/text_elider.h"
+#include "ui/gfx/text_utils.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/background.h"
@@ -75,7 +75,6 @@ const gfx::FontList& Label::GetDefaultFontList() {
 }
 
 void Label::SetFontList(const gfx::FontList& font_list) {
-  is_first_paint_text_ = true;
   full_text_->SetFontList(font_list);
   ResetLayout();
 }
@@ -83,7 +82,6 @@ void Label::SetFontList(const gfx::FontList& font_list) {
 void Label::SetText(const base::string16& new_text) {
   if (new_text == text())
     return;
-  is_first_paint_text_ = true;
   full_text_->SetText(new_text);
   ResetLayout();
   stored_selection_range_ = gfx::Range::InvalidRange();
@@ -92,7 +90,6 @@ void Label::SetText(const base::string16& new_text) {
 void Label::SetAutoColorReadabilityEnabled(bool enabled) {
   if (auto_color_readability_ == enabled)
     return;
-  is_first_paint_text_ = true;
   auto_color_readability_ = enabled;
   RecalculateColors();
 }
@@ -100,7 +97,6 @@ void Label::SetAutoColorReadabilityEnabled(bool enabled) {
 void Label::SetEnabledColor(SkColor color) {
   if (enabled_color_set_ && requested_enabled_color_ == color)
     return;
-  is_first_paint_text_ = true;
   requested_enabled_color_ = color;
   enabled_color_set_ = true;
   RecalculateColors();
@@ -109,7 +105,6 @@ void Label::SetEnabledColor(SkColor color) {
 void Label::SetBackgroundColor(SkColor color) {
   if (background_color_set_ && background_color_ == color)
     return;
-  is_first_paint_text_ = true;
   background_color_ = color;
   background_color_set_ = true;
   RecalculateColors();
@@ -118,7 +113,6 @@ void Label::SetBackgroundColor(SkColor color) {
 void Label::SetSelectionTextColor(SkColor color) {
   if (selection_text_color_set_ && requested_selection_text_color_ == color)
     return;
-  is_first_paint_text_ = true;
   requested_selection_text_color_ = color;
   selection_text_color_set_ = true;
   RecalculateColors();
@@ -127,7 +121,6 @@ void Label::SetSelectionTextColor(SkColor color) {
 void Label::SetSelectionBackgroundColor(SkColor color) {
   if (selection_background_color_set_ && selection_background_color_ == color)
     return;
-  is_first_paint_text_ = true;
   selection_background_color_ = color;
   selection_background_color_set_ = true;
   RecalculateColors();
@@ -136,7 +129,6 @@ void Label::SetSelectionBackgroundColor(SkColor color) {
 void Label::SetShadows(const gfx::ShadowValues& shadows) {
   if (full_text_->shadows() == shadows)
     return;
-  is_first_paint_text_ = true;
   full_text_->set_shadows(shadows);
   ResetLayout();
 }
@@ -144,21 +136,14 @@ void Label::SetShadows(const gfx::ShadowValues& shadows) {
 void Label::SetSubpixelRenderingEnabled(bool subpixel_rendering_enabled) {
   if (subpixel_rendering_enabled_ == subpixel_rendering_enabled)
     return;
-  is_first_paint_text_ = true;
   subpixel_rendering_enabled_ = subpixel_rendering_enabled;
   RecalculateColors();
 }
 
 void Label::SetHorizontalAlignment(gfx::HorizontalAlignment alignment) {
-  // If the UI layout is right-to-left, flip the alignment direction.
-  if (base::i18n::IsRTL() &&
-      (alignment == gfx::ALIGN_LEFT || alignment == gfx::ALIGN_RIGHT)) {
-    alignment = (alignment == gfx::ALIGN_LEFT) ?
-        gfx::ALIGN_RIGHT : gfx::ALIGN_LEFT;
-  }
+  alignment = gfx::MaybeFlipForRTL(alignment);
   if (horizontal_alignment() == alignment)
     return;
-  is_first_paint_text_ = true;
   full_text_->SetHorizontalAlignment(alignment);
   ResetLayout();
 }
@@ -166,7 +151,6 @@ void Label::SetHorizontalAlignment(gfx::HorizontalAlignment alignment) {
 void Label::SetLineHeight(int height) {
   if (line_height() == height)
     return;
-  is_first_paint_text_ = true;
   full_text_->SetMinLineHeight(height);
   ResetLayout();
 }
@@ -176,7 +160,6 @@ void Label::SetMultiLine(bool multi_line) {
                          elide_behavior_ == gfx::NO_ELIDE));
   if (this->multi_line() == multi_line)
     return;
-  is_first_paint_text_ = true;
   multi_line_ = multi_line;
   full_text_->SetMultiline(multi_line);
   full_text_->SetReplaceNewlineCharsWithSymbols(!multi_line);
@@ -186,7 +169,6 @@ void Label::SetMultiLine(bool multi_line) {
 void Label::SetMaxLines(int max_lines) {
   if (max_lines_ == max_lines)
     return;
-  is_first_paint_text_ = true;
   max_lines_ = max_lines;
   ResetLayout();
 }
@@ -194,7 +176,6 @@ void Label::SetMaxLines(int max_lines) {
 void Label::SetObscured(bool obscured) {
   if (this->obscured() == obscured)
     return;
-  is_first_paint_text_ = true;
   full_text_->SetObscured(obscured);
   if (obscured)
     SetSelectable(false);
@@ -208,7 +189,6 @@ void Label::SetAllowCharacterBreak(bool allow_character_break) {
     return;
   full_text_->SetWordWrapBehavior(behavior);
   if (multi_line()) {
-    is_first_paint_text_ = true;
     ResetLayout();
   }
 }
@@ -218,7 +198,6 @@ void Label::SetElideBehavior(gfx::ElideBehavior elide_behavior) {
                            elide_behavior_ == gfx::NO_ELIDE));
   if (elide_behavior_ == elide_behavior)
     return;
-  is_first_paint_text_ = true;
   elide_behavior_ = elide_behavior;
   ResetLayout();
 }
@@ -396,9 +375,9 @@ const char* Label::GetClassName() const {
 View* Label::GetTooltipHandlerForPoint(const gfx::Point& point) {
   if (!handles_tooltips_ ||
       (tooltip_text_.empty() && !ShouldShowDefaultTooltip()))
-    return NULL;
+    return nullptr;
 
-  return HitTestPoint(point) ? this : NULL;
+  return HitTestPoint(point) ? this : nullptr;
 }
 
 bool Label::CanProcessEventsWithinSubtree() const {
@@ -410,7 +389,11 @@ WordLookupClient* Label::GetWordLookupClient() {
 }
 
 void Label::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_STATIC_TEXT;
+  if (text_context_ == style::CONTEXT_DIALOG_TITLE)
+    node_data->role = ax::mojom::Role::kTitleBar;
+  else
+    node_data->role = ax::mojom::Role::kStaticText;
+
   node_data->SetName(full_text_->GetDisplayText());
 }
 
@@ -516,13 +499,7 @@ void Label::OnBoundsChanged(const gfx::Rect& previous_bounds) {
 
 void Label::OnPaint(gfx::Canvas* canvas) {
   View::OnPaint(canvas);
-  if (is_first_paint_text_) {
-    is_first_paint_text_ = false;
-    PaintText(canvas);
-  } else {
-    PaintText(canvas);
-  }
-
+  PaintText(canvas);
   if (HasFocus())
     PaintFocusRing(canvas);
 }
@@ -687,13 +664,21 @@ void Label::ShowContextMenuForView(View* source,
                                   MENU_ANCHOR_TOPLEFT, source_type);
 }
 
-bool Label::GetDecoratedWordAtPoint(const gfx::Point& point,
-                                    gfx::DecoratedText* decorated_word,
-                                    gfx::Point* baseline_point) {
+bool Label::GetWordLookupDataAtPoint(const gfx::Point& point,
+                                     gfx::DecoratedText* decorated_word,
+                                     gfx::Point* baseline_point) {
+  gfx::RenderText* render_text = GetRenderTextForSelectionController();
+  return render_text ? render_text->GetWordLookupDataAtPoint(
+                           point, decorated_word, baseline_point)
+                     : false;
+}
+
+bool Label::GetWordLookupDataFromSelection(gfx::DecoratedText* decorated_text,
+                                           gfx::Point* baseline_point) {
   gfx::RenderText* render_text = GetRenderTextForSelectionController();
   return render_text
-             ? render_text->GetDecoratedWordAtPoint(point, decorated_word,
-                                                    baseline_point)
+             ? render_text->GetLookupDataForRange(
+                   render_text->selection(), decorated_text, baseline_point)
              : false;
 }
 
@@ -836,7 +821,6 @@ void Label::Init(const base::string16& text, const gfx::FontList& font_list) {
   collapse_when_hidden_ = false;
   fixed_width_ = 0;
   max_width_ = 0;
-  is_first_paint_text_ = true;
   SetText(text);
 
   // Only selectable labels will get requests to show the context menu, due to

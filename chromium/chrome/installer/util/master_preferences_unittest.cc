@@ -19,7 +19,7 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/installer/util/master_preferences_constants.h"
 #include "chrome/installer/util/util_constants.h"
-#include "rlz/features/features.h"
+#include "rlz/buildflags/buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -200,7 +200,7 @@ TEST_F(MasterPreferencesTest, FirstRunTabs) {
 // general it is expected the extension format to be backwards compatible.
 TEST(MasterPrefsExtension, ValidateExtensionJSON) {
   base::FilePath prefs_path;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &prefs_path));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &prefs_path));
   prefs_path = prefs_path.AppendASCII("extensions")
       .AppendASCII("good").AppendASCII("Preferences");
 

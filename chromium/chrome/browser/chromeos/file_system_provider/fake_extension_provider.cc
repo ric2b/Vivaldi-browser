@@ -9,7 +9,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/chromeos/file_system_provider/fake_provided_file_system.h"
 #include "chrome/browser/chromeos/file_system_provider/service.h"
 #include "extensions/browser/extension_registry.h"
@@ -51,6 +50,10 @@ const std::string& FakeExtensionProvider::GetName() const {
 
 const IconSet& FakeExtensionProvider::GetIconSet() const {
   return icon_set_;
+}
+
+bool FakeExtensionProvider::RequestMount(Profile* profile) {
+  return true;
 }
 
 FakeExtensionProvider::FakeExtensionProvider(

@@ -48,12 +48,21 @@ void TestBrowserWindowAura::Hide() {
   native_window_->Hide();
 }
 
+bool TestBrowserWindowAura::IsVisible() const {
+  return native_window_->IsVisible();
+}
+
 void TestBrowserWindowAura::Activate() {
+  CHECK(native_window_->GetRootWindow())
+      << "A TestBrowserWindowAura must have a root window to be activated.";
   ::wm::GetActivationClient(native_window_->GetRootWindow())
       ->ActivateWindow(native_window_.get());
 }
 
 bool TestBrowserWindowAura::IsActive() const {
+  // A test window might not be parented.
+  if (!native_window_->GetRootWindow())
+    return false;
   return ::wm::GetActivationClient(native_window_->GetRootWindow())
              ->GetActiveWindow() == native_window_.get();
 }

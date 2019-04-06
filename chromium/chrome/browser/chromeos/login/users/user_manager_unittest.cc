@@ -6,13 +6,13 @@
 #include <cstring>
 #include <memory>
 
+#include "ash/public/cpp/ash_pref_names.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager_impl.h"
-#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/profiles/profile.h"
@@ -24,6 +24,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/prefs/pref_service.h"
@@ -79,7 +80,6 @@ class UserManagerTest : public testing::Test {
     chromeos::DBusThreadManager::Initialize();
 
     ResetUserManager();
-    WallpaperManager::Initialize();
 
     wallpaper_controller_client_ =
         std::make_unique<WallpaperControllerClient>();
@@ -99,7 +99,6 @@ class UserManagerTest : public testing::Test {
 
     base::RunLoop().RunUntilIdle();
     chromeos::DBusThreadManager::Shutdown();
-    WallpaperManager::Shutdown();
   }
 
   ChromeUserManagerImpl* GetChromeUserManager() const {
@@ -182,6 +181,11 @@ TEST_F(UserManagerTest, RetrieveTrustedDevicePolicies) {
 }
 
 TEST_F(UserManagerTest, RemoveAllExceptOwnerFromList) {
+  // System salt is needed to remove user wallpaper.
+  SystemSaltGetter::Initialize();
+  SystemSaltGetter::Get()->SetRawSaltForTesting(
+      SystemSaltGetter::RawSalt({1, 2, 3, 4, 5, 6, 7, 8}));
+
   user_manager::UserManager::Get()->UserLoggedIn(
       owner_account_id_at_invalid_domain_,
       owner_account_id_at_invalid_domain_.GetUserEmail(),
@@ -256,7 +260,7 @@ TEST_F(UserManagerTest, ScreenLockAvailability) {
   EXPECT_EQ(1U, user_manager::UserManager::Get()->GetUnlockUsers().size());
 
   // The user is not allowed to lock the screen.
-  profile->GetPrefs()->SetBoolean(prefs::kAllowScreenLock, false);
+  profile->GetPrefs()->SetBoolean(ash::prefs::kAllowScreenLock, false);
   EXPECT_FALSE(user_manager::UserManager::Get()->CanCurrentUserLock());
   EXPECT_EQ(0U, user_manager::UserManager::Get()->GetUnlockUsers().size());
 
@@ -296,6 +300,16 @@ TEST_F(UserManagerTest, ProfileInitializedMigration) {
   users = &user_manager::UserManager::Get()->GetUsers();
   ASSERT_EQ(1U, users->size());
   EXPECT_TRUE((*users)[0]->profile_ever_initialized());
+}
+
+TEST_F(UserManagerTest, ProfileRequiresPolicyUnknown) {
+  user_manager::UserManager::Get()->UserLoggedIn(
+      owner_account_id_at_invalid_domain_,
+      owner_account_id_at_invalid_domain_.GetUserEmail(), false, false);
+  EXPECT_EQ(user_manager::known_user::ProfileRequiresPolicy::kUnknown,
+            user_manager::known_user::GetProfileRequiresPolicy(
+                owner_account_id_at_invalid_domain_));
+  ResetUserManager();
 }
 
 }  // namespace chromeos

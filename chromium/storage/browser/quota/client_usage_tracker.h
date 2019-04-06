@@ -21,8 +21,9 @@
 #include "storage/browser/quota/quota_task.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "storage/browser/storage_browser_export.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace storage {
 
@@ -34,11 +35,16 @@ class UsageTracker;
 class ClientUsageTracker : public SpecialStoragePolicy::Observer,
                            public base::SupportsWeakPtr<ClientUsageTracker> {
  public:
-  typedef base::Callback<void(int64_t limited_usage, int64_t unlimited_usage)>
-      HostUsageAccumulator;
-  typedef base::Callback<void(const GURL& origin, int64_t usage)>
-      OriginUsageAccumulator;
-  typedef std::map<std::string, std::set<GURL> > OriginSetByHost;
+  using HostUsageAccumulator =
+      base::RepeatingCallback<void(int64_t limited_usage,
+                                   int64_t unlimited_usage)>;
+  using OriginUsageAccumulator =
+      base::RepeatingCallback<void(const GURL& origin, int64_t usage)>;
+  using UsageAccumulator = base::RepeatingCallback<void(int64_t usage)>;
+  using OriginSetByHost = std::map<std::string, std::set<GURL>>;
+
+  using HostUsageCallback =
+      base::OnceCallback<void(int64_t limited_usage, int64_t unlimited_usage)>;
 
   ClientUsageTracker(UsageTracker* tracker,
                      QuotaClient* client,
@@ -47,9 +53,9 @@ class ClientUsageTracker : public SpecialStoragePolicy::Observer,
                      StorageMonitor* storage_monitor);
   ~ClientUsageTracker() override;
 
-  void GetGlobalLimitedUsage(const UsageCallback& callback);
-  void GetGlobalUsage(const GlobalUsageCallback& callback);
-  void GetHostUsage(const std::string& host, const UsageCallback& callback);
+  void GetGlobalLimitedUsage(UsageCallback callback);
+  void GetGlobalUsage(GlobalUsageCallback callback);
+  void GetHostUsage(const std::string& host, UsageCallback callback);
   void UpdateUsageCache(const GURL& origin, int64_t delta);
   int64_t GetCachedUsage() const;
   void GetCachedHostsUsage(std::map<std::string, int64_t>* host_usage) const;
@@ -59,37 +65,34 @@ class ClientUsageTracker : public SpecialStoragePolicy::Observer,
   void SetUsageCacheEnabled(const GURL& origin, bool enabled);
 
  private:
-  typedef CallbackQueueMap<HostUsageAccumulator, std::string, int64_t, int64_t>
-      HostUsageAccumulatorMap;
+  using HostUsageAccumulatorMap =
+      CallbackQueueMap<HostUsageCallback, std::string, int64_t, int64_t>;
 
-  typedef std::set<std::string> HostSet;
-  typedef std::map<GURL, int64_t> UsageMap;
-  typedef std::map<std::string, UsageMap> HostUsageMap;
+  using HostSet = std::set<std::string>;
+  using UsageMap = std::map<GURL, int64_t>;
+  using HostUsageMap = std::map<std::string, UsageMap>;
 
   struct AccumulateInfo {
-    int pending_jobs;
-    int64_t limited_usage;
-    int64_t unlimited_usage;
-
-    AccumulateInfo()
-        : pending_jobs(0), limited_usage(0), unlimited_usage(0) {}
+    int pending_jobs = 0;
+    int64_t limited_usage = 0;
+    int64_t unlimited_usage = 0;
   };
 
   void AccumulateLimitedOriginUsage(AccumulateInfo* info,
-                                    const UsageCallback& callback,
+                                    UsageCallback callback,
                                     int64_t usage);
-  void DidGetOriginsForGlobalUsage(const GlobalUsageCallback& callback,
-                                   const std::set<GURL>& origins);
+  void DidGetOriginsForGlobalUsage(GlobalUsageCallback callback,
+                                   const std::set<url::Origin>& origins);
   void AccumulateHostUsage(AccumulateInfo* info,
-                           const GlobalUsageCallback& callback,
+                           GlobalUsageCallback callback,
                            int64_t limited_usage,
                            int64_t unlimited_usage);
 
   void DidGetOriginsForHostUsage(const std::string& host,
-                                 const std::set<GURL>& origins);
+                                 const std::set<url::Origin>& origins);
 
   void GetUsageForOrigins(const std::string& host,
-                          const std::set<GURL>& origins);
+                          const std::set<url::Origin>& origins);
   void AccumulateOriginUsage(AccumulateInfo* info,
                              const std::string& host,
                              const GURL& origin,

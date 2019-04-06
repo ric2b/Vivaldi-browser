@@ -12,7 +12,6 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
-import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.feature_engagement.EventConstants;
@@ -63,7 +62,7 @@ public class SwipeRefreshHandler implements OverscrollRefreshHandler {
      */
     public SwipeRefreshHandler(final Context context, Tab tab) {
         mTab = tab;
-        mContainerView = mTab.getContentViewCore().getContainerView();
+        mContainerView = mTab.getContentView();
 
         mSwipeRefreshLayout = new SwipeRefreshLayout(context);
         mSwipeRefreshLayout.setLayoutParams(
@@ -120,19 +119,9 @@ public class SwipeRefreshHandler implements OverscrollRefreshHandler {
 
     @Override
     public boolean start() {
-        FullscreenManager manager = mTab.getFullscreenManager();
-
-        // If the controls are at the bottom and hidden, allow cc to handle the scroll event to show
-        // them.
-        if (manager != null && manager.areBrowserControlsAtBottom()
-                && manager.getBrowserControlHiddenRatio() > 0) {
-            return false;
-        }
-
         if (mTab.getActivity() != null && mTab.getActivity().getBottomSheet() != null) {
             Tracker tracker = TrackerFactory.getTrackerForProfile(Profile.getLastUsedProfile());
             tracker.notifyEvent(EventConstants.PULL_TO_REFRESH);
-            mTab.getActivity().getBottomSheet().maybeShowHelpBubble(false, true);
         }
 
         attachSwipeRefreshLayoutIfNecessary();

@@ -7,11 +7,10 @@
 
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings.mojom.h"
-#include "mojo/common/values_struct_traits.h"
+#include "mojo/public/cpp/base/values_mojom_traits.h"
 #include "mojo/public/cpp/bindings/enum_traits.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
 
@@ -99,7 +98,7 @@ struct StructTraits<
     return r.secondary_pattern;
   }
 
-  static const std::unique_ptr<base::Value>& setting_value(
+  static const base::Value& setting_value(
       const ContentSettingPatternSource& r) {
     return r.setting_value;
   }
@@ -139,6 +138,11 @@ struct StructTraits<
   static const std::vector<ContentSettingPatternSource>& client_hints_rules(
       const RendererContentSettingRules& r) {
     return r.client_hints_rules;
+  }
+
+  static const std::vector<ContentSettingPatternSource>& popup_redirect_rules(
+      const RendererContentSettingRules& r) {
+    return r.popup_redirect_rules;
   }
 
   static bool Read(

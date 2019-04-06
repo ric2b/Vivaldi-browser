@@ -17,7 +17,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/net_error_details.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_export.h"
@@ -59,35 +59,33 @@ class NET_EXPORT_PRIVATE HttpStream {
                                bool can_send_early,
                                RequestPriority priority,
                                const NetLogWithSource& net_log,
-                               const CompletionCallback& callback) = 0;
+                               CompletionOnceCallback callback) = 0;
 
   // Writes the headers and uploads body data to the underlying socket.
   // ERR_IO_PENDING is returned if the operation could not be completed
   // synchronously, in which case the result will be passed to the callback
   // when available. Returns OK on success.
   //
-  // The callback will only be invoked once the first full set of headers have
-  // been received, at which point |response| will have been populated with that
-  // set of headers, and is safe to read, until/unless ReadResponseHeaders is
-  // called.
+  // Some fields in |response| may be filled by this method, but it will not
+  // contain complete information until ReadResponseHeaders returns.
   //
   // |response| must remain valid until all sets of headers has been read, or
   // the HttpStream is destroyed. There's typically only one set of
   // headers, except in the case of 1xx responses (See ReadResponseHeaders).
   virtual int SendRequest(const HttpRequestHeaders& request_headers,
                           HttpResponseInfo* response,
-                          const CompletionCallback& callback) = 0;
+                          CompletionOnceCallback callback) = 0;
 
   // Reads from the underlying socket until the next set of response headers
-  // have been completely received.  This may only be called on 1xx responses
-  // after SendRequest has completed successfully, to read the next set of
-  // headers.
+  // have been completely received. Normally this is called once per request,
+  // however it may be called again in the event of a 1xx response to read the
+  // next set of headers.
   //
   // ERR_IO_PENDING is returned if the operation could not be completed
   // synchronously, in which case the result will be passed to the callback when
   // available. Returns OK on success. The response headers are available in
-  // the HttpResponseInfo passed in to original call to SendRequest.
-  virtual int ReadResponseHeaders(const CompletionCallback& callback) = 0;
+  // the HttpResponseInfo passed in the original call to SendRequest.
+  virtual int ReadResponseHeaders(CompletionOnceCallback callback) = 0;
 
   // Reads response body data, up to |buf_len| bytes. |buf_len| should be a
   // reasonable size (<2MB). The number of bytes read is returned, or an
@@ -99,8 +97,9 @@ class NET_EXPORT_PRIVATE HttpStream {
   // callback when available. If the operation is not completed immediately,
   // the socket acquires a reference to the provided buffer until the callback
   // is invoked or the socket is destroyed.
-  virtual int ReadResponseBody(IOBuffer* buf, int buf_len,
-                               const CompletionCallback& callback) = 0;
+  virtual int ReadResponseBody(IOBuffer* buf,
+                               int buf_len,
+                               CompletionOnceCallback callback) = 0;
 
   // Closes the stream.
   // |not_reusable| indicates if the stream can be used for further requests.

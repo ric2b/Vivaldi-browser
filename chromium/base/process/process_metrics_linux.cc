@@ -20,6 +20,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/process/internal_linux.h"
+#include "base/process/process_metrics_iocounters.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
@@ -131,35 +132,17 @@ bool ReadProcStatusAndGetFieldAsUint64(pid_t pid,
 
 // Get the total CPU of a single process.  Return value is number of jiffies
 // on success or -1 on error.
-int GetProcessCPU(pid_t pid) {
-  // Use /proc/<pid>/task to find all threads and parse their /stat file.
-  FilePath task_path = internal::GetProcPidDir(pid).Append("task");
-
-  DIR* dir = opendir(task_path.value().c_str());
-  if (!dir) {
-    DPLOG(ERROR) << "opendir(" << task_path.value() << ")";
+int64_t GetProcessCPU(pid_t pid) {
+  std::string buffer;
+  std::vector<std::string> proc_stats;
+  if (!internal::ReadProcStats(pid, &buffer) ||
+      !internal::ParseProcStats(buffer, &proc_stats)) {
     return -1;
   }
 
-  int total_cpu = 0;
-  while (struct dirent* ent = readdir(dir)) {
-    pid_t tid = internal::ProcDirSlotToPid(ent->d_name);
-    if (!tid)
-      continue;
-
-    // Synchronously reading files in /proc does not hit the disk.
-    ThreadRestrictions::ScopedAllowIO allow_io;
-
-    std::string stat;
-    FilePath stat_path =
-        task_path.Append(ent->d_name).Append(internal::kStatFile);
-    if (ReadFileToString(stat_path, &stat)) {
-      int cpu = ParseProcStatCPU(stat);
-      if (cpu > 0)
-        total_cpu += cpu;
-    }
-  }
-  closedir(dir);
+  int64_t total_cpu =
+      internal::GetProcStatsFieldAsInt64(proc_stats, internal::VM_UTIME) +
+      internal::GetProcStatsFieldAsInt64(proc_stats, internal::VM_STIME);
 
   return total_cpu;
 }
@@ -210,91 +193,13 @@ std::unique_ptr<ProcessMetrics> ProcessMetrics::CreateProcessMetrics(
   return WrapUnique(new ProcessMetrics(process));
 }
 
-// On Linux, return vsize.
-size_t ProcessMetrics::GetPagefileUsage() const {
-  return internal::ReadProcStatsAndGetFieldAsSizeT(process_,
-                                                   internal::VM_VSIZE);
-}
-
-// On Linux, return the high water mark of vsize.
-size_t ProcessMetrics::GetPeakPagefileUsage() const {
-  return ReadProcStatusAndGetFieldAsSizeT(process_, "VmPeak") * 1024;
-}
-
-// On Linux, return RSS.
-size_t ProcessMetrics::GetWorkingSetSize() const {
+size_t ProcessMetrics::GetResidentSetSize() const {
   return internal::ReadProcStatsAndGetFieldAsSizeT(process_, internal::VM_RSS) *
       getpagesize();
 }
 
-// On Linux, return the high water mark of RSS.
-size_t ProcessMetrics::GetPeakWorkingSetSize() const {
-  return ReadProcStatusAndGetFieldAsSizeT(process_, "VmHWM") * 1024;
-}
-
-bool ProcessMetrics::GetMemoryBytes(size_t* private_bytes,
-                                    size_t* shared_bytes) const {
-  WorkingSetKBytes ws_usage;
-  if (!GetWorkingSetKBytes(&ws_usage))
-    return false;
-
-  if (private_bytes)
-    *private_bytes = ws_usage.priv * 1024;
-
-  if (shared_bytes)
-    *shared_bytes = ws_usage.shared * 1024;
-
-  return true;
-}
-
-bool ProcessMetrics::GetWorkingSetKBytes(WorkingSetKBytes* ws_usage) const {
-#if defined(OS_CHROMEOS)
-  if (GetWorkingSetKBytesTotmaps(ws_usage))
-    return true;
-#endif
-  return GetWorkingSetKBytesStatm(ws_usage);
-}
-
-double ProcessMetrics::GetPlatformIndependentCPUUsage() {
-  TimeTicks time = TimeTicks::Now();
-
-  if (last_cpu_ == 0) {
-    // First call, just set the last values.
-    last_cpu_time_ = time;
-    last_cpu_ = GetProcessCPU(process_);
-    return 0.0;
-  }
-
-  TimeDelta time_delta = time - last_cpu_time_;
-  if (time_delta.is_zero()) {
-    NOTREACHED();
-    return 0.0;
-  }
-
-  int cpu = GetProcessCPU(process_);
-
-  // The number of jiffies in the time period.  Convert to percentage.
-  // Note: this means this will go *over* 100 in the case where multiple threads
-  // are together adding to more than one CPU's worth.
-  TimeDelta cpu_time = internal::ClockTicksToTimeDelta(cpu);
-  TimeDelta last_cpu_time = internal::ClockTicksToTimeDelta(last_cpu_);
-
-  // If the number of threads running in the process has decreased since the
-  // last time this function was called, |last_cpu_time| will be greater than
-  // |cpu_time| which will result in a negative value in the below percentage
-  // calculation. Prevent this by clamping to 0. https://crbug.com/546565.
-  // This computation is known to be shaky when threads are destroyed between
-  // "last" and "now", but for our current purposes, it's all right.
-  double percentage = 0.0;
-  if (last_cpu_time < cpu_time) {
-    percentage = 100.0 * (cpu_time - last_cpu_time).InSecondsF() /
-        time_delta.InSecondsF();
-  }
-
-  last_cpu_time_ = time;
-  last_cpu_ = cpu;
-
-  return percentage;
+TimeDelta ProcessMetrics::GetCumulativeCPUUsage() {
+  return internal::ClockTicksToTimeDelta(GetProcessCPU(process_));
 }
 
 // For the /proc/self/io file to exist, the Linux kernel must have
@@ -395,20 +300,17 @@ int ProcessMetrics::GetOpenFdSoftLimit() const {
   return -1;
 }
 
-ProcessMetrics::ProcessMetrics(ProcessHandle process)
-    : process_(process),
-      last_system_time_(0),
 #if defined(OS_LINUX) || defined(OS_AIX)
-      last_absolute_idle_wakeups_(0),
+ProcessMetrics::ProcessMetrics(ProcessHandle process)
+    : process_(process), last_absolute_idle_wakeups_(0) {}
+#else
+ProcessMetrics::ProcessMetrics(ProcessHandle process) : process_(process) {}
 #endif
-      last_cpu_(0) {
-}
 
 #if defined(OS_CHROMEOS)
 // Private, Shared and Proportional working set sizes are obtained from
 // /proc/<pid>/totmaps
-bool ProcessMetrics::GetWorkingSetKBytesTotmaps(WorkingSetKBytes *ws_usage)
-  const {
+ProcessMetrics::TotalsSummary ProcessMetrics::GetTotalsSummary() const {
   // The format of /proc/<pid>/totmaps is:
   //
   // Rss:                6120 kB
@@ -422,7 +324,8 @@ bool ProcessMetrics::GetWorkingSetKBytesTotmaps(WorkingSetKBytes *ws_usage)
   // AnonHugePages:       XXX kB
   // Swap:                XXX kB
   // Locked:              XXX kB
-  const size_t kPssIndex = (1 * 3) + 1;
+  ProcessMetrics::TotalsSummary summary = {};
+
   const size_t kPrivate_CleanIndex = (4 * 3) + 1;
   const size_t kPrivate_DirtyIndex = (5 * 3) + 1;
   const size_t kSwapIndex = (9 * 3) + 1;
@@ -433,85 +336,36 @@ bool ProcessMetrics::GetWorkingSetKBytesTotmaps(WorkingSetKBytes *ws_usage)
     ThreadRestrictions::ScopedAllowIO allow_io;
     bool ret = ReadFileToString(totmaps_file, &totmaps_data);
     if (!ret || totmaps_data.length() == 0)
-      return false;
+      return summary;
   }
 
   std::vector<std::string> totmaps_fields = SplitString(
       totmaps_data, kWhitespaceASCII, KEEP_WHITESPACE, SPLIT_WANT_NONEMPTY);
 
-  DCHECK_EQ("Pss:", totmaps_fields[kPssIndex-1]);
   DCHECK_EQ("Private_Clean:", totmaps_fields[kPrivate_CleanIndex - 1]);
   DCHECK_EQ("Private_Dirty:", totmaps_fields[kPrivate_DirtyIndex - 1]);
   DCHECK_EQ("Swap:", totmaps_fields[kSwapIndex-1]);
 
-  int pss = 0;
-  int private_clean = 0;
-  int private_dirty = 0;
-  int swap = 0;
-  bool ret = true;
-  ret &= StringToInt(totmaps_fields[kPssIndex], &pss);
-  ret &= StringToInt(totmaps_fields[kPrivate_CleanIndex], &private_clean);
-  ret &= StringToInt(totmaps_fields[kPrivate_DirtyIndex], &private_dirty);
-  ret &= StringToInt(totmaps_fields[kSwapIndex], &swap);
+  int private_clean_kb = 0;
+  int private_dirty_kb = 0;
+  int swap_kb = 0;
+  bool success = true;
+  success &=
+      StringToInt(totmaps_fields[kPrivate_CleanIndex], &private_clean_kb);
+  success &=
+      StringToInt(totmaps_fields[kPrivate_DirtyIndex], &private_dirty_kb);
+  success &= StringToInt(totmaps_fields[kSwapIndex], &swap_kb);
 
-  // On ChromeOS, swap goes to zram. Count this as private / shared, as
-  // increased swap decreases available RAM to user processes, which would
-  // otherwise create surprising results.
-  ws_usage->priv = private_clean + private_dirty + swap;
-  ws_usage->shared = pss + swap;
-  ws_usage->shareable = 0;
-  ws_usage->swapped = swap;
-  return ret;
+  if (!success)
+    return summary;
+
+  summary.private_clean_kb = private_clean_kb;
+  summary.private_dirty_kb = private_dirty_kb;
+  summary.swap_kb = swap_kb;
+
+  return summary;
 }
 #endif
-
-// Private and Shared working set sizes are obtained from /proc/<pid>/statm.
-bool ProcessMetrics::GetWorkingSetKBytesStatm(WorkingSetKBytes* ws_usage)
-    const {
-  // Use statm instead of smaps because smaps is:
-  // a) Large and slow to parse.
-  // b) Unavailable in the SUID sandbox.
-
-  // First get the page size, since everything is measured in pages.
-  // For details, see: man 5 proc.
-  const int page_size_kb = getpagesize() / 1024;
-  if (page_size_kb <= 0)
-    return false;
-
-  std::string statm;
-  {
-    FilePath statm_file = internal::GetProcPidDir(process_).Append("statm");
-    // Synchronously reading files in /proc does not hit the disk.
-    ThreadRestrictions::ScopedAllowIO allow_io;
-    bool ret = ReadFileToString(statm_file, &statm);
-    if (!ret || statm.length() == 0)
-      return false;
-  }
-
-  std::vector<StringPiece> statm_vec =
-      SplitStringPiece(statm, " ", TRIM_WHITESPACE, SPLIT_WANT_ALL);
-  if (statm_vec.size() != 7)
-    return false;  // Not the expected format.
-
-  int statm_rss;
-  int statm_shared;
-  bool ret = true;
-  ret &= StringToInt(statm_vec[1], &statm_rss);
-  ret &= StringToInt(statm_vec[2], &statm_shared);
-
-  ws_usage->priv = (statm_rss - statm_shared) * page_size_kb;
-  ws_usage->shared = statm_shared * page_size_kb;
-
-  // Sharable is not calculated, as it does not provide interesting data.
-  ws_usage->shareable = 0;
-
-#if defined(OS_CHROMEOS)
-  // Can't get swapped memory from statm.
-  ws_usage->swapped = 0;
-#endif
-
-  return ret;
-}
 
 size_t GetSystemCommitCharge() {
   SystemMemoryInfoKB meminfo;

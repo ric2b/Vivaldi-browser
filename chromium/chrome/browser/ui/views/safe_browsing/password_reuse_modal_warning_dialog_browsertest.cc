@@ -32,6 +32,7 @@ class PasswordReuseModalWarningTest : public DialogBrowserTest {
         browser()->tab_strip_model()->GetActiveWebContents();
     dialog_ = new PasswordReuseModalWarningDialog(
         web_contents, nullptr,
+        LoginReputationClientRequest::PasswordReuseEvent::SIGN_IN_PASSWORD,
         base::BindOnce(&PasswordReuseModalWarningTest::DialogCallback,
                        base::Unretained(this)));
     constrained_window::CreateBrowserModalDialogViews(
@@ -60,14 +61,6 @@ class PasswordReuseModalWarningTest : public DialogBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(PasswordReuseModalWarningTest, InvokeUi_default) {
-  ShowAndVerifyUi();
-}
-
-IN_PROC_BROWSER_TEST_F(PasswordReuseModalWarningTest, InvokeUi_softer) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeatureWithParameters(
-      safe_browsing::kGoogleBrandedPhishingWarning,
-      {{"softer_warning", "true"}});
   ShowAndVerifyUi();
 }
 

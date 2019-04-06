@@ -16,7 +16,6 @@ zip_archiver_dir = "$root_out_dir/resources/chromeos/zip_archiver"
 
 copy("zip_archiver_css") {
   sources = [
-    "css/passphrase-dialog.css",
     "css/passphrase.css",
   ]
 
@@ -89,5 +88,12 @@ copy("zip_archiver_root") {
 
   outputs = [
     "$zip_archiver_dir/{{source_file_part}}",
+  ]
+}
+
+static_library("char_coding") {
+  sources = [
+    "cpp/char_coding.cc",
+    "cpp/char_coding.h",
   ]
 }

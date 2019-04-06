@@ -6,6 +6,7 @@
 
 #include <string.h>
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -13,10 +14,10 @@
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -31,7 +32,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_byteorder.h"
 #include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/nacl/browser/nacl_browser.h"
@@ -52,21 +52,20 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
-#include "content/public/common/zygote_features.h"
 #include "ipc/ipc_channel.h"
-#include "mojo/edk/embedder/embedder.h"
 #include "net/socket/socket_descriptor.h"
 #include "ppapi/host/host_factory.h"
 #include "ppapi/host/ppapi_host.h"
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/shared_impl/ppapi_constants.h"
 #include "ppapi/shared_impl/ppapi_nacl_plugin_args.h"
+#include "services/service_manager/sandbox/switches.h"
+#include "services/service_manager/zygote/common/zygote_buildflags.h"
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
-#include "content/public/common/zygote_handle.h"
+#include "services/service_manager/zygote/common/zygote_handle.h"  // nogncheck
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
 #if defined(OS_POSIX)
@@ -185,8 +184,8 @@ class NaClSandboxedProcessLauncherDelegate
 #endif  // OS_WIN
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
-  content::ZygoteHandle GetZygote() override {
-    return content::GetGenericZygote();
+  service_manager::ZygoteHandle GetZygote() override {
+    return service_manager::GetGenericZygote();
   }
 #endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
@@ -252,12 +251,12 @@ NaClProcessHost::NaClProcessHost(
 NaClProcessHost::~NaClProcessHost() {
   // Report exit status only if the process was successfully started.
   if (process_->GetData().handle != base::kNullProcessHandle) {
-    int exit_code = 0;
-    process_->GetTerminationStatus(false /* known_dead */, &exit_code);
+    content::ChildProcessTerminationInfo info =
+        process_->GetTerminationInfo(false /* known_dead */);
     std::string message =
         base::StringPrintf("NaCl process exited with status %i (0x%x)",
-                           exit_code, exit_code);
-    if (exit_code == 0) {
+                           info.exit_code, info.exit_code);
+    if (info.exit_code == 0) {
       VLOG(1) << message;
     } else {
       LOG(ERROR) << message;
@@ -275,16 +274,16 @@ NaClProcessHost::~NaClProcessHost() {
     // handles.
     base::File file(IPC::PlatformFileForTransitToFile(
         prefetched_resource_files_[i].file));
-    base::PostTaskWithTraits(
-        FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
-        base::Bind(&CloseFile, base::Passed(std::move(file))));
+    base::PostTaskWithTraits(FROM_HERE,
+                             {base::TaskPriority::BACKGROUND, base::MayBlock()},
+                             base::BindOnce(&CloseFile, std::move(file)));
   }
 #endif
   // Open files need to be closed on the blocking pool.
   if (nexe_file_.IsValid()) {
-    base::PostTaskWithTraits(
-        FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
-        base::Bind(&CloseFile, base::Passed(std::move(nexe_file_))));
+    base::PostTaskWithTraits(FROM_HERE,
+                             {base::TaskPriority::BACKGROUND, base::MayBlock()},
+                             base::BindOnce(&CloseFile, std::move(nexe_file_)));
   }
 
   if (reply_msg_) {
@@ -362,7 +361,7 @@ void NaClProcessHost::Launch(
   const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 #if defined(OS_WIN)
   if (cmd->HasSwitch(switches::kEnableNaClDebug) &&
-      !cmd->HasSwitch(switches::kNoSandbox)) {
+      !cmd->HasSwitch(service_manager::switches::kNoSandbox)) {
     // We don't switch off sandbox automatically for security reasons.
     SendErrorToRenderer("NaCl's GDB debug stub requires --no-sandbox flag"
                         " on Windows. See crbug.com/265624.");
@@ -524,7 +523,7 @@ bool NaClProcessHost::LaunchSelLdr() {
     static const char kPath[] = "PATH";
     std::string old_path;
     base::FilePath module_path;
-    if (!PathService::Get(base::FILE_MODULE, &module_path)) {
+    if (!base::PathService::Get(base::FILE_MODULE, &module_path)) {
       SendErrorToRenderer("could not get path to current module");
       return false;
     }
@@ -568,7 +567,7 @@ bool NaClProcessHost::LaunchSelLdr() {
     return true;
   }
 #endif
-  process_->Launch(base::MakeUnique<NaClSandboxedProcessLauncherDelegate>(),
+  process_->Launch(std::make_unique<NaClSandboxedProcessLauncherDelegate>(),
                    std::move(cmd_line), true);
   return true;
 }
@@ -847,9 +846,9 @@ void NaClProcessHost::StartNaClFileResolved(
   if (checked_nexe_file.IsValid()) {
     // Release the file received from the renderer. This has to be done on a
     // thread where IO is permitted, though.
-    base::PostTaskWithTraits(
-        FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
-        base::Bind(&CloseFile, base::Passed(std::move(nexe_file_))));
+    base::PostTaskWithTraits(FROM_HERE,
+                             {base::TaskPriority::BACKGROUND, base::MayBlock()},
+                             base::BindOnce(&CloseFile, std::move(nexe_file_)));
     params.nexe_file_path_metadata = file_path;
     params.nexe_file =
         IPC::TakePlatformFileForTransit(std::move(checked_nexe_file));
@@ -934,6 +933,19 @@ bool NaClProcessHost::StartPPAPIProxy(
       args.switch_names.push_back(flag_whitelist[i]);
       args.switch_values.push_back(value);
     }
+  }
+
+  std::string enabled_features;
+  std::string disabled_features;
+  base::FeatureList::GetInstance()->GetFeatureOverrides(&enabled_features,
+                                                        &disabled_features);
+  if (!enabled_features.empty()) {
+    args.switch_names.push_back(switches::kEnableFeatures);
+    args.switch_values.push_back(enabled_features);
+  }
+  if (!disabled_features.empty()) {
+    args.switch_names.push_back(switches::kDisableFeatures);
+    args.switch_values.push_back(disabled_features);
   }
 
   ppapi_host_->GetPpapiHost()->AddHostFactoryFilter(

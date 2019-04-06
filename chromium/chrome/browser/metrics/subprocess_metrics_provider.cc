@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/persistent_histogram_allocator.h"
@@ -142,14 +141,14 @@ void SubprocessMetricsProvider::BrowserChildProcessHostDisconnected(
 
 void SubprocessMetricsProvider::BrowserChildProcessCrashed(
     const content::ChildProcessData& data,
-    int exit_code) {
+    const content::ChildProcessTerminationInfo& info) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DeregisterSubprocessAllocator(data.id);
 }
 
 void SubprocessMetricsProvider::BrowserChildProcessKilled(
     const content::ChildProcessData& data,
-    int exit_code) {
+    const content::ChildProcessTerminationInfo& info) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DeregisterSubprocessAllocator(data.id);
 }
@@ -180,15 +179,14 @@ void SubprocessMetricsProvider::RenderProcessReady(
       host->TakeMetricsAllocator();
   if (allocator) {
     RegisterSubprocessAllocator(
-        host->GetID(), base::MakeUnique<base::PersistentHistogramAllocator>(
+        host->GetID(), std::make_unique<base::PersistentHistogramAllocator>(
                            std::move(allocator)));
   }
 }
 
 void SubprocessMetricsProvider::RenderProcessExited(
     content::RenderProcessHost* host,
-    base::TerminationStatus status,
-    int exit_code) {
+    const content::ChildProcessTerminationInfo& info) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   DeregisterSubprocessAllocator(host->GetID());
@@ -221,6 +219,6 @@ SubprocessMetricsProvider::GetSubprocessHistogramAllocatorOnIOThread(int id) {
   if (!allocator)
     return nullptr;
 
-  return base::MakeUnique<base::PersistentHistogramAllocator>(
+  return std::make_unique<base::PersistentHistogramAllocator>(
       std::move(allocator));
 }

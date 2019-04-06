@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -20,11 +21,12 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/toolbar/app_menu_button.h"
+#include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "chrome/test/views/scoped_macviews_browser_mode.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -74,7 +76,7 @@ class ViewFocusChangeWaiter : public views::FocusChangeListener {
                         views::View* focused_now) override {
     if (focused_now && focused_now->id() != previous_view_id_) {
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
+          FROM_HERE, base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
     }
   }
 
@@ -118,7 +120,7 @@ class SendKeysMenuListener : public views::MenuListener {
     } else {
       SendKeyPress(browser_, ui::VKEY_ESCAPE);
       base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
+          FROM_HERE, base::RunLoop::QuitCurrentWhenIdleClosureDeprecated(),
           base::TimeDelta::FromMilliseconds(200));
     }
   }
@@ -179,6 +181,9 @@ class KeyboardAccessTest : public InProcessBrowserTest {
   // It verifies that the menu when dismissed by sending the ESC key it does
   // not display twice.
   void TestMenuKeyboardAccessAndDismiss();
+
+ private:
+  test::ScopedMacViewsBrowserMode views_mode_{true};
 
   DISALLOW_COPY_AND_ASSIGN(KeyboardAccessTest);
 };
@@ -335,6 +340,9 @@ void KeyboardAccessTest::TestMenuKeyboardAccessAndDismiss() {
 // http://crbug.com/62310.
 #if defined(OS_CHROMEOS)
 #define MAYBE_TestMenuKeyboardAccess DISABLED_TestMenuKeyboardAccess
+#elif defined(OS_MACOSX)
+// No keyboard shortcut for the Chrome menu on Mac: http://crbug.com/823952
+#define MAYBE_TestMenuKeyboardAccess DISABLED_TestMenuKeyboardAccess
 #else
 #define MAYBE_TestMenuKeyboardAccess TestMenuKeyboardAccess
 #endif
@@ -346,10 +354,12 @@ IN_PROC_BROWSER_TEST_F(KeyboardAccessTest, MAYBE_TestMenuKeyboardAccess) {
 // http://crbug.com/62310.
 #if defined(OS_CHROMEOS)
 #define MAYBE_TestAltMenuKeyboardAccess DISABLED_TestAltMenuKeyboardAccess
+#elif defined(OS_MACOSX)
+// No keyboard shortcut for the Chrome menu on Mac: http://crbug.com/823952
+#define MAYBE_TestAltMenuKeyboardAccess DISABLED_TestAltMenuKeyboardAccess
 #else
 #define MAYBE_TestAltMenuKeyboardAccess TestAltMenuKeyboardAccess
 #endif
-
 IN_PROC_BROWSER_TEST_F(KeyboardAccessTest, MAYBE_TestAltMenuKeyboardAccess) {
   TestMenuKeyboardAccess(true, false, false);
 }
@@ -382,12 +392,18 @@ IN_PROC_BROWSER_TEST_F(KeyboardAccessTest, TestMenuKeyboardOpenDismiss) {
 }
 #endif
 
+#if defined(OS_MACOSX)
+// Focusing or input is not completely working on Mac: http://crbug.com/824418
+#define MAYBE_ReserveKeyboardAccelerators DISABLED_ReserveKeyboardAccelerators
+#else
+#define MAYBE_ReserveKeyboardAccelerators ReserveKeyboardAccelerators
+#endif
 // Test that JavaScript cannot intercept reserved keyboard accelerators like
 // ctrl-t to open a new tab or ctrl-f4 to close a tab.
 // TODO(isherman): This test times out on ChromeOS.  We should merge it with
 // BrowserKeyEventsTest.ReservedAccelerators, but just disable for now.
 // If this flakes, use http://crbug.com/62311.
-IN_PROC_BROWSER_TEST_F(KeyboardAccessTest, ReserveKeyboardAccelerators) {
+IN_PROC_BROWSER_TEST_F(KeyboardAccessTest, MAYBE_ReserveKeyboardAccelerators) {
   const std::string kBadPage =
       "<html><script>"
       "document.onkeydown = function() {"
@@ -415,7 +431,13 @@ IN_PROC_BROWSER_TEST_F(KeyboardAccessTest, ReserveKeyboardAccelerators) {
 }
 
 #if defined(OS_WIN)  // These keys are Windows-only.
-IN_PROC_BROWSER_TEST_F(KeyboardAccessTest, BackForwardKeys) {
+// Disabled on debug due to high flake rate; see https://crbug.com/846623.
+#if !defined(NDEBUG)
+#define MAYBE_BackForwardKeys DISABLED_BackForwardKeys
+#else
+#define MAYBE_BackForwardKeys BackForwardKeys
+#endif
+IN_PROC_BROWSER_TEST_F(KeyboardAccessTest, MAYBE_BackForwardKeys) {
   // Navigate to create some history.
   ui_test_utils::NavigateToURL(browser(), GURL("chrome://version/"));
   ui_test_utils::NavigateToURL(browser(), GURL("chrome://about/"));

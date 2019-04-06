@@ -14,7 +14,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "media/base/audio_parameters.h"
-#include "media/base/audio_sample_types.h"
 #include "media/base/limits.h"
 #include "media/base/vector_math.h"
 
@@ -149,12 +148,22 @@ std::unique_ptr<AudioBus> AudioBus::WrapMemory(const AudioParameters& params,
                                        static_cast<float*>(data)));
 }
 
+std::unique_ptr<const AudioBus> AudioBus::WrapReadOnlyMemory(int channels,
+                                                             int frames,
+                                                             const void* data) {
+  // Note: const_cast is generally dangerous but is used in this case since
+  // AudioBus accomodates both read-only and read/write use cases. A const
+  // AudioBus object is returned to ensure no one accidentally writes to the
+  // read-only data.
+  return WrapMemory(channels, frames, const_cast<void*>(data));
+}
+
 std::unique_ptr<const AudioBus> AudioBus::WrapReadOnlyMemory(
     const AudioParameters& params,
     const void* data) {
   // Note: const_cast is generally dangerous but is used in this case since
   // AudioBus accomodates both read-only and read/write use cases. A const
-  // AudioBus object is returned to ensure noone accidentally writes to the
+  // AudioBus object is returned to ensure no one accidentally writes to the
   // read-only data.
   return WrapMemory(params, const_cast<void*>(data));
 }

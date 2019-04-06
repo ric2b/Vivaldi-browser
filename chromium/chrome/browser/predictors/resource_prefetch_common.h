@@ -18,28 +18,6 @@ class WebContents;
 
 namespace predictors {
 
-extern const char kSpeculativeResourcePrefetchingFeatureName[];
-extern const char kModeParamName[];
-extern const char kLearningMode[];
-extern const char kExternalPrefetchingMode[];
-extern const char kPrefetchingMode[];
-extern const char kEnableUrlLearningParamName[];
-extern const char kEnableManifestsParamName[];
-extern const char kEnableOriginLearningParamName[];
-extern const base::Feature kSpeculativeResourcePrefetchingFeature;
-
-struct LoadingPredictorConfig;
-
-// Returns true if prefetching is enabled, and initializes |config|, if not
-// nullptr.
-bool MaybeEnableResourcePrefetching(LoadingPredictorConfig* config);
-
-// Represents the type of key based on which prefetch data is stored.
-enum PrefetchKeyType {
-  PREFETCH_KEY_TYPE_HOST,
-  PREFETCH_KEY_TYPE_URL
-};
-
 // Represents a single navigation for a render frame.
 struct NavigationID {
   NavigationID();
@@ -55,7 +33,7 @@ struct NavigationID {
   // Returns true iff the tab_id is valid and the Main frame URL is set.
   bool is_valid() const;
 
-  SessionID::id_type tab_id;
+  SessionID tab_id;
   GURL main_frame_url;
 
   // NOTE: Even though we store the creation time here, it is not used during

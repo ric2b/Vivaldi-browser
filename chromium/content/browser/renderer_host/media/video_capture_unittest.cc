@@ -17,7 +17,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "content/browser/browser_thread_impl.h"
 #include "content/browser/renderer_host/media/fake_video_capture_provider.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/media_stream_ui_proxy.h"
@@ -62,7 +61,7 @@ void VideoInputDevicesEnumerated(base::Closure quit_closure,
         salt, security_origin, info.device_id);
     out->push_back(MediaDeviceInfo(device_id, info.label, std::string()));
   }
-  quit_closure.Run();
+  std::move(quit_closure).Run();
 }
 
 }  // namespace
@@ -75,11 +74,18 @@ ACTION_P2(ExitMessageLoop, task_runner, quit_closure) {
   task_runner->PostTask(FROM_HERE, quit_closure);
 }
 
+class MockRenderProcessHostDelegate
+    : public VideoCaptureHost::RenderProcessHostDelegate {
+ public:
+  MOCK_METHOD0(NotifyStreamAdded, void());
+  MOCK_METHOD0(NotifyStreamRemoved, void());
+};
+
 // This is an integration test of VideoCaptureHost in conjunction with
 // MediaStreamManager, VideoCaptureManager, VideoCaptureController, and
 // VideoCaptureDevice.
 class VideoCaptureTest : public testing::Test,
-                         public mojom::VideoCaptureObserver {
+                         public media::mojom::VideoCaptureObserver {
  public:
   VideoCaptureTest()
       : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
@@ -147,10 +153,11 @@ class VideoCaptureTest : public testing::Test,
     {
       base::RunLoop run_loop;
       media_stream_manager_->OpenDevice(
-          render_process_id, render_frame_id,
-          browser_context_.GetMediaDeviceIDSalt(), page_request_id,
+          render_process_id, render_frame_id, page_request_id,
           video_devices[0].device_id, MEDIA_DEVICE_VIDEO_CAPTURE,
-          security_origin,
+          MediaDeviceSaltAndOrigin{browser_context_.GetMediaDeviceIDSalt(),
+                                   browser_context_.GetMediaDeviceIDSalt(),
+                                   security_origin},
           base::BindOnce(&VideoCaptureTest::OnDeviceOpened,
                          base::Unretained(this), run_loop.QuitClosure()),
           MediaStreamManager::DeviceStoppedCallback());
@@ -168,13 +175,13 @@ class VideoCaptureTest : public testing::Test,
   }
 
  protected:
-  // mojom::VideoCaptureObserver implementation.
-  MOCK_METHOD1(OnStateChanged, void(mojom::VideoCaptureState));
-  void OnBufferCreated(int32_t buffer_id,
-                       mojo::ScopedSharedBufferHandle handle) override {
-    DoOnBufferCreated(buffer_id);
+  // media::mojom::VideoCaptureObserver implementation.
+  MOCK_METHOD1(OnStateChanged, void(media::mojom::VideoCaptureState));
+  void OnNewBuffer(int32_t buffer_id,
+                   media::mojom::VideoBufferHandlePtr buffer_handle) override {
+    DoOnNewBuffer(buffer_id);
   }
-  MOCK_METHOD1(DoOnBufferCreated, void(int32_t));
+  MOCK_METHOD1(DoOnNewBuffer, void(int32_t));
   void OnBufferReady(int32_t buffer_id,
                      media::mojom::VideoFrameInfoPtr info) override {
     DoOnBufferReady(buffer_id);
@@ -188,15 +195,16 @@ class VideoCaptureTest : public testing::Test,
     params.requested_format = media::VideoCaptureFormat(
         gfx::Size(352, 288), 30, media::PIXEL_FORMAT_I420);
 
-    EXPECT_CALL(*this, OnStateChanged(mojom::VideoCaptureState::STARTED));
-    EXPECT_CALL(*this, DoOnBufferCreated(_))
+    EXPECT_CALL(*this,
+                OnStateChanged(media::mojom::VideoCaptureState::STARTED));
+    EXPECT_CALL(*this, DoOnNewBuffer(_))
         .Times(AnyNumber())
         .WillRepeatedly(Return());
     EXPECT_CALL(*this, DoOnBufferReady(_))
         .Times(AnyNumber())
         .WillRepeatedly(ExitMessageLoop(task_runner_, run_loop.QuitClosure()));
 
-    mojom::VideoCaptureObserverPtr observer;
+    media::mojom::VideoCaptureObserverPtr observer;
     observer_binding_.Bind(mojo::MakeRequest(&observer));
     host_->Start(kDeviceId, opened_session_id_, params, std::move(observer));
 
@@ -215,13 +223,14 @@ class VideoCaptureTest : public testing::Test,
 
     // |STARTED| is reported asynchronously, which may not be received if
     // capture is stopped immediately.
-    EXPECT_CALL(*this, OnStateChanged(mojom::VideoCaptureState::STARTED))
+    EXPECT_CALL(*this, OnStateChanged(media::mojom::VideoCaptureState::STARTED))
         .Times(AtMost(1));
-    mojom::VideoCaptureObserverPtr observer;
+    media::mojom::VideoCaptureObserverPtr observer;
     observer_binding_.Bind(mojo::MakeRequest(&observer));
     host_->Start(kDeviceId, opened_session_id_, params, std::move(observer));
 
-    EXPECT_CALL(*this, OnStateChanged(mojom::VideoCaptureState::STOPPED));
+    EXPECT_CALL(*this,
+                OnStateChanged(media::mojom::VideoCaptureState::STOPPED));
     host_->Stop(kDeviceId);
     run_loop.RunUntilIdle();
   }
@@ -230,14 +239,15 @@ class VideoCaptureTest : public testing::Test,
     InSequence s;
     base::RunLoop run_loop;
 
-    EXPECT_CALL(*this, OnStateChanged(mojom::VideoCaptureState::PAUSED));
+    EXPECT_CALL(*this, OnStateChanged(media::mojom::VideoCaptureState::PAUSED));
     host_->Pause(kDeviceId);
 
     media::VideoCaptureParams params;
     params.requested_format = media::VideoCaptureFormat(
         gfx::Size(352, 288), 30, media::PIXEL_FORMAT_I420);
 
-    EXPECT_CALL(*this, OnStateChanged(mojom::VideoCaptureState::RESUMED));
+    EXPECT_CALL(*this,
+                OnStateChanged(media::mojom::VideoCaptureState::RESUMED));
     host_->Resume(kDeviceId, opened_session_id_, params);
     run_loop.RunUntilIdle();
   }
@@ -245,7 +255,7 @@ class VideoCaptureTest : public testing::Test,
   void StopCapture() {
     base::RunLoop run_loop;
 
-    EXPECT_CALL(*this, OnStateChanged(mojom::VideoCaptureState::STOPPED))
+    EXPECT_CALL(*this, OnStateChanged(media::mojom::VideoCaptureState::STOPPED))
         .WillOnce(ExitMessageLoop(task_runner_, run_loop.QuitClosure()));
     host_->Stop(kDeviceId);
 
@@ -265,7 +275,7 @@ class VideoCaptureTest : public testing::Test,
   }
 
   void SimulateError() {
-    EXPECT_CALL(*this, OnStateChanged(mojom::VideoCaptureState::FAILED));
+    EXPECT_CALL(*this, OnStateChanged(media::mojom::VideoCaptureState::FAILED));
     VideoCaptureControllerID id(kDeviceId);
     host_->OnError(id);
     base::RunLoop().RunUntilIdle();
@@ -285,11 +295,11 @@ class VideoCaptureTest : public testing::Test,
       opened_device_label_ = label;
       opened_session_id_ = opened_device.session_id;
     }
-    quit_closure.Run();
+    std::move(quit_closure).Run();
   }
 
   // |media_stream_manager_| needs to outlive |thread_bundle_| because it is a
-  // MessageLoop::DestructionObserver.
+  // MessageLoopCurrent::DestructionObserver.
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
   const content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<media::AudioManager> audio_manager_;
@@ -301,7 +311,7 @@ class VideoCaptureTest : public testing::Test,
   std::string opened_device_label_;
 
   std::unique_ptr<VideoCaptureHost> host_;
-  mojo::Binding<mojom::VideoCaptureObserver> observer_binding_;
+  mojo::Binding<media::mojom::VideoCaptureObserver> observer_binding_;
 
   DISALLOW_COPY_AND_ASSIGN(VideoCaptureTest);
 };
@@ -327,7 +337,7 @@ TEST_F(VideoCaptureTest, StartAndErrorAndStop) {
 }
 
 TEST_F(VideoCaptureTest, StartAndCaptureAndError) {
-  EXPECT_CALL(*this, OnStateChanged(mojom::VideoCaptureState::STOPPED))
+  EXPECT_CALL(*this, OnStateChanged(media::mojom::VideoCaptureState::STOPPED))
       .Times(0);
   StartCapture();
   WaitForOneCapturedBuffer();
@@ -346,9 +356,31 @@ TEST_F(VideoCaptureTest, CloseSessionWithoutStopping) {
 
   // When the session is closed via the stream without stopping capture, the
   // ENDED event is sent.
-  EXPECT_CALL(*this, OnStateChanged(mojom::VideoCaptureState::ENDED));
+  EXPECT_CALL(*this, OnStateChanged(media::mojom::VideoCaptureState::ENDED));
   CloseSession();
   base::RunLoop().RunUntilIdle();
+}
+
+// Tests if RenderProcessHostDelegate methods are called as often as as
+// expected.
+TEST_F(VideoCaptureTest, IncrementMatchesDecrementCalls) {
+  std::unique_ptr<MockRenderProcessHostDelegate> mock_delegate =
+      std::make_unique<MockRenderProcessHostDelegate>();
+  MockRenderProcessHostDelegate* const mock_delegate_ptr = mock_delegate.get();
+  std::unique_ptr<VideoCaptureHost> host =
+      std::make_unique<VideoCaptureHost>(std::move(mock_delegate), nullptr);
+
+  const int kNumNotifyCalls = 3;
+  EXPECT_CALL(*mock_delegate_ptr, NotifyStreamAdded()).Times(kNumNotifyCalls);
+  EXPECT_CALL(*mock_delegate_ptr, NotifyStreamRemoved()).Times(kNumNotifyCalls);
+
+  EXPECT_EQ(0u, host->number_of_active_streams_);
+  for (int i = 0; i < kNumNotifyCalls; ++i)
+    host->NotifyStreamAdded();
+  EXPECT_EQ(kNumNotifyCalls, static_cast<int>(host->number_of_active_streams_));
+  host->NotifyStreamRemoved();
+  host->NotifyAllStreamsRemoved();
+  EXPECT_EQ(0u, host->number_of_active_streams_);
 }
 
 }  // namespace content

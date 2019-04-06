@@ -6,11 +6,11 @@
 
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#import "ios/testing/wait_util.h"
+#import "base/test/ios/wait_util.h"
 #import "ios/web/public/download/download_controller.h"
 #import "ios/web/public/download/download_task.h"
-#import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/test/fakes/fake_download_controller_delegate.h"
+#import "ios/web/public/test/navigation_test_util.h"
 #import "ios/web/public/test/web_test_with_web_state.h"
 #import "ios/web/public/web_client.h"
 #import "ios/web/public/web_state/web_state.h"
@@ -24,7 +24,9 @@
 #error "This file requires ARC support."
 #endif
 
-using testing::WaitUntilConditionOrTimeout;
+using base::test::ios::WaitUntilConditionOrTimeout;
+using base::test::ios::kWaitForDownloadTimeout;
+using base::test::ios::kWaitForPageLoadTimeout;
 
 namespace web {
 
@@ -74,12 +76,10 @@ TEST_F(DownloadTest, SucessfullDownload) {
   // Load download URL.
   ASSERT_TRUE(server_.Start());
   GURL url(server_.GetURL("/"));
-  web::NavigationManager::WebLoadParams params(url);
-  params.transition_type = ui::PageTransition::PAGE_TRANSITION_TYPED;
-  web_state()->GetNavigationManager()->LoadURLWithParams(params);
+  test::LoadUrl(web_state(), url);
 
   // Wait until download task is created.
-  ASSERT_TRUE(WaitUntilConditionOrTimeout(testing::kWaitForDownloadTimeout, ^{
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForDownloadTimeout, ^{
     return !delegate_.alive_download_tasks().empty();
   }));
   ASSERT_EQ(1U, delegate_.alive_download_tasks().size());
@@ -101,7 +101,7 @@ TEST_F(DownloadTest, SucessfullDownload) {
 
   // Start the download task and wait for completion.
   task->Start(std::make_unique<net::URLFetcherStringWriter>());
-  ASSERT_TRUE(WaitUntilConditionOrTimeout(testing::kWaitForPageLoadTimeout, ^{
+  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForPageLoadTimeout, ^{
     base::RunLoop().RunUntilIdle();
     return task->IsDone();
   }));

@@ -13,7 +13,6 @@
 #include "ui/gfx/font.h"
 #include "ui/gfx/font_render_params.h"
 #include "ui/gfx/linux_font_delegate.h"
-#include "ui/gfx/test/fontconfig_util_linux.h"
 
 namespace gfx {
 
@@ -62,7 +61,6 @@ class TestFontDelegate : public LinuxFontDelegate {
 class PlatformFontLinuxTest : public testing::Test {
  public:
   PlatformFontLinuxTest() {
-    SetUpFontconfig();
     original_font_delegate_ = LinuxFontDelegate::instance();
     LinuxFontDelegate::SetInstance(&test_font_delegate_);
   }
@@ -71,7 +69,6 @@ class PlatformFontLinuxTest : public testing::Test {
     LinuxFontDelegate::SetInstance(
         const_cast<LinuxFontDelegate*>(original_font_delegate_));
     PlatformFontLinux::ReloadDefaultFont();
-    TearDownFontconfig();
   }
 
  protected:
@@ -87,13 +84,10 @@ class PlatformFontLinuxTest : public testing::Test {
 // Test that PlatformFontLinux's default constructor initializes the instance
 // with the correct parameters.
 TEST_F(PlatformFontLinuxTest, DefaultFont) {
-  ASSERT_TRUE(LoadSystemFontIntoFontconfig("arial.ttf"));
-  ASSERT_TRUE(LoadSystemFontIntoFontconfig("times_new_roman.ttf"));
-
 #if defined(OS_CHROMEOS)
-  PlatformFontLinux::SetDefaultFontDescription("Arial,Times New Roman,13px");
+  PlatformFontLinux::SetDefaultFontDescription("Arimo,Tinos,13px");
 #else
-  test_font_delegate_.set_family("Arial");
+  test_font_delegate_.set_family("Arimo");
   test_font_delegate_.set_size_pixels(13);
   test_font_delegate_.set_style(Font::NORMAL);
   FontRenderParams params;
@@ -102,7 +96,7 @@ TEST_F(PlatformFontLinuxTest, DefaultFont) {
   test_font_delegate_.set_params(params);
 #endif
   scoped_refptr<gfx::PlatformFontLinux> font(new gfx::PlatformFontLinux());
-  EXPECT_EQ("Arial", font->GetFontName());
+  EXPECT_EQ("Arimo", font->GetFontName());
   EXPECT_EQ(13, font->GetFontSize());
   EXPECT_EQ(gfx::Font::NORMAL, font->GetStyle());
 #if !defined(OS_CHROMEOS)
@@ -114,16 +108,16 @@ TEST_F(PlatformFontLinuxTest, DefaultFont) {
   // Drop the old default font and check that new settings are loaded.
 #if defined(OS_CHROMEOS)
   PlatformFontLinux::SetDefaultFontDescription(
-      "Times New Roman,Arial,Bold Italic 15px");
+      "Tinos,Arimo,Bold Italic 15px");
 #else
-  test_font_delegate_.set_family("Times New Roman");
+  test_font_delegate_.set_family("Tinos");
   test_font_delegate_.set_size_pixels(15);
   test_font_delegate_.set_style(gfx::Font::ITALIC);
   test_font_delegate_.set_weight(gfx::Font::Weight::BOLD);
 #endif
   PlatformFontLinux::ReloadDefaultFont();
   scoped_refptr<gfx::PlatformFontLinux> font2(new gfx::PlatformFontLinux());
-  EXPECT_EQ("Times New Roman", font2->GetFontName());
+  EXPECT_EQ("Tinos", font2->GetFontName());
   EXPECT_EQ(15, font2->GetFontSize());
   EXPECT_NE(font2->GetStyle() & Font::ITALIC, 0);
   EXPECT_EQ(gfx::Font::Weight::BOLD, font2->GetWeight());

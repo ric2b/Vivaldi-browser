@@ -74,12 +74,9 @@ void TestTextInputClientMessageFilter::SetStringForRangeCallback(
 
 void AskForLookUpDictionaryForRange(RenderWidgetHostView* tab_view,
                                     const gfx::Range& range) {
-  RenderWidgetHostViewCocoa* cocoa_view =
-      static_cast<RenderWidgetHostViewMac*>(tab_view)->cocoa_view();
-
-  // Explicitly ask for the dictionary for the given range.
-  [cocoa_view showLookUpDictionaryOverlayFromRange:range.ToNSRange()
-                                        targetView:cocoa_view];
+  RenderWidgetHostViewMac* tab_view_mac =
+      static_cast<RenderWidgetHostViewMac*>(tab_view);
+  tab_view_mac->LookUpDictionaryOverlayFromRange(range);
 }
 
 size_t GetOpenNSWindowsCount() {

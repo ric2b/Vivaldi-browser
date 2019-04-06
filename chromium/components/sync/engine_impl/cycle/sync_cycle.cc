@@ -8,6 +8,7 @@
 #include <iterator>
 
 #include "base/logging.h"
+#include "components/sync/engine_impl/update_handler.h"
 #include "components/sync/syncable/directory.h"
 
 namespace syncer {
@@ -20,19 +21,27 @@ SyncCycle::SyncCycle(SyncCycleContext* context, Delegate* delegate)
 SyncCycle::~SyncCycle() {}
 
 SyncCycleSnapshot SyncCycle::TakeSnapshot() const {
-  return TakeSnapshotWithSource(sync_pb::GetUpdatesCallerInfo::UNKNOWN);
+  return TakeSnapshotWithOrigin(sync_pb::SyncEnums::UNKNOWN_ORIGIN);
 }
 
-SyncCycleSnapshot SyncCycle::TakeSnapshotWithSource(
-    sync_pb::GetUpdatesCallerInfo::GetUpdatesSource legacy_updates_source)
-    const {
-  syncable::Directory* dir = context_->directory();
-
+SyncCycleSnapshot SyncCycle::TakeSnapshotWithOrigin(
+    sync_pb::SyncEnums::GetUpdatesOrigin get_updates_origin) const {
   ProgressMarkerMap download_progress_markers;
   for (int i = FIRST_REAL_MODEL_TYPE; i < MODEL_TYPE_COUNT; ++i) {
     ModelType type(ModelTypeFromInt(i));
-    dir->GetDownloadProgressAsString(type, &download_progress_markers[type]);
+    const UpdateHandler* update_handler =
+        context_->model_type_registry()->GetUpdateHandler(type);
+    if (update_handler == nullptr) {
+      continue;
+    }
+    sync_pb::DataTypeProgressMarker progress_marker;
+    update_handler->GetDownloadProgress(&progress_marker);
+    download_progress_markers[type] = progress_marker.SerializeAsString();
   }
+
+  // TODO(mastiz): Remove dependency to directory, since it most likely hides
+  // an issue with USS types.
+  syncable::Directory* dir = context_->directory();
 
   std::vector<int> num_entries_by_type(MODEL_TYPE_COUNT, 0);
   std::vector<int> num_to_delete_entries_by_type(MODEL_TYPE_COUNT, 0);
@@ -48,15 +57,17 @@ SyncCycleSnapshot SyncCycle::TakeSnapshotWithSource(
       context_->notifications_enabled(), dir->GetEntriesCount(),
       status_controller_->sync_start_time(),
       status_controller_->poll_finish_time(), num_entries_by_type,
-      num_to_delete_entries_by_type, legacy_updates_source);
+      num_to_delete_entries_by_type, get_updates_origin,
+      context_->short_poll_interval(), context_->long_poll_interval(),
+      context_->model_type_registry()->HasUnsyncedItems());
 
   return snapshot;
 }
 
 void SyncCycle::SendSyncCycleEndEventNotification(
-    sync_pb::GetUpdatesCallerInfo::GetUpdatesSource source) {
+    sync_pb::SyncEnums::GetUpdatesOrigin get_updates_origin) {
   SyncCycleEvent event(SyncCycleEvent::SYNC_CYCLE_ENDED);
-  event.snapshot = TakeSnapshotWithSource(source);
+  event.snapshot = TakeSnapshotWithOrigin(get_updates_origin);
 
   DVLOG(1) << "Sending cycle end event with snapshot: "
            << event.snapshot.ToString();

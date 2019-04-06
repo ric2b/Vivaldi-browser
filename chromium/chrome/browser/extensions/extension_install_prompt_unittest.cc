@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/extension_install_prompt_show_params.h"
 #include "chrome/browser/extensions/extension_service_test_with_install.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -24,7 +25,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/common/feature_switch.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/api_permission_set.h"
@@ -53,17 +54,11 @@ void VerifyPromptIconCallback(
 void VerifyPromptPermissionsCallback(
     const base::Closure& quit_closure,
     size_t regular_permissions_count,
-    size_t withheld_permissions_count,
     ExtensionInstallPromptShowParams* params,
     const ExtensionInstallPrompt::DoneCallback& done_callback,
     std::unique_ptr<ExtensionInstallPrompt::Prompt> install_prompt) {
   ASSERT_TRUE(install_prompt.get());
-  EXPECT_EQ(regular_permissions_count,
-            install_prompt->GetPermissionCount(
-                ExtensionInstallPrompt::REGULAR_PERMISSIONS));
-  EXPECT_EQ(withheld_permissions_count,
-            install_prompt->GetPermissionCount(
-                ExtensionInstallPrompt::WITHHELD_PERMISSIONS));
+  EXPECT_EQ(regular_permissions_count, install_prompt->GetPermissionCount());
   quit_closure.Run();
 }
 
@@ -123,43 +118,7 @@ TEST_F(ExtensionInstallPromptUnitTest, PromptShowsPermissionWarnings) {
           ExtensionInstallPrompt::PERMISSIONS_PROMPT),
       std::move(permission_set),
       base::Bind(&VerifyPromptPermissionsCallback, run_loop.QuitClosure(),
-                 1u,    // |regular_permissions_count|.
-                 0u));  // |withheld_permissions_count|.
-  run_loop.Run();
-}
-
-TEST_F(ExtensionInstallPromptUnitTest, PromptShowsWithheldPermissions) {
-  // Enable consent flag so that <all_hosts> permissions get withheld.
-  FeatureSwitch::ScopedOverride enable_scripts_switch(
-      FeatureSwitch::scripts_require_action(), true);
-
-  scoped_refptr<const Extension> extension =
-      ExtensionBuilder()
-          .SetManifest(
-              DictionaryBuilder()
-                  .Set("name", "foo")
-                  .Set("version", "1.0")
-                  .Set("manifest_version", 2)
-                  .Set("description", "Random Ext")
-                  .Set("permissions", ListBuilder()
-                                          .Append("http://*/*")
-                                          .Append("http://www.google.com/")
-                                          .Append("tabs")
-                                          .Build())
-                  .Build())
-          .Build();
-
-  content::TestWebContentsFactory factory;
-  ExtensionInstallPrompt prompt(factory.CreateWebContents(profile()));
-  base::RunLoop run_loop;
-
-  // We expect <all_hosts> to be withheld, but http://www.google.com/ and tabs
-  // permissions should be granted as regular permissions.
-  prompt.ShowDialog(
-      ExtensionInstallPrompt::DoneCallback(), extension.get(), nullptr,
-      base::Bind(&VerifyPromptPermissionsCallback, run_loop.QuitClosure(),
-                 2u,    // |regular_permissions_count|.
-                 1u));  // |withheld_permissions_count|.
+                 1u));  // |regular_permissions_count|.
   run_loop.Run();
 }
 
@@ -191,8 +150,7 @@ TEST_F(ExtensionInstallPromptUnitTest,
       ExtensionInstallPrompt::DoneCallback(), extension.get(), nullptr,
       std::move(sub_prompt),
       base::Bind(&VerifyPromptPermissionsCallback, run_loop.QuitClosure(),
-                 2u,    // |regular_permissions_count|.
-                 0u));  // |withheld_permissions_count|.
+                 2u));  // |regular_permissions_count|.
   run_loop.Run();
 }
 

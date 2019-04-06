@@ -73,12 +73,17 @@ void PixelTestOutputSurface::ApplyExternalStencil() {}
 void PixelTestOutputSurface::SwapBuffers(viz::OutputSurfaceFrame frame) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::BindOnce(&PixelTestOutputSurface::SwapBuffersCallback,
-                                weak_ptr_factory_.GetWeakPtr(), ++swap_id_));
+                                weak_ptr_factory_.GetWeakPtr(),
+                                frame.need_presentation_feedback));
 }
 
-void PixelTestOutputSurface::SwapBuffersCallback(uint64_t swap_id) {
-  client_->DidReceiveSwapBuffersAck(swap_id);
-  client_->DidReceivePresentationFeedback(swap_id, gfx::PresentationFeedback());
+void PixelTestOutputSurface::SwapBuffersCallback(
+    bool need_presentation_feedback) {
+  client_->DidReceiveSwapBuffersAck();
+  if (need_presentation_feedback) {
+    client_->DidReceivePresentationFeedback(gfx::PresentationFeedback(
+        base::TimeTicks::Now(), base::TimeDelta(), 0));
+  }
 }
 
 viz::OverlayCandidateValidator*
@@ -98,10 +103,6 @@ gfx::BufferFormat PixelTestOutputSurface::GetOverlayBufferFormat() const {
   return gfx::BufferFormat::RGBX_8888;
 }
 
-bool PixelTestOutputSurface::SurfaceIsSuspendForRecycle() const {
-  return false;
-}
-
 uint32_t PixelTestOutputSurface::GetFramebufferCopyTextureFormat() {
   // This format will work if the |context_provider| has an RGB or RGBA
   // framebuffer. For now assume tests do not want/care about alpha in
@@ -115,5 +116,9 @@ gpu::VulkanSurface* PixelTestOutputSurface::GetVulkanSurface() {
   return nullptr;
 }
 #endif
+
+unsigned PixelTestOutputSurface::UpdateGpuFence() {
+  return 0;
+}
 
 }  // namespace cc

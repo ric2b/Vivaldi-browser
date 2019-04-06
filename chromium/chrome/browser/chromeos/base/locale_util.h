@@ -13,6 +13,7 @@
 #include "base/callback_forward.h"
 
 class Profile;
+class PrefService;
 
 namespace chromeos {
 namespace locale_util {
@@ -50,6 +51,30 @@ void SwitchLanguage(const std::string& locale,
                     const bool login_layouts_only,
                     const SwitchLanguageCallback& callback,
                     Profile* profile);
+
+// This function checks if the given locale is allowed according to the list of
+// allowed UI locales (stored in |prefs|, managed by 'AllowedUILocales'
+// policy). If the list is empty, every locale is allowed.
+bool IsAllowedUILocale(const std::string& locale, const PrefService* prefs);
+
+// This functions checks if the given locale is a native UI locale (e.g.,
+// 'en-US', 'en-GB', 'fr', etc. are all valid, but 'en', 'en-WS' or 'fr-CH' are
+// not)
+bool IsNativeUILocale(const std::string& locale);
+
+// This function returns an allowed UI locale based on the list of allowed UI
+// locales (stored in |prefs|, managed by 'AllowedUILocales' policy). If none of
+// the user's preferred languages is an allowed UI locale, the function returns
+// the first valid entry in the allowed UI locales list. If the list contains no
+// valid entries, the default fallback will be 'en-US'
+// (kAllowedUILocalesFallbackLocale);
+std::string GetAllowedFallbackUILocale(const PrefService* prefs);
+
+// This function adds the |locale| to the list of preferred languages (pref
+// |kLanguagePreferredLanguages|). Returns true if the locale was newly added
+// to the list, false otherwise.
+bool AddLocaleToPreferredLanguages(const std::string& locale,
+                                   PrefService* prefs);
 
 }  // namespace locale_util
 }  // namespace chromeos

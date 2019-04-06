@@ -8,6 +8,7 @@
 #include "content/browser/dom_storage/dom_storage_context_impl.h"
 #include "content/browser/dom_storage/dom_storage_namespace.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace content {
 
@@ -21,11 +22,10 @@ DOMStorageHost::~DOMStorageHost() {
     CloseStorageArea(connections_.begin()->first);
 }
 
-base::Optional<bad_message::BadMessageReason>
-DOMStorageHost::OpenStorageArea(
+base::Optional<bad_message::BadMessageReason> DOMStorageHost::OpenStorageArea(
     int connection_id,
-    int namespace_id,
-    const GURL& origin) {
+    const std::string& namespace_id,
+    const url::Origin& origin) {
   if (HasConnection(connection_id))
     return bad_message::DSH_DUPLICATE_CONNECTION_ID;
   NamespaceAndArea references;
@@ -141,8 +141,8 @@ bool DOMStorageHost::ClearArea(int connection_id, const GURL& page_url) {
   return true;
 }
 
-bool DOMStorageHost::HasAreaOpen(
-    int namespace_id, const GURL& origin) const {
+bool DOMStorageHost::HasAreaOpen(const std::string& namespace_id,
+                                 const url::Origin& origin) const {
   for (const auto& it : connections_) {
     if (namespace_id == it.second.namespace_->namespace_id() &&
         origin == it.second.area_->origin()) {

@@ -11,7 +11,6 @@
 #include "content/common/content_export.h"
 
 namespace ui {
-class Compositor;
 class ContextFactory;
 class ContextFactoryPrivate;
 }
@@ -39,6 +38,10 @@ class CONTENT_EXPORT ImageTransportFactory {
   // Gets the factory instance.
   static ImageTransportFactory* GetInstance();
 
+  // Disable GPU compositing. Will do nothing if GPU compositing is already
+  // disabled.
+  virtual void DisableGpuCompositing() = 0;
+
   // Whether gpu compositing is being used or is disabled for software
   // compositing. Clients of the compositor should give resources that match
   // the appropriate mode.
@@ -56,17 +59,6 @@ class CONTENT_EXPORT ImageTransportFactory {
   // GLHelper will get destroyed whenever the shared context is lost
   // (ImageTransportFactoryObserver::OnLostResources is called).
   virtual viz::GLHelper* GetGLHelper() = 0;
-
-#if defined(OS_MACOSX)
-  // Called with |suspended| as true when the ui::Compositor has been
-  // disconnected from an NSView and may be attached to another one. Called
-  // with |suspended| as false after the ui::Compositor has been connected to
-  // a new NSView and the first commit targeted at the new NSView has
-  // completed. This ensures that content and frames intended for the old
-  // NSView will not flash in the new NSView.
-  virtual void SetCompositorSuspendedForRecycle(ui::Compositor* compositor,
-                                                bool suspended) = 0;
-#endif
 };
 
 }  // namespace content

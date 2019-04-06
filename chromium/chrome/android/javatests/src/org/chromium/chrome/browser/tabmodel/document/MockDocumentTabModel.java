@@ -83,7 +83,7 @@ public class MockDocumentTabModel implements DocumentTabModel {
     }
 
     @Override
-    public void setIndex(int i, TabSelectionType type) {
+    public void setIndex(int i, @TabSelectionType int type) {
         Assert.fail();
     }
 
@@ -98,7 +98,7 @@ public class MockDocumentTabModel implements DocumentTabModel {
     }
 
     @Override
-    public void addTab(Tab tab, int index, TabLaunchType type) {
+    public void addTab(Tab tab, int index, @TabLaunchType int type) {
         Assert.fail();
     }
 
@@ -120,6 +120,11 @@ public class MockDocumentTabModel implements DocumentTabModel {
     @Override
     public boolean isIncognito() {
         return mIsIncognito;
+    }
+
+    @Override
+    public boolean isCurrentModel() {
+        return false;
     }
 
     @Override
@@ -160,12 +165,4 @@ public class MockDocumentTabModel implements DocumentTabModel {
 
     @Override
     public void openMostRecentlyClosedTab() {}
-
-    @Override
-    public void setIsPendingTabAdd(boolean isPendingTabAdd) {}
-
-    @Override
-    public boolean isPendingTabAdd() {
-        return false;
-    }
 }

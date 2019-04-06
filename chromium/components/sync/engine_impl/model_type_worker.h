@@ -14,8 +14,8 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequence_checker.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/threading/thread_checker.h"
 #include "components/sync/base/cancelation_observer.h"
 #include "components/sync/base/cryptographer.h"
 #include "components/sync/base/model_type.h"
@@ -59,6 +59,9 @@ class ModelTypeWorker : public UpdateHandler,
                         public CommitContributor,
                         public CommitQueue {
  public:
+  // Public for testing.
+  enum DecryptionStatus { SUCCESS, DECRYPTION_PENDING, FAILED_TO_DECRYPT };
+
   ModelTypeWorker(ModelType type,
                   const sync_pb::ModelTypeState& initial_state,
                   bool trigger_initial_sync,
@@ -68,6 +71,14 @@ class ModelTypeWorker : public UpdateHandler,
                   DataTypeDebugInfoEmitter* debug_info_emitter,
                   CancelationSignal* cancelation_signal);
   ~ModelTypeWorker() override;
+
+  // Public for testing.
+  // |cryptographer| can be null.
+  // |response_data| must be not null.
+  static DecryptionStatus PopulateUpdateResponseData(
+      const Cryptographer* cryptographer,
+      const sync_pb::SyncEntity& update_entity,
+      UpdateResponseData* response_data);
 
   ModelType GetModelType() const;
 
@@ -93,15 +104,14 @@ class ModelTypeWorker : public UpdateHandler,
   std::unique_ptr<CommitContribution> GetContribution(
       size_t max_entries) override;
 
+  bool HasLocalChangesForTest() const;
+
   // An alternative way to drive sending data to the processor, that should be
   // called when a new encryption mechanism is ready.
   void EncryptionAcceptedMaybeApplyUpdates();
 
   // Callback for when our contribution gets a response.
   void OnCommitResponse(CommitResponseDataList* response_list);
-
-  // Called at the end of commit regardless of commit success.
-  void CleanupAfterCommit();
 
   // If migration the directory encounters an error partway through, we need to
   // clear the update data that has been added so far.
@@ -113,7 +123,18 @@ class ModelTypeWorker : public UpdateHandler,
   base::WeakPtr<ModelTypeWorker> AsWeakPtr();
 
  private:
-  using EntityMap = std::map<std::string, std::unique_ptr<WorkerEntityTracker>>;
+  // Attempts to decrypt the given specifics and return them in the |out|
+  // parameter. Assumes cryptographer.CanDecrypt(specifics) returned true.
+  //
+  // Returns false if the decryption failed. There are no guarantees about the
+  // contents of |out| when that happens.
+  //
+  // In theory, this should never fail. Only corrupt or invalid entries could
+  // cause this to fail, and no clients are known to create such entries. The
+  // failure case is an attempt to be defensive against bad input.
+  static bool DecryptSpecifics(const Cryptographer& cryptographer,
+                               const sync_pb::EntitySpecifics& in,
+                               sync_pb::EntitySpecifics* out);
 
   // Helper function to actually send |pending_updates_| to the processor.
   void ApplyPendingUpdates();
@@ -137,23 +158,10 @@ class ModelTypeWorker : public UpdateHandler,
   // an update occurred.
   bool UpdateEncryptionKeyName();
 
-  // Iterates through all elements in |entities_| and tries to decrypt anything
-  // that has encrypted data. Also updates |has_encrypted_updates_| to reflect
-  // whether anything in |entities_| was not decryptable by |cryptographer_|.
+  // Iterates through all elements in |entries_pending_decryption_| and tries to
+  // decrypt anything that has encrypted data.
   // Should only be called during a GetUpdates cycle.
   void DecryptStoredEntities();
-
-  // Attempts to decrypt the given specifics and return them in the |out|
-  // parameter. Assumes cryptographer_->CanDecrypt(specifics) returned true.
-  //
-  // Returns false if the decryption failed. There are no guarantees about the
-  // contents of |out| when that happens.
-  //
-  // In theory, this should never fail. Only corrupt or invalid entries could
-  // cause this to fail, and no clients are known to create such entries. The
-  // failure case is an attempt to be defensive against bad input.
-  bool DecryptSpecifics(const sync_pb::EntitySpecifics& in,
-                        sync_pb::EntitySpecifics* out);
 
   // Returns the entity tracker for the given |tag_hash|, or nullptr.
   WorkerEntityTracker* GetEntityTracker(const std::string& tag_hash);
@@ -187,23 +195,13 @@ class ModelTypeWorker : public UpdateHandler,
   // Interface used to access and send nudges to the sync scheduler. Not owned.
   NudgeHandler* nudge_handler_;
 
-  // A map of per-entity information, keyed by client_tag_hash.
-  //
-  // When commits are pending, their information is stored here. This
-  // information is dropped from memory when the commit succeeds or gets
-  // canceled.
-  //
-  // This also stores some information related to received server state in
-  // order to implement reflection blocking and conflict detection. This
-  // information is kept in memory indefinitely.
-  EntityMap entities_;
+  // A map of update responses, keyed by server_id.
+  // Holds updates encrypted with pending keys.
+  std::map<std::string, UpdateResponseData> entries_pending_decryption_;
 
   // Accumulates all the updates from a single GetUpdates cycle in memory so
   // they can all be sent to the processor at once.
   UpdateResponseDataList pending_updates_;
-
-  // Whether there are outstanding encrypted updates in |entities_|.
-  bool has_encrypted_updates_ = false;
 
   // Indicates if processor has local changes. Processor only nudges worker once
   // and worker might not be ready to commit entities at the time.
@@ -213,7 +211,8 @@ class ModelTypeWorker : public UpdateHandler,
   // shutdown.
   CancelationSignal* cancelation_signal_;
 
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
+
   base::WeakPtrFactory<ModelTypeWorker> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ModelTypeWorker);

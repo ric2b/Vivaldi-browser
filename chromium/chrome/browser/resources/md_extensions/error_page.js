@@ -24,11 +24,6 @@ cr.define('extensions', function() {
      * @return {!Promise<!chrome.developerPrivate.RequestFileSourceResponse>}
      */
     requestFileSource(args) {}
-
-    /**
-     * @param {!chrome.developerPrivate.OpenDevToolsProperties} args
-     */
-    openDevTools(args) {}
   }
 
   /**
@@ -81,6 +76,13 @@ cr.define('extensions', function() {
       /** @type {!extensions.ErrorPageDelegate|undefined} */
       delegate: Object,
 
+      // Whether or not dev mode is enabled.
+      inDevMode: {
+        type: Boolean,
+        value: false,
+        observer: 'onInDevModeChanged_',
+      },
+
       /** @private {!Array<!(ManifestError|RuntimeError)>} */
       entries_: Array,
 
@@ -109,6 +111,10 @@ cr.define('extensions', function() {
       'observeDataChanges_(data.*)',
     ],
 
+    listeners: {
+      'view-enter-start': 'onViewEnterStart_',
+    },
+
     /** @override */
     ready: function() {
       cr.ui.FocusOutlineManager.forDocument(document);
@@ -117,6 +123,16 @@ cr.define('extensions', function() {
     /** @return {!ManifestError|!RuntimeError} */
     getSelectedError: function() {
       return this.entries_[this.selectedEntry_];
+    },
+
+    /**
+     * Focuses the back button when page is loaded.
+     * @private
+     */
+    onViewEnterStart_: function() {
+      Polymer.RenderStatus.afterNextRender(
+          this, () => cr.ui.focusWithoutInk(this.$.closeButton));
+      chrome.metricsPrivate.recordUserAction('Options_ViewExtensionErrors');
     },
 
     /**
@@ -189,6 +205,16 @@ cr.define('extensions', function() {
       e.stopPropagation();
     },
 
+    /** private */
+    onInDevModeChanged_: function() {
+      if (!this.inDevMode) {
+        // Wait until next render cycle in case error page is loading.
+        this.async(() => {
+          this.onCloseButtonTap_();
+        });
+      }
+    },
+
     /**
      * Fetches the source for the selected error and populates the code section.
      * @private
@@ -254,11 +280,6 @@ cr.define('extensions', function() {
       return description;
     },
 
-    /** @private */
-    getExpandedClass_: function() {
-      return this.stackTraceExpanded_ ? 'expanded' : '';
-    },
-
     /**
      * @param {chrome.developerPrivate.StackFrame} frame
      * @return {string}
@@ -266,6 +287,15 @@ cr.define('extensions', function() {
      */
     getStackFrameClass_: function(frame) {
       return frame == this.selectedStackFrame_ ? 'selected' : '';
+    },
+
+    /**
+     * @param {!chrome.developerPrivate.StackFrame} frame
+     * @return {number}
+     * @private
+     */
+    getStackFrameTabIndex_: function(frame) {
+      return frame == this.selectedStackFrame_ ? 0 : -1;
     },
 
     /**
@@ -281,13 +311,11 @@ cr.define('extensions', function() {
     },
 
     /**
-     * @param {!Event} e
+     * @param {!chrome.developerPrivate.StackFrame} frame
      * @private
      */
-    onStackFrameTap_: function(e) {
-      const frame = /** @type {!{model:Object}} */ (e).model.item;
-
-      this.selectedStackFrame_ = frame;
+    updateSelected_: function(frame) {
+      this.selectedStackFrame_ = assert(frame);
 
       const selectedError = this.getSelectedError();
       this.delegate
@@ -300,20 +328,44 @@ cr.define('extensions', function() {
           .then(code => this.code_ = code);
     },
 
-    /** @private */
-    onDevToolButtonTap_: function() {
-      const selectedError = this.getSelectedError();
-      // This guarantees renderProcessId and renderViewId.
-      assert(selectedError.type == chrome.developerPrivate.ErrorType.RUNTIME);
-      assert(this.selectedStackFrame_);
+    /**
+     * @param {!Event} e
+     * @private
+     */
+    onStackFrameTap_: function(e) {
+      const frame = /** @type {!{model:Object}} */ (e).model.item;
+      this.updateSelected_(frame);
+    },
 
-      this.delegate.openDevTools({
-        renderProcessId: selectedError.renderProcessId,
-        renderViewId: selectedError.renderViewId,
-        url: this.selectedStackFrame_.url,
-        lineNumber: this.selectedStackFrame_.lineNumber || 0,
-        columnNumber: this.selectedStackFrame_.columnNumber || 0,
-      });
+    /**
+     * @param {!Event} e
+     * @private
+     */
+    onStackKeydown_: function(e) {
+      let direction = 0;
+
+      if (e.key == 'ArrowDown')
+        direction = 1;
+      else if (e.key == 'ArrowUp')
+        direction = -1;
+      else
+        return;
+
+      e.preventDefault();
+
+      let list = e.target.parentElement.querySelectorAll('li');
+
+      for (let i = 0; i < list.length; ++i) {
+        if (list[i].classList.contains('selected')) {
+          let polymerEvent = /** @type {!{model: !Object}} */ (e);
+          let frame = polymerEvent.model.item.stackTrace[i + direction];
+          if (frame) {
+            this.updateSelected_(frame);
+            list[i + direction].focus();  // Preserve focus.
+          }
+          return;
+        }
+      }
     },
 
     /**
@@ -341,6 +393,16 @@ cr.define('extensions', function() {
      */
     isOpened_: function(index) {
       return index == this.selectedEntry_;
+    },
+
+
+    /**
+     * @param {number} index
+     * @return {string} The aria-expanded value as a string.
+     * @private
+     */
+    isAriaExpanded_: function(index) {
+      return this.isOpened_(index).toString();
     },
 
     /**

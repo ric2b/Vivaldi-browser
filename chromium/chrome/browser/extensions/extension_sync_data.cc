@@ -79,7 +79,6 @@ ExtensionSyncData::ExtensionSyncData()
       disable_reasons_(disable_reason::DISABLE_NONE),
       incognito_enabled_(false),
       remote_install_(false),
-      all_urls_enabled_(BOOLEAN_UNSET),
       installed_by_custodian_(false),
       launch_type_(LAUNCH_TYPE_INVALID) {}
 
@@ -88,20 +87,22 @@ ExtensionSyncData::ExtensionSyncData(const Extension& extension,
                                      int disable_reasons,
                                      bool incognito_enabled,
                                      bool remote_install,
-                                     OptionalBoolean all_urls_enabled,
                                      bool installed_by_custodian)
-    : ExtensionSyncData(extension, enabled, disable_reasons, incognito_enabled,
-                        remote_install, all_urls_enabled,
-                        installed_by_custodian, StringOrdinal(),
-                        StringOrdinal(), LAUNCH_TYPE_INVALID) {
-}
+    : ExtensionSyncData(extension,
+                        enabled,
+                        disable_reasons,
+                        incognito_enabled,
+                        remote_install,
+                        installed_by_custodian,
+                        StringOrdinal(),
+                        StringOrdinal(),
+                        LAUNCH_TYPE_INVALID) {}
 
 ExtensionSyncData::ExtensionSyncData(const Extension& extension,
                                      bool enabled,
                                      int disable_reasons,
                                      bool incognito_enabled,
                                      bool remote_install,
-                                     OptionalBoolean all_urls_enabled,
                                      bool installed_by_custodian,
                                      const StringOrdinal& app_launch_ordinal,
                                      const StringOrdinal& page_ordinal,
@@ -114,7 +115,6 @@ ExtensionSyncData::ExtensionSyncData(const Extension& extension,
       disable_reasons_(disable_reasons),
       incognito_enabled_(incognito_enabled),
       remote_install_(remote_install),
-      all_urls_enabled_(all_urls_enabled),
       installed_by_custodian_(installed_by_custodian),
       version_(extension.from_bookmark() ? base::Version("0")
                                          : extension.version()),
@@ -192,8 +192,6 @@ void ExtensionSyncData::ToExtensionSpecifics(
     specifics->set_disable_reasons(disable_reasons_);
   specifics->set_incognito_enabled(incognito_enabled_);
   specifics->set_remote_install(remote_install_);
-  if (all_urls_enabled_ != BOOLEAN_UNSET)
-    specifics->set_all_urls_enabled(all_urls_enabled_ == BOOLEAN_TRUE);
   specifics->set_installed_by_custodian(installed_by_custodian_);
   specifics->set_name(name_);
 }
@@ -234,6 +232,7 @@ void ExtensionSyncData::ToAppSpecifics(sync_pb::AppSpecifics* specifics) const {
   for (const auto& linked_icon : linked_icons_) {
     sync_pb::LinkedAppIconInfo* linked_app_icon_info =
         specifics->add_linked_app_icons();
+    DCHECK(linked_icon.url.is_valid());
     linked_app_icon_info->set_url(linked_icon.url.spec());
     linked_app_icon_info->set_size(linked_icon.size);
   }
@@ -274,14 +273,6 @@ bool ExtensionSyncData::PopulateFromExtensionSpecifics(
   supports_disable_reasons_ = specifics.has_disable_reasons();
   disable_reasons_ = specifics.disable_reasons();
   incognito_enabled_ = specifics.incognito_enabled();
-  if (specifics.has_all_urls_enabled()) {
-    all_urls_enabled_ =
-        specifics.all_urls_enabled() ? BOOLEAN_TRUE : BOOLEAN_FALSE;
-  } else {
-    // Set this explicitly (even though it's the default) on the offchance
-    // that someone is re-using an ExtensionSyncData object.
-    all_urls_enabled_ = BOOLEAN_UNSET;
-  }
   remote_install_ = specifics.remote_install();
   installed_by_custodian_ = specifics.installed_by_custodian();
   name_ = specifics.name();

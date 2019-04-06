@@ -14,7 +14,7 @@
 #include "content/common/content_export.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "mojo/public/cpp/bindings/associated_binding_set.h"
-#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
+#include "third_party/blink/public/mojom/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -51,6 +51,8 @@ class CONTENT_EXPORT ServiceWorkerRegistrationObjectHost
       ServiceWorkerRegistration* registration,
       ChangedVersionAttributesMask changed_mask,
       const ServiceWorkerRegistrationInfo& info) override;
+  void OnUpdateViaCacheChanged(
+      ServiceWorkerRegistration* registration) override;
   void OnRegistrationFailed(ServiceWorkerRegistration* registration) override;
   void OnUpdateFound(ServiceWorkerRegistration* registration) override;
 
@@ -68,25 +70,25 @@ class CONTENT_EXPORT ServiceWorkerRegistrationObjectHost
 
   // Called back from ServiceWorkerContextCore when an update is complete.
   void UpdateComplete(UpdateCallback callback,
-                      ServiceWorkerStatusCode status,
+                      blink::ServiceWorkerStatusCode status,
                       const std::string& status_message,
                       int64_t registration_id);
   // Called back from ServiceWorkerContextCore when the unregistration is
   // complete.
   void UnregistrationComplete(UnregisterCallback callback,
-                              ServiceWorkerStatusCode status);
+                              blink::ServiceWorkerStatusCode status);
   // Called back from ServiceWorkerStorage when setting navigation preload is
   // complete.
   void DidUpdateNavigationPreloadEnabled(
       bool enable,
       EnableNavigationPreloadCallback callback,
-      ServiceWorkerStatusCode status);
+      blink::ServiceWorkerStatusCode status);
   // Called back from ServiceWorkerStorage when setting navigation preload
   // header is complete.
   void DidUpdateNavigationPreloadHeader(
       const std::string& value,
       SetNavigationPreloadHeaderCallback callback,
-      ServiceWorkerStatusCode status);
+      blink::ServiceWorkerStatusCode status);
 
   // Sets the corresponding version field to the given version or if the given
   // version is nullptr, clears the field.
@@ -110,6 +112,8 @@ class CONTENT_EXPORT ServiceWorkerRegistrationObjectHost
   // |this|.
   ServiceWorkerProviderHost* provider_host_;
   base::WeakPtr<ServiceWorkerContextCore> context_;
+  scoped_refptr<ServiceWorkerRegistration> registration_;
+
   mojo::AssociatedBindingSet<blink::mojom::ServiceWorkerRegistrationObjectHost>
       bindings_;
   // Mojo connection to the content::WebServiceWorkerRegistrationImpl in the
@@ -117,8 +121,6 @@ class CONTENT_EXPORT ServiceWorkerRegistrationObjectHost
   // object.
   blink::mojom::ServiceWorkerRegistrationObjectAssociatedPtr
       remote_registration_;
-
-  scoped_refptr<ServiceWorkerRegistration> registration_;
 
   base::WeakPtrFactory<ServiceWorkerRegistrationObjectHost> weak_ptr_factory_;
 

@@ -7,15 +7,13 @@
 
 #include <jni.h>
 
-#include <memory>
-
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
 #include "chromecast/browser/cast_content_window.h"
 
 namespace content {
 class WebContents;
-}
+}  // namespace content
 
 namespace chromecast {
 namespace shell {
@@ -27,8 +25,16 @@ class CastContentWindowAndroid : public CastContentWindow {
   ~CastContentWindowAndroid() override;
 
   // CastContentWindow implementation:
-  void ShowWebContents(content::WebContents* web_contents,
-                       CastWindowManager* window_manager) override;
+  void CreateWindowForWebContents(
+      content::WebContents* web_contents,
+      CastWindowManager* window_manager,
+      bool is_visible,
+      CastWindowManager::WindowId z_order,
+      VisibilityPriority visibility_priority) override;
+  void EnableTouchInput(bool enabled) override;
+  void RequestVisibility(VisibilityPriority visibility_priority) override;
+  void NotifyVisibilityChange(VisibilityType visibility_type) override;
+  void RequestMoveOut() override;
 
   // Called through JNI.
   void OnActivityStopped(JNIEnv* env,
@@ -36,13 +42,22 @@ class CastContentWindowAndroid : public CastContentWindow {
   void OnKeyDown(JNIEnv* env,
                  const base::android::JavaParamRef<jobject>& jcaller,
                  int keycode);
+  bool ConsumeGesture(JNIEnv* env,
+                      const base::android::JavaParamRef<jobject>& jcaller,
+                      int gesture_type);
+  void OnVisibilityChange(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& jcaller,
+                          int visibility_type);
+  base::android::ScopedJavaLocalRef<jstring> GetId(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jcaller);
 
  private:
   friend class CastContentWindow;
 
   // This class should only be instantiated by CastContentWindow::Create.
   CastContentWindowAndroid(CastContentWindow::Delegate* delegate,
-                           bool isHeadless,
+                           bool is_headless,
                            bool enable_touch_input);
 
   CastContentWindow::Delegate* const delegate_;

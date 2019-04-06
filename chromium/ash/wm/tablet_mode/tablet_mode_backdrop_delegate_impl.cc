@@ -5,6 +5,7 @@
 #include "ash/wm/tablet_mode/tablet_mode_backdrop_delegate_impl.h"
 #include "ash/shell.h"
 #include "ash/wm/splitview/split_view_controller.h"
+#include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 
 namespace ash {
@@ -30,6 +31,10 @@ TabletModeBackdropDelegateImpl::TabletModeBackdropDelegateImpl() = default;
 TabletModeBackdropDelegateImpl::~TabletModeBackdropDelegateImpl() = default;
 
 bool TabletModeBackdropDelegateImpl::HasBackdrop(aura::Window* window) {
+  // Don't show the backdrop in tablet mode for PIP windows.
+  if (wm::GetWindowState(window)->IsPip())
+    return false;
+
   if (!Shell::Get()->IsSplitViewModeActive())
     return true;
 

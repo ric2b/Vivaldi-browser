@@ -29,92 +29,27 @@
 #include "gpu/command_buffer/client/gles2_impl_export.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/gpu_control_client.h"
+#include "gpu/command_buffer/client/implementation_base.h"
+#include "gpu/command_buffer/client/logging.h"
 #include "gpu/command_buffer/client/mapped_memory.h"
+#include "gpu/command_buffer/client/query_tracker.h"
+#include "gpu/command_buffer/client/readback_buffer_shadow_tracker.h"
 #include "gpu/command_buffer/client/ref_counted.h"
 #include "gpu/command_buffer/client/share_group.h"
 #include "gpu/command_buffer/client/transfer_buffer.h"
-#include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/command_buffer/common/context_creation_attribs.h"
 #include "gpu/command_buffer/common/context_result.h"
 #include "gpu/command_buffer/common/debug_marker_manager.h"
 
-#if DCHECK_IS_ON() && !defined(__native_client__) && \
-    !defined(GLES2_CONFORMANCE_TESTS)
-  #if defined(GLES2_INLINE_OPTIMIZATION)
-    // TODO(gman): Replace with macros that work with inline optmization.
-    #define GPU_CLIENT_SINGLE_THREAD_CHECK()
-    #define GPU_CLIENT_LOG(args)
-    #define GPU_CLIENT_LOG_CODE_BLOCK(code)
-    #define GPU_CLIENT_DCHECK_CODE_BLOCK(code)
-  #else
-    #include "base/logging.h"
-    #define GPU_CLIENT_SINGLE_THREAD_CHECK() SingleThreadChecker checker(this);
-    #define GPU_CLIENT_LOG(args)  DLOG_IF(INFO, debug_) << args;
-    #define GPU_CLIENT_LOG_CODE_BLOCK(code) code
-    #define GPU_CLIENT_DCHECK_CODE_BLOCK(code) code
-    #define GPU_CLIENT_DEBUG
-  #endif
-#else
-  #define GPU_CLIENT_SINGLE_THREAD_CHECK()
-  #define GPU_CLIENT_LOG(args)
-  #define GPU_CLIENT_LOG_CODE_BLOCK(code)
-  #define GPU_CLIENT_DCHECK_CODE_BLOCK(code)
-#endif
-
-#if defined(GPU_CLIENT_DEBUG)
-  // Set to 1 to have the client fail when a GL error is generated.
-  // This helps find bugs in the renderer since the debugger stops on the error.
-#  if 0
-#    define GL_CLIENT_FAIL_GL_ERRORS
-#  endif
-#endif
-
-// Check that destination pointers point to initialized memory.
-// When the context is lost, calling GL function has no effect so if destination
-// pointers point to initialized memory it can often lead to crash bugs. eg.
-//
-// GLsizei len;
-// glGetShaderSource(shader, max_size, &len, buffer);
-// std::string src(buffer, buffer + len);  // len can be uninitialized here!!!
-//
-// Because this check is not official GL this check happens only on Chrome code,
-// not Pepper.
-//
-// If it was up to us we'd just always write to the destination but the OpenGL
-// spec defines the behavior of OpenGL functions, not us. :-(
-#if defined(__native_client__) || defined(GLES2_CONFORMANCE_TESTS)
-  #define GPU_CLIENT_VALIDATE_DESTINATION_INITALIZATION_ASSERT(v)
-  #define GPU_CLIENT_DCHECK(v)
-#elif defined(GPU_DCHECK)
-  #define GPU_CLIENT_VALIDATE_DESTINATION_INITALIZATION_ASSERT(v) GPU_DCHECK(v)
-  #define GPU_CLIENT_DCHECK(v) GPU_DCHECK(v)
-#elif defined(DCHECK)
-  #define GPU_CLIENT_VALIDATE_DESTINATION_INITALIZATION_ASSERT(v) DCHECK(v)
-  #define GPU_CLIENT_DCHECK(v) DCHECK(v)
-#else
-  #define GPU_CLIENT_VALIDATE_DESTINATION_INITALIZATION_ASSERT(v) ASSERT(v)
-  #define GPU_CLIENT_DCHECK(v) ASSERT(v)
-#endif
-
-#define GPU_CLIENT_VALIDATE_DESTINATION_INITALIZATION(type, ptr) \
-    GPU_CLIENT_VALIDATE_DESTINATION_INITALIZATION_ASSERT(ptr && \
-        (ptr[0] == static_cast<type>(0) || ptr[0] == static_cast<type>(-1)));
-
-#define GPU_CLIENT_VALIDATE_DESTINATION_OPTIONAL_INITALIZATION(type, ptr) \
-    GPU_CLIENT_VALIDATE_DESTINATION_INITALIZATION_ASSERT(!ptr || \
-        (ptr[0] == static_cast<type>(0) || ptr[0] == static_cast<type>(-1)));
-
 namespace gpu {
 
-class GpuControl;
 class IdAllocator;
-struct SharedMemoryLimits;
 
 namespace gles2 {
 
 class GLES2CmdHelper;
 class VertexArrayObjectManager;
-class QueryTracker;
+class ReadbackBufferShadowTracker;
 
 // This class emulates GLES2 over command buffers. It can be used by a client
 // program so that the program does not need deal with shared memory and command
@@ -122,11 +57,9 @@ class QueryTracker;
 // be had by changing your code to use command buffers directly by using the
 // GLES2CmdHelper but that entails changing your code to use and deal with
 // shared memory and synchronization issues.
-class GLES2_IMPL_EXPORT GLES2Implementation
-    : public GLES2Interface,
-      public ContextSupport,
-      public GpuControlClient,
-      public base::trace_event::MemoryDumpProvider {
+class GLES2_IMPL_EXPORT GLES2Implementation : public GLES2Interface,
+                                              public ImplementationBase,
+                                              public QueryTrackerClient {
  public:
   // Stores GL state that never changes.
   struct GLES2_IMPL_EXPORT GLStaticState {
@@ -139,22 +72,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
         ShaderPrecisionMap;
     ShaderPrecisionMap shader_precisions;
   };
-
-  // The maximum result size from simple GL get commands.
-  static const size_t kMaxSizeOfSimpleResult =
-      16 * sizeof(uint32_t);  // NOLINT.
-
-  // used for testing only. If more things are reseved add them here.
-  static const unsigned int kStartingOffset = kMaxSizeOfSimpleResult;
-
-  // Size in bytes to issue async flush for transfer buffer.
-  static const unsigned int kSizeToFlush = 256 * 1024;
-
-  // The bucket used for results. Public for testing only.
-  static const uint32_t kResultBucketId = 1;
-
-  // Alignment of allocations.
-  static const unsigned int kAlignment = 16;
 
   // GL names for the buffers used to emulate client side buffers.
   static const GLuint kClientSideArrayId = 0xFEDCBA98u;
@@ -179,9 +96,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // this to issue cmds at a lower level for certain kinds of optimization.
   GLES2CmdHelper* helper() const;
 
-  // Gets client side generated errors.
-  GLenum GetClientSideGLError();
-
   // GLES2Interface implementation
   void FreeSharedMemory(void*) override;
 
@@ -191,48 +105,43 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   #include "gpu/command_buffer/client/gles2_implementation_autogen.h"
 
   // ContextSupport implementation.
-  void FlushPendingWork() override;
-  void SignalSyncToken(const gpu::SyncToken& sync_token,
-                       base::OnceClosure callback) override;
-  bool IsSyncTokenSignaled(const gpu::SyncToken& sync_token) override;
-  void SignalQuery(uint32_t query, base::OnceClosure callback) override;
-  void GetGpuFence(uint32_t gpu_fence_id,
-                   base::OnceCallback<void(std::unique_ptr<gfx::GpuFence>)>
-                       callback) override;
   void SetAggressivelyFreeResources(bool aggressively_free_resources) override;
-  void Swap() override;
-  void SwapWithBounds(const std::vector<gfx::Rect>& rects) override;
-  void PartialSwapBuffers(const gfx::Rect& sub_buffer) override;
-  void CommitOverlayPlanes() override;
+  void Swap(uint32_t flags,
+            SwapCompletedCallback complete_callback,
+            PresentationCallback presentation_callback) override;
+  void SwapWithBounds(const std::vector<gfx::Rect>& rects,
+                      uint32_t flags,
+                      SwapCompletedCallback swap_completed,
+                      PresentationCallback presentation_callback) override;
+  void PartialSwapBuffers(const gfx::Rect& sub_buffer,
+                          uint32_t flags,
+                          SwapCompletedCallback swap_completed,
+                          PresentationCallback presentation_callback) override;
+  void CommitOverlayPlanes(uint32_t flags,
+                           SwapCompletedCallback swap_completed,
+                           PresentationCallback presentation_callback) override;
   void ScheduleOverlayPlane(int plane_z_order,
                             gfx::OverlayTransform plane_transform,
                             unsigned overlay_texture_id,
                             const gfx::Rect& display_bounds,
-                            const gfx::RectF& uv_rect) override;
+                            const gfx::RectF& uv_rect,
+                            bool enable_blend,
+                            unsigned gpu_fence_id) override;
   uint64_t ShareGroupTracingGUID() const override;
   void SetErrorMessageCallback(
       base::RepeatingCallback<void(const char*, int32_t)> callback) override;
-  void SetSnapshotRequested() override;
   bool ThreadSafeShallowLockDiscardableTexture(uint32_t texture_id) override;
   void CompleteLockDiscardableTexureOnContextThread(
       uint32_t texture_id) override;
   bool ThreadsafeDiscardableTextureIsDeletedForTracing(
       uint32_t texture_id) override;
-  void CreateTransferCacheEntry(
-      const cc::ClientTransferCacheEntry& entry) override;
-  bool ThreadsafeLockTransferCacheEntry(cc::TransferCacheEntryType type,
-                                        uint32_t id) override;
+  void* MapTransferCacheEntry(size_t serialized_size) override;
+  void UnmapAndCreateTransferCacheEntry(uint32_t type, uint32_t id) override;
+  bool ThreadsafeLockTransferCacheEntry(uint32_t type, uint32_t id) override;
   void UnlockTransferCacheEntries(
-      const std::vector<std::pair<cc::TransferCacheEntryType, uint32_t>>&
-          entries) override;
-  void DeleteTransferCacheEntry(cc::TransferCacheEntryType type,
-                                uint32_t id) override;
+      const std::vector<std::pair<uint32_t, uint32_t>>& entries) override;
+  void DeleteTransferCacheEntry(uint32_t type, uint32_t id) override;
   unsigned int GetTransferBufferFreeSize() const override;
-
-  // TODO(danakj): Move to ContextSupport once ContextProvider doesn't need to
-  // intercept it.
-  void SetLostContextCallback(const base::Closure& callback);
-
   void GetProgramInfoCHROMIUMHelper(GLuint program,
                                     std::vector<int8_t>* result);
   GLint GetAttribLocationHelper(GLuint program, const char* name);
@@ -271,22 +180,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   bool GetQueryObjectValueHelper(
       const char* function_name, GLuint id, GLenum pname, GLuint64* params);
 
-  void FreeUnusedSharedMemory();
-  void FreeEverything();
-
-  // Helper to set verified bit on sync token if allowed by gpu control.
-  bool GetVerifiedSyncTokenForIPC(const gpu::SyncToken& sync_token,
-                                  gpu::SyncToken* verified_sync_token);
-
-  // base::trace_event::MemoryDumpProvider implementation.
-  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
-                    base::trace_event::ProcessMemoryDump* pmd) override;
-
   const scoped_refptr<ShareGroup>& share_group() const { return share_group_; }
-
-  const Capabilities& capabilities() const {
-    return capabilities_;
-  }
 
   GpuControl* gpu_control() {
     return gpu_control_;
@@ -295,6 +189,27 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   ShareGroupContextData* share_group_context_data() {
     return &share_group_context_data_;
   }
+
+  // QueryTrackerClient implementation.
+  void IssueBeginQuery(GLenum target,
+                       GLuint id,
+                       uint32_t sync_data_shm_id,
+                       uint32_t sync_data_shm_offset) override;
+  void IssueEndQuery(GLenum target, GLuint submit_count) override;
+  void IssueQueryCounter(GLuint id,
+                         GLenum target,
+                         uint32_t sync_data_shm_id,
+                         uint32_t sync_data_shm_offset,
+                         GLuint submit_count) override;
+  void IssueSetDisjointValueSync(uint32_t sync_data_shm_id,
+                                 uint32_t sync_data_shm_offset) override;
+  GLenum GetClientSideGLError() override;
+  CommandBufferHelper* cmd_buffer_helper() override;
+  void SetGLError(GLenum error,
+                  const char* function_name,
+                  const char* msg) override;
+
+  CommandBuffer* command_buffer() const;
 
  private:
   friend class GLES2ImplementationTest;
@@ -305,16 +220,15 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   // Used to track whether an extension is available
   enum ExtensionStatus {
-      kAvailableExtensionStatus,
-      kUnavailableExtensionStatus,
-      kUnknownExtensionStatus
+    kAvailableExtensionStatus,
+    kUnavailableExtensionStatus,
+    kUnknownExtensionStatus
   };
 
   enum Dimension {
-      k2D,
-      k3D,
+    k2D,
+    k3D,
   };
-
 
   // Base class for mapped resources.
   struct MappedResource {
@@ -322,8 +236,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
         : access(_access),
           shm_id(_shm_id),
           shm_memory(mem),
-          shm_offset(offset) {
-    }
+          shm_offset(offset) {}
 
     // access mode. Currently only GL_WRITE_ONLY is valid
     GLenum access;
@@ -415,6 +328,26 @@ class GLES2_IMPL_EXPORT GLES2Implementation
     GLuint bound_texture_external_oes;
   };
 
+  // Prevents problematic reentrancy during error callbacks.
+  class DeferErrorCallbacks {
+   public:
+    explicit DeferErrorCallbacks(GLES2Implementation* gles2_implementation);
+    ~DeferErrorCallbacks();
+
+   private:
+    GLES2Implementation* gles2_implementation_;
+  };
+
+  struct DeferredErrorCallback {
+    // This takes std::string by value and uses std::move in the
+    // implementation, allowing the compiler to achieve zero copies
+    // when passing in a temporary.
+    DeferredErrorCallback(std::string message, int32_t id);
+
+    std::string message;
+    int32_t id = 0;
+  };
+
   // Checks for single threaded access.
   class SingleThreadChecker {
    public:
@@ -425,20 +358,20 @@ class GLES2_IMPL_EXPORT GLES2Implementation
     GLES2Implementation* gles2_implementation_;
   };
 
-  // Gets the value of the result.
-  template <typename T>
-  T GetResultAs() {
-    return static_cast<T>(GetResultBuffer());
-  }
+  // ImplementationBase implementation.
+  void IssueShallowFlush() override;
 
   // GpuControlClient implementation.
   void OnGpuControlLostContext() final;
   void OnGpuControlLostContextMaybeReentrant() final;
   void OnGpuControlErrorMessage(const char* message, int32_t id) final;
+  void OnGpuControlSwapBuffersCompleted(
+      const SwapBuffersCompleteParams& params) final;
+  void OnSwapBufferPresented(uint64_t swap_id,
+                             const gfx::PresentationFeedback& feedback) final;
 
-  void* GetResultBuffer();
-  int32_t GetResultShmId();
-  uint32_t GetResultShmOffset();
+  void SendErrorMessage(std::string message, int32_t id);
+  void CallDeferredErrorCallbacks();
 
   bool IsChromiumFramebufferMultisampleAvailable();
 
@@ -449,7 +382,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   GLenum GetGLError();
 
   // Sets our wrapper for the GLError.
-  void SetGLError(GLenum error, const char* function_name, const char* msg);
   void SetGLErrorInvalidEnum(
       const char* function_name, GLenum value, const char* label);
 
@@ -458,28 +390,10 @@ class GLES2_IMPL_EXPORT GLES2Implementation
     return last_error_;
   }
 
-  // Waits for all commands to execute.
-  void WaitForCmd();
-
-  // TODO(gman): These bucket functions really seem like they belong in
-  // CommandBufferHelper (or maybe BucketHelper?). Unfortunately they need
-  // a transfer buffer to function which is currently managed by this class.
-
-  // Gets the contents of a bucket.
-  bool GetBucketContents(uint32_t bucket_id, std::vector<int8_t>* data);
-
-  // Sets the contents of a bucket.
-  void SetBucketContents(uint32_t bucket_id, const void* data, size_t size);
-
-  // Sets the contents of a bucket as a string.
-  void SetBucketAsCString(uint32_t bucket_id, const char* str);
-
-  // Gets the contents of a bucket as a string. Returns false if there is no
-  // string available which is a separate case from the empty string.
-  bool GetBucketAsString(uint32_t bucket_id, std::string* str);
-
-  // Sets the contents of a bucket as a string.
-  void SetBucketAsString(uint32_t bucket_id, const std::string& str);
+  void AllocateShadowCopiesForReadback();
+  static void BufferShadowWrittenCallback(
+      const ReadbackBufferShadowTracker::BufferList& buffers,
+      uint64_t serial);
 
   // Returns true if id is reserved.
   bool IsBufferReservedId(GLuint id);
@@ -491,6 +405,10 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   bool IsSamplerReservedId(GLuint id) { return false; }
   bool IsTransformFeedbackReservedId(GLuint id) { return false; }
 
+  bool UpdateIndexedBufferState(GLenum target,
+                                GLuint index,
+                                GLuint buffer_id,
+                                const char* function_name);
   void BindBufferHelper(GLenum target, GLuint buffer);
   void BindBufferBaseHelper(GLenum target, GLuint index, GLuint buffer);
   void BindBufferRangeHelper(GLenum target, GLuint index, GLuint buffer,
@@ -523,6 +441,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   void DeleteFramebuffersHelper(GLsizei n, const GLuint* framebuffers);
   void DeleteRenderbuffersHelper(GLsizei n, const GLuint* renderbuffers);
   void DeleteTexturesHelper(GLsizei n, const GLuint* textures);
+  void UnbindTexturesHelper(GLsizei n, const GLuint* textures);
   bool DeleteProgramHelper(GLuint program);
   bool DeleteShaderHelper(GLuint shader);
   void DeleteQueriesEXTHelper(GLsizei n, const GLuint* queries);
@@ -664,6 +583,8 @@ class GLES2_IMPL_EXPORT GLES2Implementation
       GLuint buffer_id,
       const char* function_name, GLuint offset, GLsizei size);
 
+  void OnBufferWrite(GLenum target);
+
   // Pack 2D arrays of char into a bucket.
   // Helper function for ShaderSource(), TransformFeedbackVaryings(), etc.
   bool PackStringsToBucket(GLsizei count,
@@ -684,6 +605,15 @@ class GLES2_IMPL_EXPORT GLES2Implementation
                                    size_t* out_paths_offset,
                                    uint32_t* out_transforms_shm_id,
                                    size_t* out_transforms_offset);
+
+// Set to 1 to have the client fail when a GL error is generated.
+// This helps find bugs in the renderer since the debugger stops on the error.
+#if DCHECK_IS_ON()
+#if 0
+#define GL_CLIENT_FAIL_GL_ERRORS
+#endif
+#endif
+
 #if defined(GL_CLIENT_FAIL_GL_ERRORS)
   void CheckGLError();
   void FailGLError(GLenum error);
@@ -703,15 +633,16 @@ class GLES2_IMPL_EXPORT GLES2Implementation
 
   PixelStoreParams GetUnpackParameters(Dimension dimension);
 
+  uint64_t PrepareNextSwapId(SwapCompletedCallback complete_callback,
+                             PresentationCallback present_callback);
+
   GLES2Util util_;
   GLES2CmdHelper* helper_;
-  TransferBufferInterface* transfer_buffer_;
   std::string last_error_;
   DebugMarkerManager debug_marker_manager_;
   std::string this_in_hex_;
 
   base::queue<int32_t> swap_buffers_tokens_;
-  base::queue<int32_t> rate_limit_tokens_;
 
   ExtensionStatus chromium_framebuffer_multisample_;
 
@@ -767,6 +698,12 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   GLuint bound_pixel_unpack_buffer_;
   GLuint bound_transform_feedback_buffer_;
   GLuint bound_uniform_buffer_;
+  // We don't cache the currently bound transform feedback buffer, because
+  // it is part of the current transform feedback object. Caching the transform
+  // feedback object state correctly requires predicting if a call to
+  // glBeginTransformFeedback will succeed or fail, which in turn requires
+  // caching a whole bunch of other states such as the transform feedback
+  // varyings of the current program.
 
   // The currently bound pixel transfer buffers.
   GLuint bound_pixel_pack_transfer_buffer_id_;
@@ -781,8 +718,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // Current GL error bits.
   uint32_t error_bits_;
 
-  // Whether or not to print debugging info.
-  bool debug_;
+  LogSettings log_settings_;
 
   // When true, the context is lost when a GL_OUT_OF_MEMORY error occurs.
   const bool lose_context_when_out_of_memory_;
@@ -820,29 +756,23 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   typedef std::map<const void*, MappedTexture> MappedTextureMap;
   MappedTextureMap mapped_textures_;
 
-  std::unique_ptr<MappedMemoryManager> mapped_memory_;
-
   scoped_refptr<ShareGroup> share_group_;
   ShareGroupContextData share_group_context_data_;
 
-  std::unique_ptr<QueryTracker> query_tracker_;
   std::unique_ptr<IdAllocator>
       id_allocators_[static_cast<int>(IdNamespaces::kNumIdNamespaces)];
 
   std::unique_ptr<BufferTracker> buffer_tracker_;
-  ClientTransferCache transfer_cache_;
+  std::unique_ptr<ReadbackBufferShadowTracker> readback_buffer_shadow_tracker_;
 
+  base::Optional<ScopedMappedMemoryPtr> font_mapped_buffer_;
   base::Optional<ScopedTransferBufferPtr> raster_mapped_buffer_;
 
   base::Callback<void(const char*, int32_t)> error_message_callback_;
-  base::Closure lost_context_callback_;
-  bool lost_context_callback_run_ = false;
+  bool deferring_error_callbacks_ = false;
+  std::deque<DeferredErrorCallback> deferred_error_callbacks_;
 
   int current_trace_stack_;
-
-  GpuControl* const gpu_control_;
-
-  Capabilities capabilities_;
 
   // Flag to indicate whether the implementation can retain resources, or
   // whether it should aggressively free them.
@@ -857,6 +787,13 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // Populated if cached_extension_string_ != nullptr. These point to
   // gl_strings, valid forever.
   std::vector<const char*> cached_extensions_;
+
+  // The next swap ID to send.
+  uint64_t swap_id_ = 0;
+  // A map of swap IDs to callbacks to run when that ID completes.
+  base::flat_map<uint64_t, SwapCompletedCallback> pending_swap_callbacks_;
+  base::flat_map<uint64_t, PresentationCallback>
+      pending_presentation_callbacks_;
 
   base::WeakPtrFactory<GLES2Implementation> weak_ptr_factory_;
 

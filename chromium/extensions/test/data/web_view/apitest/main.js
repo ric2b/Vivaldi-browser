@@ -1084,6 +1084,27 @@ function testLoadAbortNonWebSafeScheme() {
   document.body.appendChild(webview);
 };
 
+// Verifies that cancelling a navigation due to an unsupported protocol doesn't
+// cause a crash.
+function testLoadAbortUnknownScheme() {
+  var webview = document.createElement('webview');
+  var ftpURL = 'ftp://example.com/';
+  webview.addEventListener('loadabort', function(e) {
+    embedder.test.assertEq('ERR_UNKNOWN_URL_SCHEME', e.reason);
+    embedder.test.assertEq(ftpURL, e.url);
+  });
+  webview.addEventListener('loadstop', function(e) {
+    embedder.test.assertEq(ftpURL, webview.src);
+    embedder.test.succeed();
+  });
+  webview.addEventListener('exit', function(e) {
+    // We should not crash.
+    embedder.test.fail();
+  });
+  webview.src = ftpURL;
+  document.body.appendChild(webview);
+}
+
 // This test verifies that the loadStart isn't sent for same-document
 // navigations, while loadCommit is (per docs).
 function testLoadEventsSameDocumentNavigation() {
@@ -1147,21 +1168,6 @@ function testLoadStartLoadRedirect() {
       embedder.test.fail();
     }
   });
-  document.body.appendChild(webview);
-}
-
-function testNavigationToExternalProtocol() {
-  var webview = document.createElement('webview');
-  webview.addEventListener('loadstop', function(e) {
-    webview.addEventListener('loadabort', function(e) {
-      embedder.test.assertEq('ERR_UNKNOWN_URL_SCHEME', e.reason);
-      embedder.test.succeed();
-    });
-    webview.executeScript({
-      code: 'window.location.href = "tel:+12223334444";'
-    }, function(results) {});
-  });
-  webview.setAttribute('src', 'data:text/html,navigate to external protocol');
   document.body.appendChild(webview);
 }
 
@@ -1820,11 +1826,11 @@ embedder.test.testList = {
   'testLoadAbortIllegalJavaScriptURL': testLoadAbortIllegalJavaScriptURL,
   'testLoadAbortInvalidNavigation': testLoadAbortInvalidNavigation,
   'testLoadAbortNonWebSafeScheme': testLoadAbortNonWebSafeScheme,
+  'testLoadAbortUnknownScheme': testLoadAbortUnknownScheme,
   'testLoadEventsSameDocumentNavigation': testLoadEventsSameDocumentNavigation,
   'testLoadProgressEvent': testLoadProgressEvent,
   'testLoadStartLoadRedirect': testLoadStartLoadRedirect,
   'testNavigateAfterResize': testNavigateAfterResize,
-  'testNavigationToExternalProtocol': testNavigationToExternalProtocol,
   'testNavOnConsecutiveSrcAttributeChanges':
       testNavOnConsecutiveSrcAttributeChanges,
   'testNavOnSrcAttributeChange': testNavOnSrcAttributeChange,

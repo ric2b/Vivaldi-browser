@@ -17,12 +17,9 @@ namespace media {
 PlatformMediaPipeline* PlatformMediaPipelineCreate(
     IPCDataSource* data_source,
     const PlatformMediaPipeline::AudioConfigChangedCB& audio_config_changed_cb,
-    const PlatformMediaPipeline::VideoConfigChangedCB& video_config_changed_cb,
-    PlatformMediaDecodingMode preferred_video_decoding_mode,
-    const PlatformMediaPipeline::MakeGLContextCurrentCB& make_gl_context_current_cb) {
+    const PlatformMediaPipeline::VideoConfigChangedCB& video_config_changed_cb) {
   return new WMFMediaPipeline(
-      data_source, audio_config_changed_cb, video_config_changed_cb,
-      preferred_video_decoding_mode, make_gl_context_current_cb);
+      data_source, audio_config_changed_cb, video_config_changed_cb);
 }
 
 }  // namespace media

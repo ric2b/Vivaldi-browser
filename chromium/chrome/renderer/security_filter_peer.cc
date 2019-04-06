@@ -86,7 +86,8 @@ void SecurityFilterPeer::OnReceivedResponse(
   NOTREACHED();
 }
 
-void SecurityFilterPeer::OnDownloadedData(int len, int encoded_data_length) {
+void SecurityFilterPeer::OnStartLoadingResponseBody(
+    mojo::ScopedDataPipeConsumerHandle body) {
   NOTREACHED();
 }
 
@@ -106,7 +107,7 @@ void SecurityFilterPeer::OnCompletedRequest(
   info.content_length = static_cast<int>(data_.size());
   original_peer_->OnReceivedResponse(info);
   if (!data_.empty()) {
-    original_peer_->OnReceivedData(base::MakeUnique<content::FixedReceivedData>(
+    original_peer_->OnReceivedData(std::make_unique<content::FixedReceivedData>(
         data_.data(), data_.size()));
   }
   network::URLLoaderCompletionStatus ok_status(status);

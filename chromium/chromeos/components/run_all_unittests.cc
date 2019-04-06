@@ -5,10 +5,14 @@
 #include "base/bind.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
+#include "mojo/core/embedder/embedder.h"
 
 int main(int argc, char** argv) {
+  // Some unit tests make Mojo calls.
+  mojo::core::Init();
+
   base::TestSuite test_suite(argc, argv);
   return base::LaunchUnitTests(
       argc, argv,
-      base::Bind(&base::TestSuite::Run, base::Unretained(&test_suite)));
+      base::BindOnce(&base::TestSuite::Run, base::Unretained(&test_suite)));
 }

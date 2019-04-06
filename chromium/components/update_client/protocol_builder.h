@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_UPDATE_CLIENT_PROTOCOL_BUILDER_H_
 #define COMPONENTS_UPDATE_CLIENT_PROTOCOL_BUILDER_H_
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -17,6 +18,14 @@ namespace update_client {
 
 class Configurator;
 class PersistedData;
+
+// Creates the values for the DDOS extra request headers sent with the update
+// check. These headers include "X-Goog-Update-Updater",
+// "X-Goog-Update-AppId", and  "X-Goog-Update-Interactivity".
+std::map<std::string, std::string> BuildUpdateCheckExtraRequestHeaders(
+    scoped_refptr<Configurator> config,
+    const std::vector<std::string>& ids_checked,
+    bool is_foreground);
 
 // Builds an update check request for |components|. |additional_attributes| is
 // serialized as part of the <request> element of the request to customize it
@@ -35,6 +44,7 @@ class PersistedData;
 // </request>
 std::string BuildUpdateCheckRequest(
     const Configurator& config,
+    const std::string& session_id,
     const std::vector<std::string>& ids_checked,
     const IdToComponentPtrMap& components,
     PersistedData* metadata,
@@ -82,7 +92,8 @@ std::string BuildActionRunEventElement(bool succeeded,
 // For example:
 //
 // <?xml version="1.0" encoding="UTF-8"?>
-// <request protocol="3.0" version="chrome-32.0.1.0" prodversion="32.0.1.0"
+// <request protocol="3.0" sessionid="{D505492F-95FE-4F90-8253-AEA75772DCC4}"
+//        version="chrome-32.0.1.0" prodversion="32.0.1.0"
 //        requestid="{7383396D-B4DD-46E1-9104-AAC6B918E792}"
 //        updaterchannel="canary" arch="x86" nacl_arch="x86-64"
 //        ADDITIONAL ATTRIBUTES>
@@ -101,6 +112,7 @@ std::string BuildActionRunEventElement(bool succeeded,
 // parameter specifying that an <updater> element is serialized as part of
 // the request.
 std::string BuildProtocolRequest(
+    const std::string& session_id,
     const std::string& prod_id,
     const std::string& browser_version,
     const std::string& channel,

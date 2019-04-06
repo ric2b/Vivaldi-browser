@@ -4,14 +4,15 @@
 
 #include "content/browser/service_worker/service_worker_metrics.h"
 
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/test/test_content_browser_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 
 namespace content {
 
-namespace {
+namespace service_worker_metrics_unittest {
 const std::string kNavigationPreloadSuffix = "_NavigationPreloadEnabled";
 const std::string kStartWorkerDuringStartupSuffix = "_StartWorkerDuringStartup";
 const std::string kWorkerStartOccurred = "_WorkerStartOccurred";
@@ -65,7 +66,10 @@ void ExpectNoNavPreloadWorkerStartOccurredUMA(
       0);
 }
 
-}  // namespace
+base::TimeTicks AdvanceTime(base::TimeTicks* time, int milliseconds) {
+  *time += base::TimeDelta::FromMilliseconds(milliseconds);
+  return *time;
+}
 
 using CrossProcessTimeDelta = ServiceWorkerMetrics::CrossProcessTimeDelta;
 using StartSituation = ServiceWorkerMetrics::StartSituation;
@@ -93,11 +97,15 @@ TEST(ServiceWorkerMetricsTest, ActivatedWorkerPreparation) {
         kPreparationType, static_cast<int>(WorkerPreparationType::STARTING), 1);
     histogram_tester.ExpectTotalCount(
         kPreparationType + kNavigationPreloadSuffix, 0);
-    histogram_tester.ExpectTimeBucketCount(kPreparationTime, time, 1);
-    histogram_tester.ExpectTimeBucketCount(kPreparationTime + "_StartingWorker",
-                                           time, 1);
-    histogram_tester.ExpectTotalCount(
-        kPreparationTime + kNavigationPreloadSuffix, 0);
+
+    // We don't record .Time histograms when S13nServiceWorker is enabled.
+    if (!blink::ServiceWorkerUtils::IsServicificationEnabled()) {
+      histogram_tester.ExpectTimeBucketCount(kPreparationTime, time, 1);
+      histogram_tester.ExpectTimeBucketCount(
+          kPreparationTime + "_StartingWorker", time, 1);
+      histogram_tester.ExpectTotalCount(
+          kPreparationTime + kNavigationPreloadSuffix, 0);
+    }
   }
 
   {
@@ -112,11 +120,16 @@ TEST(ServiceWorkerMetricsTest, ActivatedWorkerPreparation) {
     histogram_tester.ExpectUniqueSample(
         kPreparationType + kNavigationPreloadSuffix,
         static_cast<int>(WorkerPreparationType::START_DURING_STARTUP), 1);
-    histogram_tester.ExpectTimeBucketCount(kPreparationTime, time, 1);
-    histogram_tester.ExpectTimeBucketCount(
-        kPreparationTime + kNavigationPreloadSuffix, time, 1);
-    histogram_tester.ExpectTotalCount(
-        kPreparationTime + kWorkerStartOccurred + kNavigationPreloadSuffix, 1);
+
+    // We don't record .Time histograms when S13nServiceWorker is enabled.
+    if (!blink::ServiceWorkerUtils::IsServicificationEnabled()) {
+      histogram_tester.ExpectTimeBucketCount(kPreparationTime, time, 1);
+      histogram_tester.ExpectTimeBucketCount(
+          kPreparationTime + kNavigationPreloadSuffix, time, 1);
+      histogram_tester.ExpectTotalCount(
+          kPreparationTime + kWorkerStartOccurred + kNavigationPreloadSuffix,
+          1);
+    }
   }
 
   {
@@ -136,12 +149,16 @@ TEST(ServiceWorkerMetricsTest, ActivatedWorkerPreparation) {
         static_cast<int>(
             WorkerPreparationType::START_IN_EXISTING_READY_PROCESS),
         1);
-    histogram_tester.ExpectTimeBucketCount(kPreparationTime, time, 1);
-    histogram_tester.ExpectTimeBucketCount(
-        kPreparationTime + kNavigationPreloadSuffix, time, 1);
-    histogram_tester.ExpectTimeBucketCount(
-        kPreparationTime + kWorkerStartOccurred + kNavigationPreloadSuffix,
-        time, 1);
+
+    // We don't record .Time histograms when S13nServiceWorker is enabled.
+    if (!blink::ServiceWorkerUtils::IsServicificationEnabled()) {
+      histogram_tester.ExpectTimeBucketCount(kPreparationTime, time, 1);
+      histogram_tester.ExpectTimeBucketCount(
+          kPreparationTime + kNavigationPreloadSuffix, time, 1);
+      histogram_tester.ExpectTimeBucketCount(
+          kPreparationTime + kWorkerStartOccurred + kNavigationPreloadSuffix,
+          time, 1);
+    }
   }
 
   // Suffixed metric test.
@@ -391,106 +408,152 @@ TEST(ServiceWorkerMetricsTest, NavigationPreloadResponse_BrowserStartup) {
 }
 
 TEST(ServiceWorkerMetricsTest, EmbeddedWorkerStartTiming) {
-  base::TimeTicks start_worker_sent_time = base::TimeTicks::Now();
-  const base::TimeDelta latency = base::TimeDelta::FromMilliseconds(33);
-  auto start_timing = mojom::EmbeddedWorkerStartTiming::New();
-  start_timing->blink_initialized_time = start_worker_sent_time;
-  start_timing->start_worker_received_time = start_worker_sent_time + latency;
+  ServiceWorkerMetrics::StartTimes times;
+  auto current = base::TimeTicks::Now();
+  times.local_start = current;
+  times.local_start_worker_sent = AdvanceTime(&current, 11);
+  times.remote_start_worker_received = AdvanceTime(&current, 33);
+  times.remote_script_evaluation_start = AdvanceTime(&current, 55);
+  times.remote_script_evaluation_end = AdvanceTime(&current, 77);
+  times.local_end = AdvanceTime(&current, 22);
+
   StartSituation start_situation = StartSituation::EXISTING_READY_PROCESS;
   base::HistogramTester histogram_tester;
 
-  ServiceWorkerMetrics::RecordEmbeddedWorkerStartTiming(
-      std::move(start_timing), start_worker_sent_time, start_situation);
-  histogram_tester.ExpectUniqueSample(
-      "EmbeddedWorkerInstance.Start.StartMessageLatency.Type",
-      static_cast<int>(CrossProcessTimeDelta::NORMAL), 1);
+  ServiceWorkerMetrics::RecordStartWorkerTiming(times, start_situation);
+
+  // Total duration.
+  histogram_tester.ExpectTimeBucketCount("ServiceWorker.StartTiming.Duration",
+                                         times.local_end - times.local_start,
+                                         1);
   histogram_tester.ExpectTimeBucketCount(
-      "EmbeddedWorkerInstance.Start.StartMessageLatency", latency, 1);
+      "ServiceWorker.StartTiming.Duration.ExistingReadyProcess",
+      times.local_end - times.local_start, 1);
+
+  // SentStartWorker milestone.
   histogram_tester.ExpectTimeBucketCount(
-      "EmbeddedWorkerInstance.Start.StartMessageLatency_ExistingReadyProcess",
-      latency, 1);
+      "ServiceWorker.StartTiming.StartToSentStartWorker",
+      times.local_start_worker_sent - times.local_start, 1);
+
+  // ReceivedStartWorker milestone.
+  histogram_tester.ExpectTimeBucketCount(
+      "ServiceWorker.StartTiming.StartToReceivedStartWorker",
+      times.remote_start_worker_received - times.local_start, 1);
+  histogram_tester.ExpectTimeBucketCount(
+      "ServiceWorker.StartTiming.SentStartWorkerToReceivedStartWorker",
+      times.remote_start_worker_received - times.local_start_worker_sent, 1);
+
+  // ScriptEvaluationStart milestone.
+  histogram_tester.ExpectTimeBucketCount(
+      "ServiceWorker.StartTiming.StartToScriptEvaluationStart",
+      times.remote_script_evaluation_start - times.local_start, 1);
+  histogram_tester.ExpectTimeBucketCount(
+      "ServiceWorker.StartTiming.ReceivedStartWorkerToScriptEvaluationStart",
+      times.remote_script_evaluation_start - times.remote_start_worker_received,
+      1);
+
+  // ScriptEvaluationEnd milestone.
+  histogram_tester.ExpectTimeBucketCount(
+      "ServiceWorker.StartTiming.StartToScriptEvaluationEnd",
+      times.remote_script_evaluation_end - times.local_start, 1);
+  histogram_tester.ExpectTimeBucketCount(
+      "ServiceWorker.StartTiming.ScriptEvaluationStartToScriptEvaluationEnd",
+      times.remote_script_evaluation_end - times.remote_script_evaluation_start,
+      1);
+
+  // End milestone.
+  histogram_tester.ExpectTimeBucketCount(
+      "ServiceWorker.StartTiming.ScriptEvaluationEndToEnd",
+      times.local_end - times.remote_script_evaluation_end, 1);
+
+  // Clock consistency.
   histogram_tester.ExpectUniqueSample(
-      "EmbeddedWorkerInstance.Start.WaitedForRendererSetup", false, 1);
-  histogram_tester.ExpectTotalCount(
-      "EmbeddedWorkerInstance.Start.WaitedForRendererSetup.Time", 0);
+      "ServiceWorker.StartTiming.ClockConsistency",
+      CrossProcessTimeDelta::NORMAL, 1);
 }
 
 TEST(ServiceWorkerMetricsTest, EmbeddedWorkerStartTiming_BrowserStartup) {
-  base::TimeTicks start_worker_sent_time = base::TimeTicks::Now();
-  const base::TimeDelta latency = base::TimeDelta::FromMilliseconds(66);
-  auto start_timing = mojom::EmbeddedWorkerStartTiming::New();
-  start_timing->blink_initialized_time = start_worker_sent_time;
-  start_timing->start_worker_received_time = start_worker_sent_time + latency;
+  ServiceWorkerMetrics::StartTimes times;
+  auto current = base::TimeTicks::Now();
+  times.local_start = current;
+  times.local_start_worker_sent = AdvanceTime(&current, 11);
+  times.remote_start_worker_received = AdvanceTime(&current, 66);
+  times.remote_script_evaluation_start = AdvanceTime(&current, 55);
+  times.remote_script_evaluation_end = AdvanceTime(&current, 77);
+  times.local_end = AdvanceTime(&current, 22);
+
   StartSituation start_situation = StartSituation::DURING_STARTUP;
   base::HistogramTester histogram_tester;
 
-  ServiceWorkerMetrics::RecordEmbeddedWorkerStartTiming(
-      std::move(start_timing), start_worker_sent_time, start_situation);
-  histogram_tester.ExpectUniqueSample(
-      "EmbeddedWorkerInstance.Start.StartMessageLatency.Type",
-      static_cast<int>(CrossProcessTimeDelta::NORMAL), 1);
+  ServiceWorkerMetrics::RecordStartWorkerTiming(times, start_situation);
+
+  // Total duration.
+  histogram_tester.ExpectTimeBucketCount("ServiceWorker.StartTiming.Duration",
+                                         times.local_end - times.local_start,
+                                         1);
   histogram_tester.ExpectTimeBucketCount(
-      "EmbeddedWorkerInstance.Start.StartMessageLatency", latency, 1);
-  histogram_tester.ExpectTimeBucketCount(
-      "EmbeddedWorkerInstance.Start.StartMessageLatency_DuringStartup", latency,
-      1);
-  histogram_tester.ExpectUniqueSample(
-      "EmbeddedWorkerInstance.Start.WaitedForRendererSetup", false, 1);
-  histogram_tester.ExpectTotalCount(
-      "EmbeddedWorkerInstance.Start.WaitedForRendererSetup.Time", 0);
+      "ServiceWorker.StartTiming.Duration.DuringStartup",
+      times.local_end - times.local_start, 1);
 }
 
-TEST(ServiceWorkerMetricsTest, EmbeddedWorkerStartTiming_WaitForRenderer) {
-  base::TimeTicks start_worker_sent_time = base::TimeTicks::Now();
-  const base::TimeDelta latency = base::TimeDelta::FromMilliseconds(777);
-  const base::TimeDelta renderer_setup = base::TimeDelta::FromMilliseconds(333);
-  auto start_timing = mojom::EmbeddedWorkerStartTiming::New();
-  start_timing->blink_initialized_time =
-      start_worker_sent_time + renderer_setup;
-  start_timing->start_worker_received_time = start_worker_sent_time + latency;
-  StartSituation start_situation = StartSituation::NEW_PROCESS;
-  base::HistogramTester histogram_tester;
+TEST(ServiceWorkerMetricsTest,
+     EmbeddedWorkerStartTiming_NegativeLatencyForStartIPC) {
+  ServiceWorkerMetrics::StartTimes times;
+  auto current = base::TimeTicks::Now();
+  times.local_start = current;
+  times.local_start_worker_sent = AdvanceTime(&current, 11);
+  // Go back in time.
+  times.remote_start_worker_received = AdvanceTime(&current, -777);
+  times.remote_script_evaluation_start = AdvanceTime(&current, 55);
+  times.remote_script_evaluation_end = AdvanceTime(&current, 77);
+  times.local_end = AdvanceTime(&current, 22);
 
-  ServiceWorkerMetrics::RecordEmbeddedWorkerStartTiming(
-      std::move(start_timing), start_worker_sent_time, start_situation);
-  histogram_tester.ExpectUniqueSample(
-      "EmbeddedWorkerInstance.Start.StartMessageLatency.Type",
-      static_cast<int>(CrossProcessTimeDelta::NORMAL), 1);
-  histogram_tester.ExpectTimeBucketCount(
-      "EmbeddedWorkerInstance.Start.StartMessageLatency", latency, 1);
-  histogram_tester.ExpectTimeBucketCount(
-      "EmbeddedWorkerInstance.Start.StartMessageLatency_NewProcess", latency,
-      1);
-  histogram_tester.ExpectUniqueSample(
-      "EmbeddedWorkerInstance.Start.WaitedForRendererSetup", true, 1);
-  histogram_tester.ExpectTimeBucketCount(
-      "EmbeddedWorkerInstance.Start.WaitedForRendererSetup.Time",
-      renderer_setup, 1);
-}
-
-TEST(ServiceWorkerMetricsTest, EmbeddedWorkerStartTiming_NegativeLatency) {
-  base::TimeTicks start_worker_sent_time = base::TimeTicks::Now();
-  const base::TimeDelta latency = base::TimeDelta::FromMilliseconds(777);
-  auto start_timing = mojom::EmbeddedWorkerStartTiming::New();
-  start_timing->blink_initialized_time = start_worker_sent_time;
-  start_timing->start_worker_received_time = start_worker_sent_time - latency;
   StartSituation start_situation = StartSituation::EXISTING_READY_PROCESS;
   base::HistogramTester histogram_tester;
 
-  ServiceWorkerMetrics::RecordEmbeddedWorkerStartTiming(
-      std::move(start_timing), start_worker_sent_time, start_situation);
+  ServiceWorkerMetrics::RecordStartWorkerTiming(times, start_situation);
+
+  // Duration and breakdowns should not be logged.
+  histogram_tester.ExpectTotalCount("ServiceWorker.StartTiming.Duration", 0);
+  // Just test one arbitrarily chosen breakdown metric.
+  histogram_tester.ExpectTotalCount(
+      "ServiceWorker.StartTiming.StartToScriptEvaluationStart", 0);
+
+  // Clock consistency.
   histogram_tester.ExpectUniqueSample(
-      "EmbeddedWorkerInstance.Start.StartMessageLatency.Type",
-      static_cast<int>(CrossProcessTimeDelta::NEGATIVE), 1);
-  histogram_tester.ExpectTotalCount(
-      "EmbeddedWorkerInstance.Start.StartMessageLatency", 0);
-  histogram_tester.ExpectTotalCount(
-      "EmbeddedWorkerInstance.Start.StartMessageLatency_ExistingReadyProcess",
-      0);
-  histogram_tester.ExpectTotalCount(
-      "EmbeddedWorkerInstance.Start.WaitedForRendererSetup", 0);
-  histogram_tester.ExpectTotalCount(
-      "EmbeddedWorkerInstance.Start.WaitedForRendererSetup.Time", 0);
+      "ServiceWorker.StartTiming.ClockConsistency",
+      CrossProcessTimeDelta::NEGATIVE, 1);
 }
 
+TEST(ServiceWorkerMetricsTest,
+     EmbeddedWorkerStartTiming_NegativeLatencyForStartedIPC) {
+  ServiceWorkerMetrics::StartTimes times;
+  auto current = base::TimeTicks::Now();
+  times.local_start = current;
+  times.local_start_worker_sent = AdvanceTime(&current, 11);
+  times.remote_start_worker_received = AdvanceTime(&current, 777);
+  times.remote_script_evaluation_start = AdvanceTime(&current, 55);
+  times.remote_script_evaluation_end = AdvanceTime(&current, 77);
+  // Go back in time.
+  times.local_end = AdvanceTime(&current, -123);
+
+  StartSituation start_situation = StartSituation::EXISTING_READY_PROCESS;
+  base::HistogramTester histogram_tester;
+
+  ServiceWorkerMetrics::RecordStartWorkerTiming(times, start_situation);
+
+  // Duration and breakdowns should not be logged.
+  histogram_tester.ExpectTotalCount("ServiceWorker.StartTiming.Duration", 0);
+  // Just test one arbitrarily chosen breakdown metric.
+  histogram_tester.ExpectTotalCount(
+      "ServiceWorker.StartTiming.ScriptEvaluationStartToScriptEvaluationEnd",
+      0);
+
+  // Clock consistency.
+  histogram_tester.ExpectUniqueSample(
+      "ServiceWorker.StartTiming.ClockConsistency",
+      CrossProcessTimeDelta::NEGATIVE, 1);
+}
+
+}  // namespace service_worker_metrics_unittest
 }  // namespace content

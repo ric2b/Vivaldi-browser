@@ -9,25 +9,27 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/extensions/api/screenlock_private/screenlock_private_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/signin/easy_unlock_service.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "components/proximity_auth/screenlock_bridge.h"
-#include "components/signin/core/browser/signin_manager.h"
+#include "chromeos/components/proximity_auth/screenlock_bridge.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/api/test/test_api.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/switches.h"
+#include "services/identity/public/cpp/identity_manager.h"
+#include "services/identity/public/cpp/identity_test_utils.h"
 
 namespace extensions {
 
 namespace {
 
-const char kTestGaiaId[] = "gaia-id-testuser@gmail.com";
 const char kAttemptClickAuthMessage[] = "attemptClickAuth";
 const char kTestExtensionId[] = "lkegkdgachcnekllcdfkijonogckdnjo";
 const char kTestUser[] = "testuser@gmail.com";
@@ -50,14 +52,14 @@ class ScreenlockPrivateApiTest : public ExtensionApiTest,
   }
 
   void SetUpOnMainThread() override {
-    SigninManagerFactory::GetForProfile(profile())
-        ->SetAuthenticatedAccountInfo(kTestGaiaId, kTestUser);
-    ProfileAttributesEntry* entry;
-    ASSERT_TRUE(g_browser_process->profile_manager()->
-        GetProfileAttributesStorage().
-        GetProfileAttributesWithPath(profile()->GetPath(), &entry));
-    entry->SetAuthInfo(
-        kTestGaiaId, base::UTF8ToUTF16(test_account_id_.GetUserEmail()));
+    identity::IdentityManager* identity_manager =
+        IdentityManagerFactory::GetForProfile(profile());
+    identity::MakePrimaryAccountAvailable(
+        SigninManagerFactory::GetForProfile(profile()),
+        ProfileOAuth2TokenServiceFactory::GetForProfile(profile()),
+        identity_manager, kTestUser);
+    test_account_id_ = AccountId::FromUserEmailGaiaId(
+        kTestUser, identity_manager->GetPrimaryAccountInfo().gaia);
     registrar_.Add(this,
                    extensions::NOTIFICATION_EXTENSION_TEST_MESSAGE,
                    content::NotificationService::AllSources());
@@ -80,7 +82,8 @@ class ScreenlockPrivateApiTest : public ExtensionApiTest,
       proximity_auth::ScreenlockBridge::Get()->lock_handler()->SetAuthType(
           test_account_id_, proximity_auth::mojom::AuthType::USER_CLICK,
           base::string16());
-      EasyUnlockService::Get(profile())->AttemptAuth(test_account_id_);
+      chromeos::EasyUnlockService::Get(profile())->AttemptAuth(
+          test_account_id_);
     }
   }
 
@@ -90,8 +93,7 @@ class ScreenlockPrivateApiTest : public ExtensionApiTest,
   }
 
  private:
-  const AccountId test_account_id_ =
-      AccountId::FromUserEmailGaiaId(kTestUser, kTestGaiaId);
+  AccountId test_account_id_;
   content::NotificationRegistrar registrar_;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenlockPrivateApiTest);

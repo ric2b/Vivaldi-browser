@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "pdf/range_set.h"
@@ -31,20 +32,21 @@ class ChunkStream {
   void SetChunkData(uint32_t chunk_index, std::unique_ptr<ChunkData> data) {
     if (!data)
       return;
-    if (chunk_index >= data_.size()) {
+
+    if (chunk_index >= data_.size())
       data_.resize(chunk_index + 1);
-    }
-    if (!data_[chunk_index]) {
+
+    if (!data_[chunk_index])
       ++filled_chunks_count_;
-    }
+
     data_[chunk_index] = std::move(data);
     filled_chunks_.Union(gfx::Range(chunk_index, chunk_index + 1));
   }
 
   bool ReadData(const gfx::Range& range, void* buffer) const {
-    if (!IsRangeAvailable(range)) {
+    if (!IsRangeAvailable(range))
       return false;
-    }
+
     unsigned char* data_buffer = static_cast<unsigned char*>(buffer);
     uint32_t start = range.start();
     while (start != range.end()) {
@@ -62,19 +64,25 @@ class ChunkStream {
   uint32_t GetChunkIndex(uint32_t offset) const { return offset / kChunkSize; }
 
   gfx::Range GetChunksRange(uint32_t offset, uint32_t size) const {
-    return gfx::Range(GetChunkIndex(offset),
-                      GetChunkIndex(offset + size + kChunkSize - 1));
+    return gfx::Range(GetChunkIndex(offset), GetChunkEnd(offset + size));
   }
 
   bool IsRangeAvailable(const gfx::Range& range) const {
     if (!range.IsValid() || range.is_reversed() ||
-        (eof_pos_ > 0 && eof_pos_ < range.end()))
+        (eof_pos_ > 0 && eof_pos_ < range.end())) {
       return false;
+    }
+
     if (range.is_empty())
       return true;
+
     const gfx::Range chunks_range(GetChunkIndex(range.start()),
-                                  GetChunkIndex(range.end() + kChunkSize - 1));
+                                  GetChunkEnd(range.end()));
     return filled_chunks_.Contains(chunks_range);
+  }
+
+  bool IsChunkAvailable(uint32_t chunk_index) const {
+    return filled_chunks_.Contains(chunk_index);
   }
 
   void set_eof_pos(uint32_t eof_pos) { eof_pos_ = eof_pos; }
@@ -86,6 +94,10 @@ class ChunkStream {
     return eof_pos_ > 0 && IsRangeAvailable(gfx::Range(0, eof_pos_));
   }
 
+  bool IsValidChunkIndex(uint32_t chunk_index) const {
+    return !eof_pos_ || (chunk_index <= GetChunkIndex(eof_pos_ - 1));
+  }
+
   void Clear() {
     data_.clear();
     eof_pos_ = 0;
@@ -94,11 +106,13 @@ class ChunkStream {
   }
 
   uint32_t filled_chunks_count() const { return filled_chunks_count_; }
-  uint32_t total_chunks_count() const {
-    return GetChunkIndex(eof_pos_ + kChunkSize - 1);
-  }
+  uint32_t total_chunks_count() const { return GetChunkEnd(eof_pos_); }
 
  private:
+  uint32_t GetChunkEnd(uint32_t offset) const {
+    return (offset + kChunkSize - 1) / kChunkSize;
+  }
+
   std::vector<std::unique_ptr<ChunkData>> data_;
   uint32_t eof_pos_ = 0;
   RangeSet filled_chunks_;

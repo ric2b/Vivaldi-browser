@@ -52,6 +52,7 @@ ClientSocketPoolManagerImpl::ClientSocketPoolManagerImpl(
     CTPolicyEnforcer* ct_policy_enforcer,
     const std::string& ssl_session_cache_shard,
     SSLConfigService* ssl_config_service,
+    WebSocketEndpointLockManager* websocket_endpoint_lock_manager,
     HttpNetworkSession::SocketPoolType pool_type)
     : net_log_(net_log),
       socket_factory_(socket_factory),
@@ -73,6 +74,7 @@ ClientSocketPoolManagerImpl::ClientSocketPoolManagerImpl(
                                        max_sockets_per_group(pool_type),
                                        host_resolver,
                                        socket_factory_,
+                                       websocket_endpoint_lock_manager,
                                        net_log)
                                  : new TransportClientSocketPool(
                                        max_sockets_per_pool(pool_type),
@@ -294,7 +296,7 @@ ClientSocketPoolManagerImpl::GetSocketPoolForHTTPProxy(
               ssl_session_cache_shard_, socket_factory_,
               tcp_https_ret.first->second.get() /* https proxy */,
               nullptr /* no socks proxy */, nullptr /* no http proxy */,
-              ssl_config_service_.get(), net_log_)));
+              ssl_config_service_, net_log_)));
   DCHECK(tcp_https_ret.second);
 
   std::pair<HTTPProxySocketPoolMap::iterator, bool> ret =
@@ -329,8 +331,8 @@ SSLClientSocketPool* ClientSocketPoolManagerImpl::GetSocketPoolForSSLWithProxy(
               ssl_session_cache_shard_, socket_factory_,
               nullptr, /* no tcp pool, we always go through a proxy */
               GetSocketPoolForSOCKSProxy(proxy_server),
-              GetSocketPoolForHTTPProxy(proxy_server),
-              ssl_config_service_.get(), net_log_)));
+              GetSocketPoolForHTTPProxy(proxy_server), ssl_config_service_,
+              net_log_)));
 
   return ret.first->second.get();
 }

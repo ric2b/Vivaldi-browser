@@ -54,6 +54,8 @@
 #include "base/win/windows_version.h"
 #include "base/win/win_util.h"
 
+#include "installer/util/vivaldi_install_util.h"
+
 namespace installer {
 
 namespace {
@@ -284,6 +286,7 @@ std::string GenerateVisualElementsManifest(const base::Version& version,
   //   - "Light" or "", according to |use_light_assets|.
   // followed by:
   //   - Foreground text value (light or dark).
+  //   - Background color.
   static constexpr char kManifestTemplate[] =
       "<Application xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>\r\n"
       "  <VisualElements\r\n"
@@ -292,7 +295,7 @@ std::string GenerateVisualElementsManifest(const base::Version& version,
       "      Square70x70Logo='%ls\\SmallLogo%ls%ls.png'\r\n"
       "      Square44x44Logo='%ls\\SmallLogo%ls%ls.png'\r\n"
       "      ForegroundText='%ls'\r\n"
-      "      BackgroundColor='#212121'/>\r\n"
+      "      BackgroundColor='%ls'/>\r\n"
       "</Application>\r\n";
   static constexpr wchar_t kLight[] = L"Light";
 
@@ -311,7 +314,8 @@ std::string GenerateVisualElementsManifest(const base::Version& version,
       manifest_template.c_str(), elements_dir.c_str(), logo_suffix,
       light_suffix, elements_dir.c_str(), logo_suffix, light_suffix,
       elements_dir.c_str(), logo_suffix, light_suffix,
-      use_light_assets ? L"dark" : L"light"));
+      use_light_assets ? L"dark" : L"light",
+      use_light_assets ? L"#FFFFFF" : L"#EF3939"));
 
   return base::UTF16ToUTF8(manifest16);
 }
@@ -337,12 +341,7 @@ VEAssetType DetermineVisualElementAssetType(const base::FilePath& base_path,
   DCHECK(base::PathExists(visual_elements_dir.Append(
       base::StringPrintf(L"Logo%ls.png", logo_suffix))));
 
-  // Check for light assets that require dark text.
-  base::string16 light_logo_file_name =
-      base::StringPrintf(L"Logo%lsLight.png", logo_suffix);
-  return base::PathExists(visual_elements_dir.Append(light_logo_file_name))
-             ? VEAssetType::kDarkAndLight
-             : VEAssetType::kDarkOnly;
+  return VEAssetType::kDarkOnly;
 }
 
 }  // namespace
@@ -443,7 +442,7 @@ void CreateOrUpdateShortcuts(const base::FilePath& target,
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   bool is_vivaldi_standalone =
-      command_line.HasSwitch(installer::switches::kVivaldiStandalone);
+      command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone);
 
   if (is_vivaldi_standalone) {
     do_not_create_any_shortcuts = true;
@@ -517,9 +516,11 @@ void CreateOrUpdateShortcuts(const base::FilePath& target,
           ShellUtil::SHELL_SHORTCUT_CREATE_IF_NO_SYSTEM_LEVEL) {
     start_menu_properties.set_pin_to_taskbar(!do_not_create_taskbar_shortcut);
     if (base::win::GetVersion() >= base::win::VERSION_WIN7) {
-      base::win::RegKey key(HKEY_CURRENT_USER, kVivaldiKey, KEY_ALL_ACCESS);
+      base::win::RegKey key(HKEY_CURRENT_USER,
+                            vivaldi::constants::kVivaldiKey, KEY_ALL_ACCESS);
       if (key.Valid()) {
-        key.WriteValue(kVivaldiPinToTaskbarValue, DWORD(1));
+        key.WriteValue(vivaldi::constants::kVivaldiPinToTaskbarValue,
+                       DWORD(1));
       }
     }
   }
@@ -590,7 +591,7 @@ void RegisterChromeOnMachine(const InstallerState& installer_state,
             HKEY_CURRENT_USER, vivaldi::kUpdateNotifierAutorunName, &command) ||
         command.empty()))) {
     command = installer_state.target_path()
-        .Append(installer::kVivaldiUpdateNotifierExe)
+        .Append(vivaldi::constants::kVivaldiUpdateNotifierExe)
         .value();
     command = L"\"" + command + L"\"";
     base::win::AddCommandToAutoRun(
@@ -627,9 +628,9 @@ InstallStatus InstallOrUpdateProduct(const InstallationState& original_state,
   if (installer_state.is_vivaldi() &&
       base::PathExists(
           installer_state.target_path().AppendASCII(new_version.GetString()))) {
-    installer::KillProcesses(installer::GetRunningProcessesForPath(
+    vivaldi::KillProcesses(vivaldi::GetRunningProcessesForPath(
         installer_state.target_path().Append(
-            installer::kVivaldiUpdateNotifierExe)));
+          vivaldi::constants::kVivaldiUpdateNotifierExe)));
   }
 
   std::unique_ptr<base::Version> existing_version;
@@ -711,9 +712,9 @@ InstallStatus InstallOrUpdateProduct(const InstallationState& original_state,
     if (installer_state.is_vivaldi()) {
       // Take a snapshot of notifiers running before we send the events.
       std::vector<base::win::ScopedHandle> update_notifier_processes(
-          installer::GetRunningProcessesForPath(
+          vivaldi::GetRunningProcessesForPath(
               installer_state.target_path().Append(
-                  installer::kVivaldiUpdateNotifierOldExe)));
+                vivaldi::constants::kVivaldiUpdateNotifierOldExe)));
       base::string16 quit_event_path(L"Global\\Vivaldi/Update_notifier/Quit/");
       base::string16 normalized_path =
           installer_state.target_path().NormalizePathSeparatorsTo(L'/').value();
@@ -729,10 +730,10 @@ InstallStatus InstallOrUpdateProduct(const InstallationState& original_state,
       Sleep(1000);
       ResetEvent(quit_event.Get());
       // Kill any remaining notifier
-      installer::KillProcesses(update_notifier_processes);
+      vivaldi::KillProcesses(update_notifier_processes);
       base::DeleteFile(installer_state.target_path().Append(
-                           installer::kVivaldiUpdateNotifierOldExe),
-                       false);
+          vivaldi::constants::kVivaldiUpdateNotifierOldExe),
+          false);
     }
     // For Vivaldi, do not clean up old versions here. The old setup.exe is used
     // when delta patching itself. The cleanup is done in setup_main.cc.
@@ -770,10 +771,10 @@ void LaunchDeleteOldVersionsProcess(const base::FilePath& setup_path,
 
   // For Vivaldi we need to append the supplied install dir.
   const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
-  if (cmd_line.HasSwitch(switches::kVivaldiInstallDir)) {
+  if (cmd_line.HasSwitch(vivaldi::constants::kVivaldiInstallDir)) {
     base::FilePath vivaldi_install_dir =
-        cmd_line.GetSwitchValuePath(switches::kVivaldiInstallDir);
-    command_line.AppendSwitchPath(switches::kVivaldiInstallDir,
+        cmd_line.GetSwitchValuePath(vivaldi::constants::kVivaldiInstallDir);
+    command_line.AppendSwitchPath(vivaldi::constants::kVivaldiInstallDir,
                                   vivaldi_install_dir);
   }
 

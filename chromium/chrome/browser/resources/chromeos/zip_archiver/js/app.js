@@ -10,7 +10,8 @@
  */
 unpacker.app = {
   /**
-   * The key used by chrome.storage.local to save and restore the volumes state.
+   * The key which was used by chrome.storage.local to save and restore the
+   * volumes state in old versions.
    * @const {string}
    */
   STORAGE_KEY: 'state',
@@ -173,94 +174,20 @@ unpacker.app = {
   },
 
   /**
-   * Saves state in case of restarts, event page suspend, crashes, etc. This
-   * method does nothing when context is in incognito mode.
-   * @param {!Array<!unpacker.types.FileSystemId>} fileSystemIdsArray
-   * @private
+   * Removes state from local storage for all volumes, which was stored by
+   * older versions of the extension. This method does nothing when context is
+   * in incognito mode.
    */
-  saveState_: function(fileSystemIdsArray) {
-    // If current context is in incognito mode, then skip save state because
-    // retainEntry is not available in incognito mode.
+  cleanupOldStorageInfo: function() {
     if (chrome.extension.inIncognitoContext)
       return;
 
     chrome.storage.local.get([unpacker.app.STORAGE_KEY], function(result) {
-      if (!result[unpacker.app.STORAGE_KEY])  // First save state call.
-        result[unpacker.app.STORAGE_KEY] = {};
-
-      // Overwrite state only for the volumes that have their file system id
-      // present in the input array. Leave the rest of the volumes state
-      // untouched.
-      fileSystemIdsArray.forEach(function(fileSystemId) {
-        var entryId = chrome.fileSystem.retainEntry(
-            unpacker.app.volumes[fileSystemId].entry);
-        result[unpacker.app.STORAGE_KEY][fileSystemId] = {
-          entryId: entryId,
-          passphrase: unpacker.app.volumes[fileSystemId]
-                          .decompressor.passphraseManager.rememberedPassphrase
-        };
-      });
-
-      chrome.storage.local.set(result);
-    });
-  },
-
-  /**
-   * Removes state from local storage for a single volume. This method does
-   * nothing when context is in incognito mode.
-   * @param {!unpacker.types.FileSystemId} fileSystemId
-   */
-  removeState_: function(fileSystemId) {
-    if (chrome.extension.inIncognitoContext)
-      return;
-
-    chrome.storage.local.get([unpacker.app.STORAGE_KEY], function(result) {
-      console.assert(
-          result[unpacker.app.STORAGE_KEY] &&
-              result[unpacker.app.STORAGE_KEY][fileSystemId],
-          'Should call removeState_ only for file systems that ',
-          'have previously called saveState_.');
-
-      delete result[unpacker.app.STORAGE_KEY][fileSystemId];
-      chrome.storage.local.set(result);
-    });
-  },
-
-  /**
-   * Restores archive's entry and opened files for the passed file system id.
-   * @param {!unpacker.types.FileSystemId} fileSystemId
-   * @return {!Promise<!Object>} Promise fulfilled with the entry and list of
-   *     opened files.
-   * @private
-   */
-  restoreVolumeState_: function(fileSystemId) {
-    if (chrome.extension.inIncognitoContext)
-      return new Promise.reject('No state restored due to incognito context');
-    return new Promise(function(fulfill, reject) {
-      chrome.storage.local.get([unpacker.app.STORAGE_KEY], function(result) {
-        if (!result[unpacker.app.STORAGE_KEY]) {
-          reject('FAILED');
-          return;
-        }
-
-        var volumeState = result[unpacker.app.STORAGE_KEY][fileSystemId];
-        if (!volumeState) {
-          console.error('No state for: ' + fileSystemId + '.');
-          reject('FAILED');
-          return;
-        }
-
-        chrome.fileSystem.restoreEntry(volumeState.entryId, function(entry) {
-          if (chrome.runtime.lastError) {
-            console.error(
-                'Restore entry error for <', fileSystemId,
-                '>: ' + chrome.runtime.lastError.message);
-            reject('FAILED');
-            return;
-          }
-          fulfill({entry: entry, passphrase: volumeState.passphrase});
+      if (result[unpacker.app.STORAGE_KEY]) {
+        chrome.storage.local.clear(function() {
+          console.info('Cleaned up archive mount info from older versions.');
         });
-      });
+      }
     });
   },
 
@@ -322,63 +249,6 @@ unpacker.app = {
   },
 
   /**
-   * Restores a volume mounted previously to a suspend / restart. In case of
-   * failure of the load promise for fileSystemId, the corresponding volume is
-   * forcely unmounted.
-   * @param {!unpacker.types.FileSystemId} fileSystemId
-   * @return {!Promise} A promise that restores state and loads volume.
-   * @private
-   */
-  restoreSingleVolume_: function(fileSystemId) {
-    // Load volume after restart / suspend page event.
-    return unpacker.app.restoreVolumeState_(fileSystemId)
-        .then(function(state) {
-          return new Promise(function(fulfill, reject) {
-            // Check if the file system is compatible with this version of the
-            // ZIP unpacker.
-            // TODO(mtomasz): Implement remounting instead of unmounting.
-            chrome.fileSystemProvider.get(fileSystemId, function(fileSystem) {
-              if (chrome.runtime.lastError) {
-                console.error(chrome.runtime.lastError.name);
-                reject('FAILED');
-                return;
-              }
-              if (!fileSystem || fileSystem.openedFilesLimit != 1) {
-                console.error('No compatible mounted file system found.');
-                reject('FAILED');
-                return;
-              }
-              fulfill({state: state, fileSystem: fileSystem});
-            });
-          });
-        })
-        .then(function(stateWithFileSystem) {
-          var openedFilesOptions = {};
-          stateWithFileSystem.fileSystem.openedFiles.forEach(function(
-              openedFile) {
-            openedFilesOptions[openedFile.openRequestId] = {
-              fileSystemId: fileSystemId,
-              requestId: openedFile.openRequestId,
-              mode: openedFile.mode,
-              filePath: openedFile.filePath
-            };
-          });
-          return unpacker.app.loadVolume_(
-              fileSystemId, stateWithFileSystem.state.entry, openedFilesOptions);
-        })
-        .catch(function(error) {
-          console.error(error.stack || error);
-          // Force unmount in case restore failed. All resources related to the
-          // volume will be cleanup from both memory and local storage.
-          // TODO(523195): Show a notification that the source file is gone.
-          return unpacker.app.unmountVolume(fileSystemId, true)
-              .then(function() {
-                return Promise.reject('FAILED');
-              });
-        });
-  },
-
-  /**
    * Ensures a volume is loaded by returning its corresponding loaded promise
    * from unpacker.app.volumeLoadedPromises. In case there is no such promise,
    * then this is a call after suspend / restart and a new volume loaded promise
@@ -400,11 +270,14 @@ unpacker.app = {
     return unpacker.app.moduleLoadedPromise.then(function() {
       // In case there is no volume promise for fileSystemId then we
       // received a call after restart / suspend as load promises are
-      // created on launched. In this case we will restore volume state
-      // from local storage and create a new load promise.
+      // created on launched.
       if (!unpacker.app.volumeLoadedPromises[fileSystemId]) {
+        // This path was once used for restoring volume state from local
+        // storage, but we no longer do it. Emulate an error to make caller
+        // forget the persisted mount info.
         unpacker.app.volumeLoadedPromises[fileSystemId] =
-            unpacker.app.restoreSingleVolume_(fileSystemId);
+            unpacker.app.unmountVolume(fileSystemId, true)
+                .then(Promise.reject('FAILED'));
       }
 
       // Decrement the counter when the mounting process ends.
@@ -499,8 +372,7 @@ unpacker.app = {
   },
 
   /**
-   * Cleans up the resources for a volume, except for the local storage. If
-   * necessary that can be done using unpacker.app.removeState_.
+   * Cleans up the resources for a volume.
    * @param {!unpacker.types.FileSystemId} fileSystemId
    */
   cleanupVolume: function(fileSystemId) {
@@ -550,16 +422,6 @@ unpacker.app = {
   },
 
   /**
-   * Updates the state in case of restarts, event page suspend, crashes, etc.
-   * Use this method to update or save the state out side of the object in case
-   * when password changes, etc.
-   * @param {!Array<!unpacker.types.FileSystemId>} fileSystemIdsArray
-   */
-  updateState: function(fileSystemIdsArray) {
-    unpacker.app.saveState_(fileSystemIdsArray);
-  },
-
-  /**
    * Unmounts a volume and removes any resources related to the volume from both
    * the extension and the local storage state.
    * @param {!unpacker.types.FileSystemId} fileSystemId
@@ -570,41 +432,54 @@ unpacker.app = {
    */
   unmountVolume: function(fileSystemId, opt_forceUnmount) {
     return new Promise(function(fulfill, reject) {
-      var volume = unpacker.app.volumes[fileSystemId];
-      console.assert(
-          volume || opt_forceUnmount,
-          'Unmount that is not forced must not be called for ',
-          'volumes that are not restored.');
+             chrome.fileManagerPrivate.markCacheAsMounted(
+                 fileSystemId, false /* isMounted */, function() {
+                   if (chrome.runtime.lastError) {
+                     console.error(
+                         'Unmount error: ' + chrome.runtime.lastError.message +
+                         '.');
+                     reject('FAILED');
+                     return;
+                   }
+                   fulfill();
+                 });
+           })
+        .then(function() {
+          return new Promise(function(fulfill, reject) {
+            var volume = unpacker.app.volumes[fileSystemId];
+            console.assert(
+                volume || opt_forceUnmount,
+                'Unmount that is not forced must not be called for ',
+                'volumes that are not restored.');
 
-      if (!opt_forceUnmount && volume.inUse()) {
-        reject('IN_USE');
-        return;
-      }
+            if (!opt_forceUnmount && volume.inUse()) {
+              reject('IN_USE');
+              return;
+            }
 
-      var options = {fileSystemId: fileSystemId};
-      chrome.fileSystemProvider.unmount(options, function() {
-        if (chrome.runtime.lastError) {
-          console.error(
-              'Unmount error: ' + chrome.runtime.lastError.message + '.');
-          reject('FAILED');
-          return;
-        }
+            var options = {fileSystemId: fileSystemId};
+            chrome.fileSystemProvider.unmount(options, function() {
+              if (chrome.runtime.lastError) {
+                console.error(
+                    'Unmount error: ' + chrome.runtime.lastError.message + '.');
+                reject('FAILED');
+                return;
+              }
 
-        // In case of forced unmount volume can be undefined due to not being
-        // restored. An unmount that is not forced will be called only after
-        // restoring state. In the case of forced unmount when volume is not
-        // restored, we will not do a normal cleanup, but just remove the load
-        // volume promise to allow further mounts.
-        if (opt_forceUnmount)
-          delete unpacker.app.volumeLoadedPromises[fileSystemId];
-        else
-          unpacker.app.cleanupVolume(fileSystemId);
+              // In case of forced unmount volume can be undefined due to not
+              // being restored. An unmount that is not forced will be called
+              // only after restoring state. In the case of forced unmount when
+              // volume is not restored, we will not do a normal cleanup, but
+              // just remove the load volume promise to allow further mounts.
+              if (opt_forceUnmount)
+                delete unpacker.app.volumeLoadedPromises[fileSystemId];
+              else
+                unpacker.app.cleanupVolume(fileSystemId);
 
-        // Remove volume from local storage.
-        unpacker.app.removeState_(fileSystemId);
-        fulfill();
-      });
-    });
+              fulfill();
+            });
+          });
+        });
   },
 
   /**
@@ -707,8 +582,9 @@ unpacker.app = {
   /**
    * Creates a new compressor and compresses entries.
    * @param {!Object} launchData
+   * @param {boolean} useTemporaryDirectory
    */
-  onLaunchedWithPack: function(launchData) {
+  onLaunchedWithPack: function(launchData, useTemporaryDirectory) {
     unpacker.app.mountProcessCounter++;
 
     // Create a promise to load the NaCL module.
@@ -724,7 +600,7 @@ unpacker.app = {
         .then(function(stringData) {
           var compressor = new unpacker.Compressor(
               /** @type {!Object} */ (unpacker.app.naclModule),
-              launchData.items);
+              launchData.items, useTemporaryDirectory);
 
           var compressorId = compressor.getCompressorId();
           unpacker.app.compressors[compressorId] = compressor;
@@ -867,7 +743,8 @@ unpacker.app = {
           launchData.items.forEach(function(item) {
             unpacker.app.mountProcessCounter++;
             chrome.fileSystem.getDisplayPath(
-                item.entry, function(entry, fileSystemId) {
+                item.entry, function(entry, displayPath) {
+                  const fileSystemId = displayPath;
                   // If loading takes significant amount of time, then show a
                   // notification about scanning in progress.
                   var deferredNotificationTimer = setTimeout(function() {
@@ -941,9 +818,18 @@ unpacker.app = {
                   loadPromise
                       .then(function() {
                         unpacker.app.volumeLoadFinished[fileSystemId] = true;
-                        // Mount the volume and save its information in local
-                        // storage in order to be able to recover the metadata
-                        // in case of restarts, system crashes, etc.
+                        return new Promise(function(fulfill, reject) {
+                          chrome.fileManagerPrivate.markCacheAsMounted(
+                              displayPath, true /* isMounted */, function() {
+                                if (chrome.runtime.lastError) {
+                                  reject(chrome.runtime.lastError);
+                                  return;
+                                }
+                                fulfill();
+                              });
+                        });
+                      })
+                      .then(function() {
                         chrome.fileSystemProvider.mount(
                             {
                               fileSystemId: fileSystemId,
@@ -956,9 +842,6 @@ unpacker.app = {
                                 onError(chrome.runtime.lastError, fileSystemId);
                                 return;
                               }
-                              // Save state so in case of restarts we are able
-                              // to correctly get the archive's metadata.
-                              unpacker.app.saveState_([fileSystemId]);
                               onSuccess(fileSystemId);
                             });
                       })
@@ -994,16 +877,61 @@ unpacker.app = {
     }
 
     if (launchData.id === 'pack')
-      unpacker.app.onLaunchedWithPack(launchData);
+      unpacker.app.onLaunchedWithPack(launchData, false);
+    else if (launchData.id === 'pack_using_tmp')
+      unpacker.app.onLaunchedWithPack(launchData, true);
     else
       unpacker.app.onLaunchedWithUnpack(launchData, opt_onSuccess, opt_onError);
   },
 
   /**
-   * Saves the state before suspending the event page, so we can resume it
-   * once new events arrive.
+   * Clean all temporary files inside the work directory.
+   * Those files are usually moved to the destination directory when finished
+   * or removed when any error happened, but might be left there when the
+   * extension was aborted by runtime errors or system shutdown.
    */
-  onSuspend: function() {
-    unpacker.app.saveState_(Object.keys(unpacker.app.volumes));
+  cleanWorkDirectory: function() {
+    return new Promise(
+               webkitRequestFileSystem.bind(null, TEMPORARY, 0 /* size */))
+        .then((fs) => new Promise(function(resolve, reject) {
+                const reader = fs.root.createReader();
+                let allEntries = [];
+                function scanEntries() {
+                  reader.readEntries((entries) => {
+                    if (entries.length == 0) {
+                      resolve(allEntries);
+                      return;
+                    }
+                    Array.prototype.push.apply(allEntries, entries);
+                    scanEntries();
+                  });
+                }
+                scanEntries();
+              }))
+        .then((allEntries) => {
+          allEntries.forEach((entry) => {
+            if (entry.isDirectory) {
+              entry.removeRecursively(
+                  function() {
+                    console.info(
+                        'Found directory. ',
+                        'Perhaps the extension had exited abnormally.', entry);
+                  },
+                  function() {
+                    console.error('Failed to remove a directory:', entry);
+                  });
+            } else {
+              entry.remove(
+                  function() {
+                    console.info(
+                        'Found a temporary file. ',
+                        'Perhaps the extension had exited abnormally.', entry);
+                  },
+                  function() {
+                    console.error('Failed to remove a temporary file:', entry);
+                  });
+            }
+          });
+        });
   }
 };

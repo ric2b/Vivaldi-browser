@@ -5,11 +5,9 @@
 #ifndef CHROME_ELF_BLACKLIST_BLACKLIST_H_
 #define CHROME_ELF_BLACKLIST_BLACKLIST_H_
 
-#if defined(_WIN64)
-#include "sandbox/win/src/sandbox_nt_types.h"
-#endif
-
 #include <stddef.h>
+
+#include <string>
 
 namespace blacklist {
 
@@ -18,10 +16,6 @@ const size_t kTroublesomeDllsMaxCount = 64;
 
 // The DLL blacklist.
 extern const wchar_t* g_troublesome_dlls[kTroublesomeDllsMaxCount];
-
-#if defined(_WIN64)
-extern NtMapViewOfSectionFunction g_nt_map_view_of_section_func;
-#endif
 
 // Attempts to leave a beacon in the current user's registry hive. If the
 // blacklist beacon doesn't say it is enabled or there are any other errors when
@@ -65,10 +59,18 @@ extern "C" void SuccessfullyBlocked(const wchar_t** blocked_dlls, int* size);
 // Record that the dll at the given index was blocked.
 extern "C" void BlockedDll(size_t blocked_index);
 
-// Initializes the DLL blacklist in the current process. This should be called
-// before any undesirable DLLs might be loaded. If |force| is set to true, then
-// initialization will take place even if a beacon is present. This is useful
-// for tests.
+// Legacy match function.
+// Returns the index of the blacklist found in |g_troublesome_dlls|, or -1.
+int DllMatch(const std::wstring& module_name);
+
+// New wrapper for above match function.
+// Returns true if a matching name is found in the legacy blacklist.
+// Note: |module_name| must be an ASCII encoded string.
+bool DllMatch(const std::string& module_name);
+
+// Initializes the deprecated DLL blacklist in the current process.
+// - If |force| is set to true, then initialization will take place even if a
+//   beacon is present. This is useful for tests.
 bool Initialize(bool force);
 
 }  // namespace blacklist

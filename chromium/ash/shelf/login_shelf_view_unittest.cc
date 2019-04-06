@@ -12,6 +12,8 @@
 #include "ash/lock_screen_action/test_lock_screen_action_background_controller.h"
 #include "ash/login/mock_login_screen_client.h"
 #include "ash/login/ui/login_test_base.h"
+#include "ash/login/ui/views_utils.h"
+#include "ash/public/interfaces/kiosk_app_info.mojom.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/session/test_session_controller_client.h"
@@ -19,7 +21,7 @@
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/shutdown_controller.h"
-#include "ash/system/tray/system_tray.h"
+#include "ash/system/status_area_widget.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/tray_action/test_tray_action_client.h"
@@ -36,25 +38,14 @@ using session_manager::SessionState;
 namespace ash {
 namespace {
 
-// Returns true if |view| or any child of it has focus.
-bool HasFocusInAnyChildView(views::View* view) {
-  if (view->HasFocus())
-    return true;
-  for (int i = 0; i < view->child_count(); ++i) {
-    if (HasFocusInAnyChildView(view->child_at(i)))
-      return true;
-  }
-  return false;
-}
-
 void ExpectFocused(views::View* view) {
   EXPECT_TRUE(view->GetWidget()->IsActive());
-  EXPECT_TRUE(HasFocusInAnyChildView(view));
+  EXPECT_TRUE(login_views_utils::HasFocusInAnyChildView(view));
 }
 
 void ExpectNotFocused(views::View* view) {
   EXPECT_FALSE(view->GetWidget()->IsActive());
-  EXPECT_FALSE(HasFocusInAnyChildView(view));
+  EXPECT_FALSE(login_views_utils::HasFocusInAnyChildView(view));
 }
 
 class LoginShelfViewTest : public LoginTestBase {
@@ -70,7 +61,7 @@ class LoginShelfViewTest : public LoginTestBase {
         &action_background_controller_factory_);
 
     LoginTestBase::SetUp();
-    login_shelf_view_ = GetPrimaryShelf()->GetLoginShelfViewForTesting();
+    login_shelf_view_ = GetPrimaryShelf()->shelf_widget()->login_shelf_view();
     Shell::Get()->tray_action()->SetClient(
         tray_action_client_.CreateInterfacePtrAndBind(),
         mojom::TrayActionState::kNotAvailable);
@@ -121,6 +112,11 @@ class LoginShelfViewTest : public LoginTestBase {
         visible_button_count++;
     }
     return visible_button_count == ids.size();
+  }
+
+  // Check whether the button is enabled.
+  bool IsButtonEnabled(LoginShelfView::ButtonId id) {
+    return login_shelf_view_->GetViewByID(id)->enabled();
   }
 
   TestTrayActionClient tray_action_client_;
@@ -256,6 +252,64 @@ TEST_F(LoginShelfViewTest, ShouldUpdateUiAfterLockScreenNoteState) {
       ShowsShelfButtons({LoginShelfView::kShutdown, LoginShelfView::kSignOut}));
 }
 
+TEST_F(LoginShelfViewTest, ShouldUpdateUiAfterKioskAppsLoaded) {
+  NotifySessionStateChanged(SessionState::LOGIN_PRIMARY);
+  EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown,
+                                 LoginShelfView::kBrowseAsGuest,
+                                 LoginShelfView::kAddUser}));
+
+  std::vector<mojom::KioskAppInfoPtr> kiosk_apps;
+  kiosk_apps.push_back(mojom::KioskAppInfo::New());
+  kiosk_apps.push_back(mojom::KioskAppInfo::New());
+  login_shelf_view_->SetKioskApps(std::move(kiosk_apps));
+  EXPECT_TRUE(ShowsShelfButtons(
+      {LoginShelfView::kShutdown, LoginShelfView::kBrowseAsGuest,
+       LoginShelfView::kAddUser, LoginShelfView::kApps}));
+
+  login_shelf_view_->SetKioskApps(std::vector<mojom::KioskAppInfoPtr>());
+  EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown,
+                                 LoginShelfView::kBrowseAsGuest,
+                                 LoginShelfView::kAddUser}));
+}
+
+TEST_F(LoginShelfViewTest, SetAllowLoginByGuest) {
+  NotifySessionStateChanged(SessionState::LOGIN_PRIMARY);
+  EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown,
+                                 LoginShelfView::kBrowseAsGuest,
+                                 LoginShelfView::kAddUser}));
+
+  // SetAllowLoginAsGuest(false) always hides the guest button.
+  login_shelf_view_->SetAllowLoginAsGuest(false /*allow_guest*/);
+  EXPECT_TRUE(
+      ShowsShelfButtons({LoginShelfView::kShutdown, LoginShelfView::kAddUser}));
+
+  // SetAllowLoginAsGuest(true) brings the guest button back.
+  login_shelf_view_->SetAllowLoginAsGuest(true /*allow_guest*/);
+  EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown,
+                                 LoginShelfView::kBrowseAsGuest,
+                                 LoginShelfView::kAddUser}));
+
+  // However, SetAllowLoginAsGuest(true) does not mean that the guest button is
+  // always visible.
+  login_shelf_view_->SetLoginDialogVisible(true);
+  EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown}));
+}
+
+TEST_F(LoginShelfViewTest, ShouldUpdateUiAfterDialogVisibilityChange) {
+  NotifySessionStateChanged(SessionState::LOGIN_PRIMARY);
+  EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown,
+                                 LoginShelfView::kBrowseAsGuest,
+                                 LoginShelfView::kAddUser}));
+
+  login_shelf_view_->SetLoginDialogVisible(true);
+  EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown}));
+
+  login_shelf_view_->SetLoginDialogVisible(false);
+  EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown,
+                                 LoginShelfView::kBrowseAsGuest,
+                                 LoginShelfView::kAddUser}));
+}
+
 TEST_F(LoginShelfViewTest, ClickShutdownButton) {
   Click(LoginShelfView::kShutdown);
   EXPECT_TRUE(Shell::Get()->lock_state_controller()->ShutdownRequested());
@@ -318,8 +372,7 @@ TEST_F(LoginShelfViewTest, TabGoesFromShelfToStatusAreaAndBackToShelf) {
   views::View* shelf =
       Shelf::ForWindow(window)->shelf_widget()->GetContentsView();
   views::View* status_area = RootWindowController::ForWindow(window)
-                                 ->GetSystemTray()
-                                 ->GetWidget()
+                                 ->GetStatusAreaWidget()
                                  ->GetContentsView();
 
   // Give focus to the shelf. The tabbing between lock screen and shelf is
@@ -335,23 +388,43 @@ TEST_F(LoginShelfViewTest, TabGoesFromShelfToStatusAreaAndBackToShelf) {
       login_shelf_view_->GetViewByID(LoginShelfView::kShutdown)->HasFocus());
 
   // Focus from the first button to the second button.
-  GetEventGenerator().PressKey(ui::KeyboardCode::VKEY_TAB, 0);
+  GetEventGenerator()->PressKey(ui::KeyboardCode::VKEY_TAB, 0);
   ExpectFocused(shelf);
   ExpectNotFocused(status_area);
   EXPECT_TRUE(
       login_shelf_view_->GetViewByID(LoginShelfView::kSignOut)->HasFocus());
 
   // Focus from the second button to the status area.
-  GetEventGenerator().PressKey(ui::KeyboardCode::VKEY_TAB, 0);
+  GetEventGenerator()->PressKey(ui::KeyboardCode::VKEY_TAB, 0);
   ExpectNotFocused(shelf);
   ExpectFocused(status_area);
 
   // A single shift+tab brings focus back to the second shelf button.
-  GetEventGenerator().PressKey(ui::KeyboardCode::VKEY_TAB, ui::EF_SHIFT_DOWN);
+  GetEventGenerator()->PressKey(ui::KeyboardCode::VKEY_TAB, ui::EF_SHIFT_DOWN);
   ExpectFocused(shelf);
   ExpectNotFocused(status_area);
   EXPECT_TRUE(
       login_shelf_view_->GetViewByID(LoginShelfView::kSignOut)->HasFocus());
+}
+
+TEST_F(LoginShelfViewTest, ShouldUpdateUiAfterAddButtonStatusChange) {
+  NotifySessionStateChanged(SessionState::LOGIN_PRIMARY);
+  EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown,
+                                 LoginShelfView::kBrowseAsGuest,
+                                 LoginShelfView::kAddUser}));
+  EXPECT_TRUE(IsButtonEnabled(LoginShelfView::kAddUser));
+
+  login_shelf_view_->SetAddUserButtonEnabled(false /*enable_add_user*/);
+  EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown,
+                                 LoginShelfView::kBrowseAsGuest,
+                                 LoginShelfView::kAddUser}));
+  EXPECT_FALSE(IsButtonEnabled(LoginShelfView::kAddUser));
+
+  login_shelf_view_->SetAddUserButtonEnabled(true /*enable_add_user*/);
+  EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown,
+                                 LoginShelfView::kBrowseAsGuest,
+                                 LoginShelfView::kAddUser}));
+  EXPECT_TRUE(IsButtonEnabled(LoginShelfView::kAddUser));
 }
 
 }  // namespace

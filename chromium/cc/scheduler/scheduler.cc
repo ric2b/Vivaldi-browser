@@ -8,7 +8,6 @@
 
 #include "base/auto_reset.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
@@ -62,6 +61,10 @@ void Scheduler::Stop() {
 
 void Scheduler::SetNeedsImplSideInvalidation(
     bool needs_first_draw_on_activation) {
+  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("cc.debug.scheduler"),
+               "Scheduler::SetNeedsImplSideInvalidation",
+               "needs_first_draw_on_activation",
+               needs_first_draw_on_activation);
   state_machine_.SetNeedsImplSideInvalidation(needs_first_draw_on_activation);
   ProcessScheduledActions();
 }
@@ -243,16 +246,6 @@ void Scheduler::SetupNextBeginFrameIfNeeded() {
 
   bool needs_begin_frames = state_machine_.BeginFrameNeeded();
 
-  // The propagation of the needsBeginFrame signal to viz is inherently racy
-  // with issuing the next BeginFrame. In full-pipe mode, it is important we
-  // don't miss a BeginFrame because our needsBeginFrames signal propagated to
-  // viz too slowly. To avoid the race, we simply always request BeginFrames
-  // from viz.
-  if (settings_.wait_for_all_pipeline_stages_before_draw &&
-      state_machine_.HasInitializedLayerTreeFrameSink()) {
-    needs_begin_frames = true;
-  }
-
   if (needs_begin_frames && !observing_begin_frame_source_) {
     observing_begin_frame_source_ = true;
     if (begin_frame_source_)
@@ -325,13 +318,15 @@ void Scheduler::SetVideoNeedsBeginFrames(bool video_needs_begin_frames) {
   ProcessScheduledActions();
 }
 
-void Scheduler::OnDrawForLayerTreeFrameSink(bool resourceless_software_draw) {
+void Scheduler::OnDrawForLayerTreeFrameSink(bool resourceless_software_draw,
+                                            bool skip_draw) {
   DCHECK(settings_.using_synchronous_renderer_compositor);
   DCHECK_EQ(state_machine_.begin_impl_frame_state(),
             SchedulerStateMachine::BeginImplFrameState::IDLE);
   DCHECK(begin_impl_frame_deadline_task_.IsCancelled());
 
   state_machine_.SetResourcelessSoftwareDraw(resourceless_software_draw);
+  state_machine_.SetSkipDraw(skip_draw);
   state_machine_.OnBeginImplFrameDeadline();
   ProcessScheduledActions();
 
@@ -475,7 +470,7 @@ void Scheduler::BeginImplFrameWithDeadline(const viz::BeginFrameArgs& args) {
   if (ShouldRecoverMainLatency(adjusted_args, can_activate_before_deadline)) {
     TRACE_EVENT_INSTANT0("cc", "SkipBeginMainFrameToReduceLatency",
                          TRACE_EVENT_SCOPE_THREAD);
-    state_machine_.SetSkipNextBeginMainFrameToReduceLatency();
+    state_machine_.SetSkipNextBeginMainFrameToReduceLatency(true);
   } else if (ShouldRecoverImplLatency(adjusted_args,
                                       can_activate_before_deadline)) {
     TRACE_EVENT_INSTANT0("cc", "SkipBeginImplFrameToReduceLatency",
@@ -527,8 +522,7 @@ void Scheduler::SendBeginFrameAck(const viz::BeginFrameArgs& args,
   if (!did_submit) {
     DCHECK(!inside_scheduled_action_);
     base::AutoReset<bool> mark_inside(&inside_scheduled_action_, true);
-    client_->DidNotProduceFrame(
-        viz::BeginFrameAck(args.source_id, args.sequence_number, did_submit));
+    client_->DidNotProduceFrame(viz::BeginFrameAck(args, did_submit));
   }
 
   if (begin_frame_source_)
@@ -550,11 +544,18 @@ void Scheduler::BeginImplFrame(const viz::BeginFrameArgs& args,
     base::AutoReset<bool> mark_inside(&inside_scheduled_action_, true);
 
     begin_impl_frame_tracker_.Start(args);
-    state_machine_.OnBeginImplFrame(args.source_id, args.sequence_number);
+    state_machine_.OnBeginImplFrame(args.source_id, args.sequence_number,
+                                    args.animate_only);
     devtools_instrumentation::DidBeginFrame(layer_tree_host_id_);
     compositor_timing_history_->WillBeginImplFrame(
         state_machine_.NewActiveTreeLikely(), args.frame_time, args.type, now);
-    client_->WillBeginImplFrame(begin_impl_frame_tracker_.Current());
+    bool has_damage =
+        client_->WillBeginImplFrame(begin_impl_frame_tracker_.Current());
+
+    if (!has_damage) {
+      state_machine_.AbortDraw();
+      compositor_timing_history_->DrawAborted();
+    }
   }
 
   ProcessScheduledActions();
@@ -658,7 +659,7 @@ void Scheduler::DrawIfPossible() {
       begin_impl_frame_tracker_.DangerousMethodCurrentOrLast().frame_time,
       client_->CompositedAnimationsCount(),
       client_->MainThreadAnimationsCount(),
-      client_->MainThreadCompositableAnimationsCount());
+      client_->CurrentFrameHadRAF(), client_->NextFrameHasPendingRAF());
 }
 
 void Scheduler::DrawForced() {
@@ -676,7 +677,7 @@ void Scheduler::DrawForced() {
       begin_impl_frame_tracker_.DangerousMethodCurrentOrLast().frame_time,
       client_->CompositedAnimationsCount(),
       client_->MainThreadAnimationsCount(),
-      client_->MainThreadCompositableAnimationsCount());
+      client_->CurrentFrameHadRAF(), client_->NextFrameHasPendingRAF());
 }
 
 void Scheduler::SetDeferCommits(bool defer_commits) {
@@ -774,7 +775,8 @@ void Scheduler::ProcessScheduledActions() {
         break;
       case SchedulerStateMachine::Action::INVALIDATE_LAYER_TREE_FRAME_SINK: {
         state_machine_.WillInvalidateLayerTreeFrameSink();
-        client_->ScheduledActionInvalidateLayerTreeFrameSink();
+        client_->ScheduledActionInvalidateLayerTreeFrameSink(
+            state_machine_.RedrawPending());
         break;
       }
     }
@@ -961,12 +963,14 @@ bool Scheduler::IsBeginMainFrameSentOrStarted() const {
 }
 
 viz::BeginFrameAck Scheduler::CurrentBeginFrameAckForActiveTree() const {
-  return viz::BeginFrameAck(begin_main_frame_args_.source_id,
-                            begin_main_frame_args_.sequence_number, true);
+  return viz::BeginFrameAck(begin_main_frame_args_, true);
 }
 
-void Scheduler::ClearHistoryOnNavigation() {
-  compositor_timing_history_->ClearHistoryOnNavigation();
+void Scheduler::ClearHistory() {
+  // Ensure we reset decisions based on history from the previous navigation.
+  state_machine_.SetSkipNextBeginMainFrameToReduceLatency(false);
+  compositor_timing_history_->ClearHistory();
+  ProcessScheduledActions();
 }
 
 }  // namespace cc

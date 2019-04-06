@@ -9,12 +9,13 @@
 #include "base/feature_list.h"
 #include "chrome/browser/profiles/off_the_record_profile_impl.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/common/chrome_features.h"
 #include "components/content_settings/core/browser/content_settings_pref_provider.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/browser_thread.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/extension_service.h"
@@ -79,18 +80,17 @@ scoped_refptr<RefcountedKeyedService>
     GetForProfile(profile->GetOriginalProfile());
   }
 
-  bool store_last_modified = base::FeatureList::IsEnabled(features::kTabsInCbd);
-
   scoped_refptr<HostContentSettingsMap> settings_map(new HostContentSettingsMap(
       profile->GetPrefs(),
       profile->GetProfileType() == Profile::INCOGNITO_PROFILE,
       profile->GetProfileType() == Profile::GUEST_PROFILE,
-      store_last_modified));
+      /*store_last_modified=*/true));
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // These must be registered before before the HostSettings are passed over to
   // the IOThread.  Simplest to do this on construction.
-  ExtensionService::RegisterContentSettings(settings_map.get(), profile);
+  extensions::ExtensionService::RegisterContentSettings(settings_map.get(),
+                                                        profile);
 #endif // BUILDFLAG(ENABLE_EXTENSIONS)
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   SupervisedUserSettingsService* supervised_service =
@@ -105,19 +105,21 @@ scoped_refptr<RefcountedKeyedService>
 #endif // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #if defined(OS_ANDROID)
+  if (profile->GetProfileType() != Profile::INCOGNITO_PROFILE) {
     auto channels_provider =
-        base::MakeUnique<NotificationChannelsProviderAndroid>();
-    if (base::FeatureList::IsEnabled(features::kSiteNotificationChannels)) {
-      channels_provider->MigrateToChannelsIfNecessary(
-          profile->GetPrefs(), settings_map->GetPrefProvider());
-      settings_map->RegisterUserModifiableProvider(
-          HostContentSettingsMap::NOTIFICATION_ANDROID_PROVIDER,
-          std::move(channels_provider));
-    } else {
-      // TODO(crbug.com/758553): Remove this unmigration code and the feature
-      // flag once we're confident a kill-switch is no longer necessary (M63?).
-      channels_provider->UnmigrateChannelsIfNecessary(
-          profile->GetPrefs(), settings_map->GetPrefProvider());
+        std::make_unique<NotificationChannelsProviderAndroid>();
+
+    channels_provider->MigrateToChannelsIfNecessary(
+        profile->GetPrefs(), settings_map->GetPrefProvider());
+
+    // Clear blocked channels *after* migrating in case the pref provider
+    // contained any erroneously-created channels that need deleting.
+    channels_provider->ClearBlockedChannelsIfNecessary(
+        profile->GetPrefs(), TemplateURLServiceFactory::GetForProfile(profile));
+
+    settings_map->RegisterUserModifiableProvider(
+        HostContentSettingsMap::NOTIFICATION_ANDROID_PROVIDER,
+        std::move(channels_provider));
   }
 #endif  // defined (OS_ANDROID)
   return settings_map;

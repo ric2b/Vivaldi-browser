@@ -91,14 +91,19 @@
   return NO;
 }
 
-- (void)formatValueForEditorField:(EditorField*)field {
-  if (field.autofillUIType == AutofillUITypeProfileHomePhoneWholeNumber) {
+- (BOOL)shouldFormatValueForAutofillUIType:(AutofillUIType)type {
+  return (type == AutofillUITypeProfileHomePhoneWholeNumber);
+}
+
+- (NSString*)formatValue:(NSString*)value autofillUIType:(AutofillUIType)type {
+  if (type == AutofillUITypeProfileHomePhoneWholeNumber) {
     const std::string countryCode =
         autofill::AutofillCountry::CountryCodeForLocale(
             _paymentRequest->GetApplicationLocale());
-    field.value = base::SysUTF8ToNSString(autofill::i18n::FormatPhoneForDisplay(
-        base::SysNSStringToUTF8(field.value), countryCode));
+    return base::SysUTF8ToNSString(autofill::i18n::FormatPhoneForDisplay(
+        base::SysNSStringToUTF8(value), countryCode));
   }
+  return nil;
 }
 
 - (UIImage*)iconIdentifyingEditorField:(EditorField*)field {
@@ -136,7 +141,7 @@
     }
   } else if (field.isRequired) {
     return l10n_util::GetNSString(
-        IDS_PAYMENTS_FIELD_REQUIRED_VALIDATION_MESSAGE);
+        IDS_PREF_EDIT_DIALOG_FIELD_REQUIRED_VALIDATION_MESSAGE);
   }
   return nil;
 }

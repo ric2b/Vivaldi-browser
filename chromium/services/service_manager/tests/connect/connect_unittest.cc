@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/guid.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
 #include "base/test/gtest_util.h"
@@ -19,7 +18,7 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/service_test.h"
-#include "services/service_manager/public/interfaces/service_manager.mojom.h"
+#include "services/service_manager/public/mojom/service_manager.mojom.h"
 #include "services/service_manager/tests/connect/connect_test.mojom.h"
 #include "services/service_manager/tests/util.h"
 

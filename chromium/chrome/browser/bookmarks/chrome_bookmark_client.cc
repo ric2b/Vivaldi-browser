@@ -5,7 +5,6 @@
 #include "chrome/browser/bookmarks/chrome_bookmark_client.h"
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/user_metrics.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -18,7 +17,8 @@
 #include "components/favicon/core/favicon_util.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/url_database.h"
-#include "components/offline_pages/features/features.h"
+#include "components/offline_pages/buildflags/buildflags.h"
+#include "components/sync_bookmarks/bookmark_sync_service.h"
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
 #include "chrome/browser/offline_pages/offline_page_bookmark_observer.h"
@@ -26,8 +26,11 @@
 
 ChromeBookmarkClient::ChromeBookmarkClient(
     Profile* profile,
-    bookmarks::ManagedBookmarkService* managed_bookmark_service)
-    : profile_(profile), managed_bookmark_service_(managed_bookmark_service) {}
+    bookmarks::ManagedBookmarkService* managed_bookmark_service,
+    sync_bookmarks::BookmarkSyncService* bookmark_sync_service)
+    : profile_(profile),
+      managed_bookmark_service_(managed_bookmark_service),
+      bookmark_sync_service_(bookmark_sync_service) {}
 
 ChromeBookmarkClient::~ChromeBookmarkClient() {
 }
@@ -35,10 +38,11 @@ ChromeBookmarkClient::~ChromeBookmarkClient() {
 void ChromeBookmarkClient::Init(bookmarks::BookmarkModel* model) {
   if (managed_bookmark_service_)
     managed_bookmark_service_->BookmarkModelCreated(model);
+  model_ = model;
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
   offline_page_observer_ =
-      base::MakeUnique<offline_pages::OfflinePageBookmarkObserver>(profile_);
+      std::make_unique<offline_pages::OfflinePageBookmarkObserver>(profile_);
   model->AddObserver(offline_page_observer_.get());
 #endif
 }
@@ -127,4 +131,15 @@ bool ChromeBookmarkClient::CanBeEditedByUser(
   return !managed_bookmark_service_
              ? true
              : managed_bookmark_service_->CanBeEditedByUser(node);
+}
+
+std::string ChromeBookmarkClient::EncodeBookmarkSyncMetadata() {
+  return bookmark_sync_service_->EncodeBookmarkSyncMetadata();
+}
+
+void ChromeBookmarkClient::DecodeBookmarkSyncMetadata(
+    const std::string& metadata_str,
+    const base::RepeatingClosure& schedule_save_closure) {
+  bookmark_sync_service_->DecodeBookmarkSyncMetadata(
+      metadata_str, schedule_save_closure, model_);
 }

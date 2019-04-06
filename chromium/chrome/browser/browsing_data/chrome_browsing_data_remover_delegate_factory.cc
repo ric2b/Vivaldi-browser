@@ -4,7 +4,6 @@
 
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate_factory.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
@@ -21,7 +20,7 @@
 #include "chrome/browser/web_data_service_factory.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/browser_context.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/offline_pages/offline_page_model_factory.h"

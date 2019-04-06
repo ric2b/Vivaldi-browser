@@ -26,7 +26,6 @@ namespace dom_distiller {
 namespace {
 
 const char* kArticlePath = "/og_article.html";
-const char* kNonArticlePath = "/non_og_article.html";
 
 class DomDistillerDistillablePageUtilsTest : public content::ContentBrowserTest,
                                              content::WebContentsObserver {
@@ -60,10 +59,10 @@ class DomDistillerDistillablePageUtilsTest : public content::ContentBrowserTest,
     base::FilePath pak_file;
     base::FilePath pak_dir;
 #if defined(OS_ANDROID)
-    CHECK(PathService::Get(base::DIR_ANDROID_APP_DATA, &pak_dir));
+    CHECK(base::PathService::Get(base::DIR_ANDROID_APP_DATA, &pak_dir));
     pak_dir = pak_dir.Append(FILE_PATH_LITERAL("paks"));
 #else
-    PathService::Get(base::DIR_MODULE, &pak_dir);
+    base::PathService::Get(base::DIR_MODULE, &pak_dir);
 #endif  // OS_ANDROID
     pak_file =
         pak_dir.Append(FILE_PATH_LITERAL("components_tests_resources.pak"));
@@ -73,7 +72,7 @@ class DomDistillerDistillablePageUtilsTest : public content::ContentBrowserTest,
 
   void SetUpTestServer() {
     base::FilePath path;
-    PathService::Get(base::DIR_SOURCE_ROOT, &path);
+    base::PathService::Get(base::DIR_SOURCE_ROOT, &path);
     path = path.AppendASCII("components/test/data/dom_distiller");
     embedded_test_server()->ServeFilesFromDirectory(path);
     ASSERT_TRUE(embedded_test_server()->Start());
@@ -111,25 +110,6 @@ class ResultHolder {
 };
 
 }  // namespace
-
-IN_PROC_BROWSER_TEST_F(DomDistillerDistillablePageUtilsTest, TestIsOGArticle) {
-  LoadURL(kArticlePath);
-  base::RunLoop run_loop_;
-  ResultHolder holder(run_loop_.QuitClosure());
-  IsOpenGraphArticle(shell()->web_contents(), holder.GetCallback());
-  run_loop_.Run();
-  ASSERT_TRUE(holder.GetResult());
-}
-
-IN_PROC_BROWSER_TEST_F(DomDistillerDistillablePageUtilsTest,
-                       TestIsNotOGArticle) {
-  LoadURL(kNonArticlePath);
-  base::RunLoop run_loop_;
-  ResultHolder holder(run_loop_.QuitClosure());
-  IsOpenGraphArticle(shell()->web_contents(), holder.GetCallback());
-  run_loop_.Run();
-  ASSERT_FALSE(holder.GetResult());
-}
 
 IN_PROC_BROWSER_TEST_F(DomDistillerDistillablePageUtilsTest,
                        TestIsDistillablePage) {

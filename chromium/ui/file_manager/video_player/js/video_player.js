@@ -24,10 +24,8 @@ function FullWindowVideoControls(
   this.casting = false;
 
   var currentWindow = chrome.app.window.current();
-  currentWindow.onFullscreened.addListener(
-      this.onFullScreenChanged.bind(this, true));
-  currentWindow.onRestored.addListener(
-      this.onFullScreenChanged.bind(this, false));
+  currentWindow.onFullscreened.addListener(this.onFullScreenChanged.bind(this));
+  currentWindow.onRestored.addListener(this.onFullScreenChanged.bind(this));
   document.addEventListener('keydown', function(e) {
     this.inactivityWatcher_.kick();
     switch (util.getKeyModifiers(e) + e.key) {
@@ -75,6 +73,9 @@ function FullWindowVideoControls(
         break;
       case 'j':
         this.bigSkip(false);
+        break;
+      case 'BrowserBack':
+        chrome.app.window.current().close();
         break;
       case 'MediaStop':
         // TODO: Define "Stop" behavior.
@@ -713,7 +714,8 @@ VideoPlayer.prototype.onCastButtonClicked_ = function() {
  * @private
  */
 VideoPlayer.prototype.updateCheckOnCastMenu_ = function() {
-  var menuItems = getRequiredElement('cast-menu').menuItems;
+  var menuItems =
+      /** @type {cr.ui.Menu} */ (getRequiredElement('cast-menu')).menuItems;
   for (var i = 0; i < menuItems.length; i++) {
     var item = menuItems[i];
     if (this.currentCast_ === null) {

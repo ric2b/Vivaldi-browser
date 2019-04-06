@@ -7,9 +7,10 @@
 #include <memory>
 #include <vector>
 
-#include "ash/ash_constants.h"
+#include "ash/public/cpp/ash_constants.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/shelf/shelf.h"
@@ -37,7 +38,9 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/easy_resize_window_targeter.h"
+#include "ui/wm/core/window_properties.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/public/activation_client.h"
 
@@ -144,6 +147,12 @@ bool MoveWindowToDisplay(aura::Window* window, int64_t display_id) {
     return false;
   }
   aura::Window* root = Shell::GetRootWindowForDisplayId(display_id);
+  // Update restore bounds to target root window.
+  if (window_state->HasRestoreBounds()) {
+    gfx::Rect restore_bounds = window_state->GetRestoreBoundsInParent();
+    ::wm::ConvertRectToScreen(root, &restore_bounds);
+    window_state->SetRestoreBoundsInScreen(restore_bounds);
+  }
   return root && MoveWindowToRoot(window, root);
 }
 
@@ -156,23 +165,10 @@ bool MoveWindowToEventRoot(aura::Window* window, const ui::Event& event) {
   return root && MoveWindowToRoot(window, root);
 }
 
-void SnapWindowToPixelBoundary(aura::Window* window) {
-  window->SetProperty(kSnapChildrenToPixelBoundary, true);
-  aura::Window* snapped_ancestor = window->parent();
-  while (snapped_ancestor) {
-    if (snapped_ancestor->GetProperty(kSnapChildrenToPixelBoundary)) {
-      ui::SnapLayerToPhysicalPixelBoundary(snapped_ancestor->layer(),
-                                           window->layer());
-      return;
-    }
-    snapped_ancestor = snapped_ancestor->parent();
-  }
-}
-
 void SetSnapsChildrenToPhysicalPixelBoundary(aura::Window* container) {
-  DCHECK(!container->GetProperty(kSnapChildrenToPixelBoundary))
+  DCHECK(!container->GetProperty(::wm::kSnapChildrenToPixelBoundary))
       << container->GetName();
-  container->SetProperty(kSnapChildrenToPixelBoundary, true);
+  container->SetProperty(::wm::kSnapChildrenToPixelBoundary, true);
 }
 
 int GetNonClientComponent(aura::Window* window, const gfx::Point& location) {
@@ -197,7 +193,7 @@ void SetChildrenUseExtendedHitRegionForWindow(aura::Window* window) {
 }
 
 void CloseWidgetForWindow(aura::Window* window) {
-  if (Shell::GetAshConfig() == Config::MASH &&
+  if (Shell::GetAshConfig() == Config::MASH_DEPRECATED &&
       window->GetProperty(kWidgetCreationTypeKey) ==
           WidgetCreationType::FOR_CLIENT) {
     // NOTE: in the FOR_CLIENT case there is not necessarily a widget associated
@@ -215,7 +211,7 @@ void CloseWidgetForWindow(aura::Window* window) {
 void AddLimitedPreTargetHandlerForWindow(ui::EventHandler* handler,
                                          aura::Window* window) {
   // In mus AddPreTargetHandler() only works for windows created by this client.
-  DCHECK(Shell::GetAshConfig() != Config::MASH ||
+  DCHECK(Shell::GetAshConfig() != Config::MASH_DEPRECATED ||
          Shell::window_tree_client()->WasCreatedByThisClient(
              aura::WindowMus::Get(window)));
   window->AddPreTargetHandler(handler);
@@ -231,6 +227,10 @@ void InstallResizeHandleWindowTargeterForWindow(
     ImmersiveFullscreenController* immersive_fullscreen_controller) {
   window->SetEventTargeter(std::make_unique<ResizeHandleWindowTargeter>(
       window, immersive_fullscreen_controller));
+}
+
+bool IsDraggingTabs(const aura::Window* window) {
+  return window->GetProperty(ash::kIsDraggingTabsKey);
 }
 
 }  // namespace wm

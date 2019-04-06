@@ -6,6 +6,7 @@
 
 #include "ash/autoclick/common/autoclick_controller_common.h"
 #include "ash/autoclick/common/autoclick_controller_common_delegate.h"
+#include "ash/public/cpp/ash_constants.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ash/wm/root_window_finder.h"
@@ -25,8 +26,6 @@ namespace ash {
 base::TimeDelta AutoclickController::GetDefaultAutoclickDelay() {
   return base::TimeDelta::FromMilliseconds(int64_t{kDefaultAutoclickDelayMs});
 }
-
-const int AutoclickController::kDefaultAutoclickDelayMs = 1000;
 
 class AutoclickControllerImpl : public AutoclickController,
                                 public ui::EventHandler,
@@ -53,10 +52,10 @@ class AutoclickControllerImpl : public AutoclickController,
 
   // AutoclickControllerCommonDelegate overrides:
   views::Widget* CreateAutoclickRingWidget(
-      const gfx::Point& event_location) override;
+      const gfx::Point& point_in_screen) override;
   void UpdateAutoclickRingWidget(views::Widget* widget,
-                                 const gfx::Point& event_location) override;
-  void DoAutoclick(const gfx::Point& event_location,
+                                 const gfx::Point& point_in_screen) override;
+  void DoAutoclick(const gfx::Point& point_in_screen,
                    const int mouse_event_flags) override;
   void OnAutoclickCanceled() override;
 
@@ -99,12 +98,12 @@ void AutoclickControllerImpl::SetEnabled(bool enabled) {
     return;
   enabled_ = enabled;
 
-  if (enabled_) {
+  if (enabled_)
     Shell::Get()->AddPreTargetHandler(this);
-    autoclick_controller_common_->CancelAutoclick();
-  } else {
+  else
     Shell::Get()->RemovePreTargetHandler(this);
-  }
+
+  autoclick_controller_common_->CancelAutoclick();
 }
 
 bool AutoclickControllerImpl::IsEnabled() const {
@@ -136,8 +135,8 @@ void AutoclickControllerImpl::OnScrollEvent(ui::ScrollEvent* event) {
 }
 
 views::Widget* AutoclickControllerImpl::CreateAutoclickRingWidget(
-    const gfx::Point& event_location) {
-  aura::Window* target = ash::wm::GetRootWindowAt(event_location);
+    const gfx::Point& point_in_screen) {
+  aura::Window* target = ash::wm::GetRootWindowAt(point_in_screen);
   SetTapDownTarget(target);
   aura::Window* root_window = target->GetRootWindow();
   widget_.reset(new views::Widget);
@@ -146,7 +145,6 @@ views::Widget* AutoclickControllerImpl::CreateAutoclickRingWidget(
   params.accept_events = false;
   params.activatable = views::Widget::InitParams::ACTIVATABLE_NO;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params.context = root_window;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
   params.parent =
       Shell::GetContainer(root_window, kShellWindowId_OverlayContainer);
@@ -157,8 +155,8 @@ views::Widget* AutoclickControllerImpl::CreateAutoclickRingWidget(
 
 void AutoclickControllerImpl::UpdateAutoclickRingWidget(
     views::Widget* widget,
-    const gfx::Point& event_location) {
-  aura::Window* target = ash::wm::GetRootWindowAt(event_location);
+    const gfx::Point& point_in_screen) {
+  aura::Window* target = ash::wm::GetRootWindowAt(point_in_screen);
   SetTapDownTarget(target);
   aura::Window* root_window = target->GetRootWindow();
   if (widget->GetNativeView()->GetRootWindow() != root_window) {
@@ -168,22 +166,22 @@ void AutoclickControllerImpl::UpdateAutoclickRingWidget(
   }
 }
 
-void AutoclickControllerImpl::DoAutoclick(const gfx::Point& event_location,
+void AutoclickControllerImpl::DoAutoclick(const gfx::Point& point_in_screen,
                                           const int mouse_event_flags) {
-  aura::Window* root_window = wm::GetRootWindowAt(event_location);
+  aura::Window* root_window = wm::GetRootWindowAt(point_in_screen);
   DCHECK(root_window) << "Root window not found while attempting autoclick.";
 
-  gfx::Point click_location(event_location);
-  ::wm::ConvertPointFromScreen(root_window, &click_location);
+  gfx::Point location_in_pixels(point_in_screen);
+  ::wm::ConvertPointFromScreen(root_window, &location_in_pixels);
   aura::WindowTreeHost* host = root_window->GetHost();
-  host->ConvertDIPToPixels(&click_location);
+  host->ConvertDIPToPixels(&location_in_pixels);
 
-  ui::MouseEvent press_event(ui::ET_MOUSE_PRESSED, click_location,
-                             click_location, ui::EventTimeForNow(),
+  ui::MouseEvent press_event(ui::ET_MOUSE_PRESSED, location_in_pixels,
+                             location_in_pixels, ui::EventTimeForNow(),
                              mouse_event_flags | ui::EF_LEFT_MOUSE_BUTTON,
                              ui::EF_LEFT_MOUSE_BUTTON);
-  ui::MouseEvent release_event(ui::ET_MOUSE_RELEASED, click_location,
-                               click_location, ui::EventTimeForNow(),
+  ui::MouseEvent release_event(ui::ET_MOUSE_RELEASED, location_in_pixels,
+                               location_in_pixels, ui::EventTimeForNow(),
                                mouse_event_flags | ui::EF_LEFT_MOUSE_BUTTON,
                                ui::EF_LEFT_MOUSE_BUTTON);
 
@@ -191,8 +189,6 @@ void AutoclickControllerImpl::DoAutoclick(const gfx::Point& event_location,
       host->event_sink()->OnEventFromSource(&press_event);
   if (!details.dispatcher_destroyed)
     details = host->event_sink()->OnEventFromSource(&release_event);
-  if (details.dispatcher_destroyed)
-    return;
 }
 
 void AutoclickControllerImpl::OnAutoclickCanceled() {

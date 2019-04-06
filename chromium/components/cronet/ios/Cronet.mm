@@ -13,9 +13,11 @@
 #include "base/mac/scoped_block.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "components/cronet/cronet_global_state.h"
 #include "components/cronet/ios/accept_languages_table.h"
 #include "components/cronet/ios/cronet_environment.h"
 #include "components/cronet/ios/cronet_metrics.h"
+#include "components/cronet/native/url_request.h"
 #include "components/cronet/url_request_context_config.h"
 #include "ios/net/crn_http_protocol_handler.h"
 #include "ios/net/empty_nsurlcache.h"
@@ -76,7 +78,7 @@ class TestCertVerifier : public net::CertVerifier {
   int Verify(const RequestParams& params,
              net::CRLSet* crl_set,
              net::CertVerifyResult* verify_result,
-             const net::CompletionCallback& callback,
+             net::CompletionOnceCallback callback,
              std::unique_ptr<Request>* out_req,
              const net::NetLogWithSource& net_log) override {
     net::Error result = net::OK;
@@ -367,17 +369,7 @@ class CronetHttpProtocolHandlerDelegate
 }
 
 + (void)start {
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    if (![NSThread isMainThread]) {
-      dispatch_sync(dispatch_get_main_queue(), ^(void) {
-        cronet::CronetEnvironment::Initialize();
-      });
-    } else {
-      cronet::CronetEnvironment::Initialize();
-    }
-  });
-
+  cronet::EnsureInitialized();
   [self startInternal];
 }
 
@@ -489,10 +481,18 @@ class CronetHttpProtocolHandlerDelegate
       base::SysNSStringToUTF8(hostResolverRulesForTesting));
 }
 
-// This is a non-public dummy method that prevents the linker from stripping out
-// the otherwise non-referenced methods from 'bidirectional_stream.cc'.
+// This is a private dummy method that prevents the linker from stripping out
+// the otherwise unreferenced methods from 'bidirectional_stream.cc'.
 + (void)preventStrippingCronetBidirectionalStream {
   bidirectional_stream_create(NULL, 0, 0);
+}
+
+// This is a private dummy method that prevents the linker from stripping out
+// the otherwise unreferenced modules from 'native'.
++ (void)preventStrippingNativeCronetModules {
+  Cronet_Buffer_Create();
+  Cronet_Engine_Create();
+  Cronet_UrlRequest_Create();
 }
 
 + (NSError*)createIllegalArgumentErrorWithArgument:(NSString*)argumentName
@@ -533,6 +533,12 @@ class CronetHttpProtocolHandlerDelegate
   return [NSError errorWithDomain:CRNCronetErrorDomain
                              code:errorCode
                          userInfo:userInfo];
+}
+
+// Used by tests to query the size of the map that contains metrics for
+// individual NSURLSession tasks.
++ (size_t)getMetricsMapSize {
+  return cronet::CronetMetricsDelegate::GetMetricsMapSize();
 }
 
 // Static class initializer.

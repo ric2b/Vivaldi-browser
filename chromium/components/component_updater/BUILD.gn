@@ -6,6 +6,8 @@ static_library("component_updater") {
   sources = [
     "component_installer.cc",
     "component_installer.h",
+    "component_updater_command_line_config_policy.cc",
+    "component_updater_command_line_config_policy.h",
     "component_updater_paths.cc",
     "component_updater_paths.h",
     "component_updater_service.cc",
@@ -21,12 +23,16 @@ static_library("component_updater") {
     "pref_names.h",
     "timer.cc",
     "timer.h",
+    "timer_update_scheduler.cc",
+    "timer_update_scheduler.h",
+    "update_scheduler.h",
   ]
 
   deps = [
     "//base",
     "//components/update_client",
     "//components/version_info",
+    "//third_party/boringssl:boringssl",
     "//ui/base",
     "//url",
   ]
@@ -74,5 +80,6 @@ source_set("unit_tests") {
     "//services/service_manager/public/cpp",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/boringssl:boringssl",
   ]
 }

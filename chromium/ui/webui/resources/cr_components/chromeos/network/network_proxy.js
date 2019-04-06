@@ -120,7 +120,7 @@ Polymer({
    * override the edited values.
    * @private {boolean}
    */
-  proxyModified_: false,
+  proxyIsUserModified_: false,
 
   /** @override */
   attached: function() {
@@ -132,14 +132,14 @@ Polymer({
    * is updated correctly.
    */
   reset: function() {
-    this.proxyModified_ = false;
+    this.proxyIsUserModified_ = false;
     this.proxy_ = this.createDefaultProxySettings_();
     this.updateProxy_();
   },
 
   /** @private */
   networkPropertiesChanged_: function() {
-    if (this.proxyModified_)
+    if (this.proxyIsUserModified_)
       return;  // Ignore update.
     this.updateProxy_();
   },
@@ -208,7 +208,8 @@ Polymer({
     // Set the Web Proxy Auto Discovery URL.
     var ipv4 =
         CrOnc.getIPConfigForType(this.networkProperties, CrOnc.IPType.IPV4);
-    this.WPAD_ = (ipv4 && ipv4.WebProxyAutoDiscoveryUrl) || '';
+    this.WPAD_ = (ipv4 && ipv4.WebProxyAutoDiscoveryUrl) ||
+        this.i18n('networkProxyWpadNone');
 
     this.setProxyAsync_(proxy);
   },
@@ -221,13 +222,13 @@ Polymer({
     // Set this.proxy_ after dom-repeat has been stamped.
     this.async(() => {
       this.proxy_ = proxy;
-      this.proxyModified_ = false;
+      this.proxyIsUserModified_ = false;
     });
   },
 
   /** @private */
   useSameProxyChanged_: function() {
-    this.proxyModified_ = true;
+    this.proxyIsUserModified_ = true;
   },
 
   /**
@@ -283,7 +284,7 @@ Polymer({
         return;
     }
     this.fire('proxy-change', {field: 'ProxySettings', value: proxy});
-    this.proxyModified_ = false;
+    this.proxyIsUserModified_ = false;
   },
 
   /**
@@ -296,10 +297,41 @@ Polymer({
     var type = /** @type {chrome.networkingPrivate.ProxySettingsType} */ (
         target.value);
     this.set('proxy_.Type', type);
-    if (type == CrOnc.ProxySettingsType.MANUAL)
-      this.proxyModified_ = true;
-    else
+    var proxyTypeChangeIsReady;
+    var elementToFocus;
+    switch (type) {
+      case CrOnc.ProxySettingsType.DIRECT:
+      case CrOnc.ProxySettingsType.WPAD:
+        // No addtional values are required, send the type change.
+        proxyTypeChangeIsReady = true;
+        break;
+      case CrOnc.ProxySettingsType.PAC:
+        elementToFocus = this.$$('#pacInput');
+        // If a PAC is already defined, send the type change now, otherwise wait
+        // until the user provides a PAC value.
+        proxyTypeChangeIsReady = !!this.proxy_.PAC;
+        break;
+      case CrOnc.ProxySettingsType.MANUAL:
+        // Manual proxy configuration includes multiple input fields, so wait
+        // until the 'send' button is clicked.
+        proxyTypeChangeIsReady = false;
+        elementToFocus = this.$$('#manualProxy network-proxy-input');
+        break;
+    }
+
+    // If the new proxy type is fully configured, send it, otherwise set
+    // |proxyIsUserModified_| to true so that property updates do not
+    // overwrite user changes.
+    if (proxyTypeChangeIsReady)
       this.sendProxyChange_();
+    else
+      this.proxyIsUserModified_ = true;
+
+    if (elementToFocus) {
+      this.async(() => {
+        elementToFocus.focus();
+      });
+    }
   },
 
   /** @private */
@@ -309,22 +341,29 @@ Polymer({
 
   /** @private */
   onProxyInputChange_: function() {
-    this.proxyModified_ = true;
+    this.proxyIsUserModified_ = true;
   },
 
-  /**
-   * Event triggered when a proxy exclusion is added.
-   * @param {!Event} event The add proxy exclusion event.
-   * @private
-   */
-  onAddProxyExclusionTap_: function(event) {
+  /** @private */
+  onAddProxyExclusionTap_: function() {
     var value = this.$.proxyExclusion.value;
     if (!value)
       return;
     this.push('proxy_.ExcludeDomains', value);
     // Clear input.
     this.$.proxyExclusion.value = '';
-    this.proxyModified_ = true;
+    this.proxyIsUserModified_ = true;
+  },
+
+  /**
+   * @param {!Event} event
+   * @private
+   */
+  onAddProxyExclusionKeypress_: function(event) {
+    if (event.key != 'Enter')
+      return;
+    event.stopPropagation();
+    this.onAddProxyExclusionTap_();
   },
 
   /**
@@ -333,7 +372,7 @@ Polymer({
    * @private
    */
   onProxyExclusionsChange_: function(event) {
-    this.proxyModified_ = true;
+    this.proxyIsUserModified_ = true;
   },
 
   /** @private */
@@ -406,7 +445,7 @@ Polymer({
    * @private
    */
   isSaveManualProxyEnabled_: function() {
-    if (!this.proxyModified_)
+    if (!this.proxyIsUserModified_)
       return false;
     var manual = this.proxy_.Manual;
     var httpHost = this.get('HTTPProxy.Host', manual);

@@ -29,11 +29,13 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/button.h"
@@ -179,40 +181,45 @@ int GetActualDialogWidth() {
   return actual_width;
 }
 
-std::unique_ptr<views::View> CreateSheetHeaderView(
-    bool show_back_arrow,
-    const base::string16& title,
-    views::ButtonListener* listener) {
-  std::unique_ptr<views::View> container = std::make_unique<views::View>();
+void PopulateSheetHeaderView(bool show_back_arrow,
+                             std::unique_ptr<views::View> header_content_view,
+                             views::ButtonListener* listener,
+                             views::View* container,
+                             std::unique_ptr<views::Background> background) {
+  SkColor background_color = background->get_color();
+  container->SetBackground(std::move(background));
   views::GridLayout* layout = container->SetLayoutManager(
-      std::make_unique<views::GridLayout>(container.get()));
+      std::make_unique<views::GridLayout>(container));
 
-  constexpr int kHeaderTopVerticalInset = 14;
-  constexpr int kHeaderBottomVerticalInset = 8;
+  constexpr int kVerticalInset = 14;
   constexpr int kHeaderHorizontalInset = 16;
-  container->SetBorder(views::CreateEmptyBorder(
-      kHeaderTopVerticalInset, kHeaderHorizontalInset,
-      kHeaderBottomVerticalInset, kHeaderHorizontalInset));
+  container->SetBorder(
+      views::CreateEmptyBorder(kVerticalInset, kHeaderHorizontalInset,
+                               kVerticalInset, kHeaderHorizontalInset));
 
   views::ColumnSet* columns = layout->AddColumnSet(0);
   // A column for the optional back arrow.
-  columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER, 0,
-                     views::GridLayout::USE_PREF, 0, 0);
+  columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER,
+                     views::GridLayout::kFixedSize, views::GridLayout::USE_PREF,
+                     0, 0);
 
-  constexpr int kPaddingBetweenArrowAndTitle = 16;
+  constexpr int kPaddingBetweenArrowAndTitle = 8;
   if (show_back_arrow)
-    columns->AddPaddingColumn(0, kPaddingBetweenArrowAndTitle);
+    columns->AddPaddingColumn(views::GridLayout::kFixedSize,
+                              kPaddingBetweenArrowAndTitle);
 
   // A column for the title.
-  columns->AddColumn(views::GridLayout::FILL, views::GridLayout::CENTER, 1,
+  columns->AddColumn(views::GridLayout::FILL, views::GridLayout::CENTER, 1.0,
                      views::GridLayout::USE_PREF, 0, 0);
 
-  layout->StartRow(0, 0);
+  layout->StartRow(views::GridLayout::kFixedSize, 0);
   if (!show_back_arrow) {
     layout->SkipColumns(1);
   } else {
     views::ImageButton* back_arrow = views::CreateVectorImageButton(listener);
-    views::SetImageFromVectorIcon(back_arrow, vector_icons::kBackArrowIcon);
+    views::SetImageFromVectorIcon(
+        back_arrow, vector_icons::kBackArrowIcon,
+        GetForegroundColorForBackground(background_color));
     constexpr int kBackArrowSize = 16;
     back_arrow->SetSize(gfx::Size(kBackArrowSize, kBackArrowSize));
     back_arrow->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
@@ -223,14 +230,7 @@ std::unique_ptr<views::View> CreateSheetHeaderView(
     layout->AddView(back_arrow);
   }
 
-  views::Label* title_label =
-      new views::Label(title, views::style::CONTEXT_DIALOG_TITLE);
-  title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  title_label->set_id(static_cast<int>(DialogViewID::SHEET_TITLE));
-  title_label->SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
-  layout->AddView(title_label);
-
-  return container;
+  layout->AddView(header_content_view.release());
 }
 
 std::unique_ptr<views::ImageView> CreateInstrumentIconView(
@@ -241,12 +241,16 @@ std::unique_ptr<views::ImageView> CreateInstrumentIconView(
   std::unique_ptr<views::ImageView> icon_view =
       std::make_unique<views::ImageView>();
   icon_view->set_can_process_events_within_subtree(false);
-  if (img != nullptr) {
+  if (img) {
     icon_view->SetImage(*img);
+    // We support max 32x32 for other instrument icons.
+    icon_view->SetImageSize(gfx::Size(32, 32));
   } else {
     icon_view->SetImage(ui::ResourceBundle::GetSharedInstance()
                             .GetImageNamed(icon_resource_id)
                             .AsImageSkia());
+    // Images from |icon_resource_id| are 32x20 credit cards.
+    icon_view->SetImageSize(gfx::Size(32, 20));
   }
   icon_view->SetTooltipText(tooltip_text);
   icon_view->SetPaintToLayer();
@@ -407,6 +411,17 @@ std::unique_ptr<views::View> CreateShippingOptionLabel(
   }
 
   return container;
+}
+
+SkColor GetForegroundColorForBackground(SkColor background_color) {
+  constexpr float kLightForegroundRatioThreshold = 3;
+  if (background_color != 0 &&
+      color_utils::GetContrastRatio(background_color, SK_ColorWHITE) >=
+          kLightForegroundRatioThreshold) {
+    return SK_ColorWHITE;
+  }
+  views::Label label;
+  return label.enabled_color();
 }
 
 }  // namespace payments

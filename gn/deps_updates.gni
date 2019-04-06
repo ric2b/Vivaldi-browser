@@ -33,20 +33,18 @@ update_target("//components/url_formatter:url_formatter") {
   deps += [ "//base:base_static" ]
 }
 
-update_target("//third_party/WebKit/public:all_blink") {
+update_target("//third_party/blink/public:all_blink") {
   public_deps -= [
-    "//third_party/WebKit/Source/controller:webkit_unit_tests",
-    "//third_party/WebKit/Source/platform/heap:blink_heap_unittests",
-    "//third_party/WebKit/Source/platform:blink_platform_unittests",
-    "//third_party/WebKit/Source/platform/wtf:wtf_unittests",
+    "//third_party/blink/renderer/controller:webkit_unit_tests",
+    "//third_party/blink/renderer/platform/heap:blink_heap_unittests",
+    "//third_party/blink/renderer/platform:blink_platform_unittests",
+    "//third_party/blink/renderer/platform/wtf:wtf_unittests",
   ]
 }
 
 foreach(_target,
         [
           "//media/cast:testing_tools",
-          "//mojo/edk/system:tests",
-          "//mojo/edk/test:public_tests",
           "//v8:gn_all",
         ]) {
   update_target(_target) {

@@ -17,8 +17,7 @@ DEFINE_CERT_ERROR_ID(
     "Certificate.signatureAlgorithm != TBSCertificate.signature");
 
 DEFINE_CERT_ERROR_ID(kChainIsEmpty, "Chain is empty");
-DEFINE_CERT_ERROR_ID(kChainIsLength1,
-                     "TODO: Cannot verify a chain of length 1");
+DEFINE_CERT_ERROR_ID(kChainIsLength1, "Cannot verify a chain of length 1");
 DEFINE_CERT_ERROR_ID(kUnconsumedCriticalExtension,
                      "Unconsumed critical extension");
 DEFINE_CERT_ERROR_ID(
@@ -32,6 +31,8 @@ DEFINE_CERT_ERROR_ID(kMissingBasicConstraints,
                      "Does not have Basic Constraints");
 DEFINE_CERT_ERROR_ID(kNotPermittedByNameConstraints,
                      "Not permitted by name constraints");
+DEFINE_CERT_ERROR_ID(kTooManyNameConstraintChecks,
+                     "Too many name constraints checks");
 DEFINE_CERT_ERROR_ID(kSubjectDoesNotMatchIssuer,
                      "subject does not match issuer");
 DEFINE_CERT_ERROR_ID(kVerifySignedDataFailed, "VerifySignedData failed");

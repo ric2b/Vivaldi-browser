@@ -18,7 +18,7 @@ namespace libgtkui {
 namespace {
 
 // gtkheaderbar.c uses GTK_ICON_SIZE_MENU, which is 16px.
-const int kIconSize = 16;
+const int kNavButtonIconSize = 16;
 
 // Specified in GtkHeaderBar spec.
 const int kHeaderSpacing = 6;
@@ -102,7 +102,7 @@ ScopedGObject<GdkPixbuf> LoadNavButtonIcon(chrome::FrameButtonDisplayType type,
                                            int scale) {
   const char* icon_name = IconNameFromButtonType(type);
   ScopedGObject<GtkIconInfo> icon_info(gtk_icon_theme_lookup_icon_for_scale(
-      gtk_icon_theme_get_default(), icon_name, kIconSize, scale,
+      gtk_icon_theme_get_default(), icon_name, kNavButtonIconSize, scale,
       static_cast<GtkIconLookupFlags>(GTK_ICON_LOOKUP_USE_BUILTIN |
                                       GTK_ICON_LOOKUP_GENERIC_FALLBACK)));
   return ScopedGObject<GdkPixbuf>(gtk_icon_info_load_symbolic_for_context(
@@ -213,10 +213,27 @@ class NavButtonImageSource : public gfx::ImageSkiaSource {
     // is not scaled for the (unexpected) smaller button size, and the button's
     // edges appear cut off.  To fix this, manually set the background to scale
     // to the button size when it would have clipped.
-    if (GtkVersionCheck(3, 20)) {
+    //
+    // GTK's "contain" is unlike CSS's "contain".  In CSS, the image would only
+    // be downsized when it would have clipped.  In GTK, the image is always
+    // scaled to fit the drawing region (preserving aspect ratio).  Only add
+    // "contain" if clipping would occur.
+    cairo_pattern_t* cr_pattern = nullptr;
+    cairo_surface_t* cr_surface = nullptr;
+    gtk_style_context_get(button_context, button_state,
+                          GTK_STYLE_PROPERTY_BACKGROUND_IMAGE, &cr_pattern,
+                          nullptr);
+    if (cr_pattern &&
+        cairo_pattern_get_surface(cr_pattern, &cr_surface) ==
+            CAIRO_STATUS_SUCCESS &&
+        cr_surface &&
+        cairo_surface_get_type(cr_surface) == CAIRO_SURFACE_TYPE_IMAGE &&
+        (cairo_image_surface_get_width(cr_surface) > button_size_.width() ||
+         cairo_image_surface_get_height(cr_surface) > button_size_.height())) {
       ApplyCssToContext(button_context,
                         ".titlebutton { background-size: contain; }");
     }
+    cairo_pattern_destroy(cr_pattern);
 
     // Gtk doesn't support fractional scale factors, but chrome does.
     // Rendering the button background and border at a fractional

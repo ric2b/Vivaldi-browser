@@ -7,13 +7,12 @@
 #include <memory>
 
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
+#include "chrome/test/views/chrome_views_test_base.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/test/test_views_delegate.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/view.h"
 
@@ -41,7 +40,7 @@ constexpr TitleSubtitlePair kTitleSubtitlePairs[] = {
      "If you're happy and you know it, clap your hands!", true},
 };
 
-class HoverButtonTest : public views::ViewsTestBase {
+class HoverButtonTest : public ChromeViewsTestBase {
  public:
   HoverButtonTest() {}
 
@@ -49,15 +48,6 @@ class HoverButtonTest : public views::ViewsTestBase {
     auto icon = std::make_unique<views::View>();
     icon->SetPreferredSize(gfx::Size(16, 16));
     return icon;
-  }
-
-  // views::ViewsTestBase:
-  void SetUp() override {
-    ViewsTestBase::SetUp();
-    // HoverButton uses Chrome-specific layout constants, so make sure these
-    // exist for testing.
-    test_views_delegate()->set_layout_provider(
-        ChromeLayoutProvider::CreateLayoutProvider());
   }
 
  private:
@@ -99,7 +89,8 @@ TEST_F(HoverButtonTest, TooltipAndAccessibleName) {
     ui::AXNodeData data;
     button->GetAccessibleNodeData(&data);
     std::string accessible_name;
-    data.GetStringAttribute(ui::AX_ATTR_NAME, &accessible_name);
+    data.GetStringAttribute(ax::mojom::StringAttribute::kName,
+                            &accessible_name);
 
     // The accessible name should always be the title and subtitle concatenated
     // by \n.
@@ -141,7 +132,8 @@ TEST_F(HoverButtonTest, CustomTooltip) {
     ui::AXNodeData data;
     button->GetAccessibleNodeData(&data);
     std::string accessible_name;
-    data.GetStringAttribute(ui::AX_ATTR_NAME, &accessible_name);
+    data.GetStringAttribute(ax::mojom::StringAttribute::kName,
+                            &accessible_name);
 
     // The accessible name should always be the title and subtitle concatenated
     // by \n.
@@ -150,4 +142,28 @@ TEST_F(HoverButtonTest, CustomTooltip) {
         base::ASCIIToUTF16("\n"));
     EXPECT_EQ(expected, base::UTF8ToUTF16(accessible_name));
   }
+}
+
+// Tests that setting the style and the subtitle elide behavior don't lead to a
+// crash for a HoverButton with an empty subtitle.
+TEST_F(HoverButtonTest, SetStyleAndSubtitleElideBehavior) {
+  HoverButton button(nullptr, CreateIcon(), base::ASCIIToUTF16("Test title"),
+                     base::string16());
+  button.SetStyle(HoverButton::STYLE_PROMINENT);
+  button.SetSubtitleElideBehavior(gfx::ELIDE_EMAIL);
+}
+
+// Tests that a button with a subtitle and icons can be instantiated without a
+// crash.
+TEST_F(HoverButtonTest, CreateButtonWithSubtitleAndIcons) {
+  std::unique_ptr<views::View> primary_icon = CreateIcon();
+  views::View* primary_icon_raw = primary_icon.get();
+  std::unique_ptr<views::View> secondary_icon = CreateIcon();
+  views::View* secondary_icon_raw = secondary_icon.get();
+
+  HoverButton button(nullptr, std::move(primary_icon),
+                     base::ASCIIToUTF16("Title"),
+                     base::ASCIIToUTF16("Subtitle"), std::move(secondary_icon));
+  EXPECT_TRUE(button.Contains(primary_icon_raw));
+  EXPECT_TRUE(button.Contains(secondary_icon_raw));
 }

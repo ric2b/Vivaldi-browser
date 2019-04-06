@@ -1,5 +1,6 @@
 {
   "-- Template --": {
+    "intro": "Tests that policies map to prefs properly and whether the corresponding Chrome settings UI behaves properly, e.g. if a policy is managed, the UI should be readonly and an icon with a properly worded tooltip should show up.",
     "intro": "Top-level entries map a policy name to its test parameters, described below. The name of the top level entry should be of the form <policy name>[.suffix]. The optional suffix is used for defining multiple test cases for a single policy.",
 
     "os": ["List of operating systems that support this policy. Valid values:", "win", "linux", "mac", "chromeos", "android", "Defaults to empty if not specified."],
@@ -30,7 +31,25 @@
     "indicator_selector": "A CSS selector that locates the controlled setting indicator directly affected by the policy. This is appended to the selector 'span.controlled-setting-indicator'."
   },
 
+  "TabLifecyclesEnabled": {
+    "os": ["win"],
+    "official_only": true,
+    "test_policy": { "TabLifecyclesEnabled": false },
+    "pref_mappings": [
+      { "pref": "tab_lifecycles_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "OverrideSecurityRestrictionsOnInsecureOrigin": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "OverrideSecurityRestrictionsOnInsecureOrigin": ["http://example.com/"] },
+    "pref_mappings": [ { "pref": "unsafely_treat_insecure_origin_as_secure" } ]
+  },
+
   "UnsafelyTreatInsecureOriginAsSecure": {
+    "note": "This policy is deprecated.",
     "os": ["win", "linux", "mac"],
     "test_policy": { "UnsafelyTreatInsecureOriginAsSecure": ["http://example.com/"] },
     "pref_mappings": [ { "pref": "unsafely_treat_insecure_origin_as_secure" } ]
@@ -351,6 +370,16 @@
     ]
   },
 
+  "UserNativePrintersAllowed": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "UserNativePrintersAllowed": true
+    },
+    "pref_mappings": [
+      { "pref": "native_printing.user_native_printers_allowed" }
+    ]
+  },
+
   "SafeBrowsingEnabled": {
     "os": ["win", "linux", "mac", "chromeos"],
     "can_be_recommended": true,
@@ -439,17 +468,12 @@
     ]
   },
 
+  "AutofillAddressEnabled": {
+    "note": "The pref behind this policy is always set and therefore cannot be tested with this generic test"
+  },
+
   "AutofillCreditCardEnabled": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "can_be_recommended": true,
-    "test_policy": { "AutofillCreditCardEnabled": false },
-    "pref_mappings": [
-      { "pref": "autofill.credit_card_enabled",
-        "indicator_tests": [
-          { "policy": { "AutofillCreditCardEnabled": false } }
-        ]
-      }
-    ]
+    "note": "The pref behind this policy is always set and therefore cannot be tested with this generic test"
   },
 
   "DisabledPlugins.0": {
@@ -751,10 +775,14 @@
   },
 
   "EnableCommonNameFallbackForLocalAnchors": {
+    "note": "This policy is deprecated and removed since Chrome 66."
+  },
+
+  "EnableSymantecLegacyInfrastructure": {
     "os": ["win", "linux", "mac", "chromeos", "android"],
-    "test_policy": { "EnableCommonNameFallbackForLocalAnchors": true },
+    "test_policy": { "EnableSymantecLegacyInfrastructure": true },
     "pref_mappings": [
-      { "pref": "ssl.common_name_fallback_enabled_for_local_anchors",
+      { "pref": "ssl.enable_symantec_legacy_infrastructure",
         "local_state": true
       }
     ]
@@ -870,6 +898,18 @@
     "note": "There is a pref behind this setting, but due to the fact that tests override the default with a command-line flag on some trybots, this setting cannot be verified with the common test."
   },
 
+  "IsolateOriginsAndroid": {
+    "os": ["android"],
+    "test_policy": { "IsolateOriginsAndroid": "" },
+    "note": "There is a pref behind this setting, but due to the fact that tests override the default with a command-line flag on some trybots, this setting cannot be verified with the common test."
+  },
+
+  "SitePerProcessAndroid": {
+    "os": ["android"],
+    "test_policy": { "SitePerProcessAndroid": false },
+    "note": "There is a pref behind this setting, but due to the fact that tests override the default with a command-line flag on some trybots, this setting cannot be verified with the common test."
+  },
+
   "WebDriverOverridesIncompatiblePolicies": {
     "os": ["win", "linux", "mac"],
     "test_policy": { "WebDriverOverridesIncompatiblePolicies": true },
@@ -912,6 +952,7 @@
 
   "ThirdPartyBlockingEnabled": {
     "os": ["win"],
+    "official_only": true,
     "test_policy": { "ThirdPartyBlockingEnabled": false },
     "pref_mappings": [
       { "pref": "third_party_blocking_enabled",
@@ -979,7 +1020,7 @@
         },
         "bcdefghijklmnopabcdefghijklmnopa" : {
           "installation_mode": "force_installed",
-          "update_url": "http://example.com/update_url",
+          "update_url": "https://clients2.google.com/service/update2/crx",
           "allowed_permissions": ["downloads"]
         },
         "*": {
@@ -1012,11 +1053,26 @@
     "os": ["win", "linux", "mac", "chromeos"],
     "test_policy": { "DeveloperToolsDisabled": true },
     "pref_mappings": [
-      { "pref": "devtools.disabled",
+      { "pref": "devtools.availability",
         "indicator_test_url": "chrome://extensions-frame/",
         "indicator_selector": "#dev-toggle-disabled-by-policy-indicator",
         "indicator_tests": [
-          { "policy": { "DeveloperToolsDisabled": true } }
+          { "policy": { "DeveloperToolsDisabled": true },
+	    "value": 2 }
+        ]
+      }
+    ]
+  },
+
+  "DeveloperToolsAvailability": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DeveloperToolsAvailability": 2 },
+    "pref_mappings": [
+      { "pref": "devtools.availability",
+        "indicator_test_url": "chrome://extensions-frame/",
+        "indicator_selector": "#dev-toggle-disabled-by-policy-indicator",
+        "indicator_tests": [
+          { "policy": { "DeveloperToolsAvailability": 2 } }
         ]
       }
     ]
@@ -1520,6 +1576,14 @@
     ]
   },
 
+  "DefaultWebUsbGuardSetting": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "DefaultWebUsbGuardSetting": 2 },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.web_usb_guard" }
+    ]
+  },
+
   "AutoSelectCertificateForUrls": {
     "os": ["win", "linux", "mac", "chromeos"],
     "test_policy": { "AutoSelectCertificateForUrls": ["{'pattern':'https://example.com','filter':{'ISSUER':{'CN': 'issuer-name'}}}"] },
@@ -1744,6 +1808,26 @@
     ],
 
     "note": "TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "WebUsbAskForUrls": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "WebUsbAskForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_web_usb_ask_for_urls" }
+    ],
+
+    "note": "TODO(reillyg): Add indicator tests. TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
+  },
+
+  "WebUsbBlockedForUrls": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "WebUsbBlockedForUrls": ["[*.]google.com"] },
+    "pref_mappings": [
+      { "pref": "profile.managed_web_usb_blocked_for_urls" }
+    ],
+
+    "note": "TODO(reillyg): Add indicator tests. TODO(bartfab): Flag this with can_be_recommended when http://crbug.com/106682 is fixed."
   },
 
   "Disable3DAPIs": {
@@ -2015,6 +2099,7 @@
   },
 
   "SafeBrowsingExtendedReportingOptInAllowed": {
+    "note": "This policy is being deprecated.",
     "os": ["win", "linux", "mac", "chromeos"],
     "test_policy": { "SafeBrowsingExtendedReportingOptInAllowed": true },
     "pref_mappings": [
@@ -2086,7 +2171,7 @@
   },
 
   "HideWebStoreIcon": {
-    "os": ["win", "linux", "mac"],
+    "os": ["win", "linux", "mac", "chromeos"],
     "test_policy": { "HideWebStoreIcon": true },
     "pref_mappings": [
       { "pref": "hide_web_store_icon" }
@@ -2165,8 +2250,24 @@
     ]
   },
 
+  "MachineLevelUserCloudPolicyEnrollmentToken": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": {"MachineLevelUserCloudPolicyEnrollmentToken": ""},
+    "pref_mappings": [
+        { "pref": "policy.machine_level_user_cloud_policy_enrollment_token",
+          "local_state": true
+        }
+      ]
+  },
+
   "SSLVersionMin": {
-    "note": "This policy is retired, see https://crbug.com/487730."
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "SSLVersionMin": "tls1.1" },
+    "pref_mappings": [
+      { "pref": "ssl.version_min",
+        "local_state": true
+      }
+    ]
   },
 
   "SSLVersionFallbackMin": {
@@ -2188,6 +2289,22 @@
     "test_policy": { "CertificateTransparencyEnforcementDisabledForUrls": ["example.com"] },
     "pref_mappings": [
       { "pref": "certificate_transparency.excluded_hosts" }
+    ]
+  },
+
+  "CertificateTransparencyEnforcementDisabledForCas": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "CertificateTransparencyEnforcementDisabledForCas": ["sha256/AAAAAAAAAAAAAAAAAAAAAA=="] },
+    "pref_mappings": [
+      { "pref": "certificate_transparency.excluded_spkis" }
+    ]
+  },
+
+  "CertificateTransparencyEnforcementDisabledForLegacyCas": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "CertificateTransparencyEnforcementDisabledForLegacyCas": ["sha256/AAAAAAAAAAAAAAAAAAAAAA=="] },
+    "pref_mappings": [
+      { "pref": "certificate_transparency.excluded_legacy_spkis" }
     ]
   },
 
@@ -2265,6 +2382,16 @@
     ]
   },
 
+  "MediaRouterCastAllowAllIPs": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "MediaRouterCastAllowAllIPs": false },
+    "pref_mappings": [
+      { "pref": "media_router.cast_allow_all_ips",
+        "local_state": true
+      }
+    ]
+  },
+
   "NTPContentSuggestionsEnabled": {
     "os": ["android"],
     "test_policy": { "NTPContentSuggestionsEnabled": false },
@@ -2307,6 +2434,35 @@
     ]
   },
 
+  "RelaunchNotification": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "RelaunchNotification": 1 },
+    "pref_mappings": [
+      { "pref": "browser.relaunch_notification",
+        "local_state": true
+      }
+    ]
+  },
+
+  "RelaunchNotificationPeriod": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "RelaunchNotificationPeriod": 86400000 },
+    "pref_mappings": [
+      { "pref": "browser.relaunch_notification_period",
+        "local_state": true
+      }
+    ]
+  },
+
+  "PromotionalTabsEnabled": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "PromotionalTabsEnabled": false },
+    "pref_mappings": [
+      { "pref": "browser.promotional_tabs_enabled",
+        "local_state": true
+      }
+    ]
+  },
 
   "----- Chrome OS policies ------------------------------------------------": {},
 
@@ -2946,21 +3102,11 @@
   },
 
   "ArcBackupRestoreEnabled": {
-    "os": ["chromeos"],
-    "can_be_recommended": false,
-    "test_policy": { "ArcBackupRestoreEnabled": false },
-    "pref_mappings": [
-      { "pref": "arc.backup_restore.enabled" }
-    ]
+    "note": "This policy has been removed. See https://bugs.chromium.org/p/chromium/issues/detail?id=845962"
   },
 
   "ArcLocationServiceEnabled": {
-    "os": ["chromeos"],
-    "can_be_recommended": false,
-    "test_policy": { "ArcLocationServiceEnabled": false },
-    "pref_mappings": [
-      { "pref": "arc.location_service.enabled" }
-    ]
+    "note": "This policy has been removed. See https://bugs.chromium.org/p/chromium/issues/detail?id=845962"
   },
 
   "ReportArcStatusEnabled": {
@@ -2998,6 +3144,35 @@
     ]
   },
 
+  "AllowedUILocales": {
+    "os": ["chromeos"],
+    "can_be_recommended": false,
+    "test_policy": { "AllowedUILocales": ["en-US", "de"] },
+    "pref_mappings": [
+      { "pref": "intl.allowed_ui_locales" }
+    ]
+  },
+
+  "AllowedInputMethods": {
+    "os": ["chromeos"],
+    "can_be_recommended": false,
+    "test_policy": { "AllowedInputMethods": ["xkb:us::en"] },
+    "pref_mappings": [
+      { "pref": "settings.language.allowed_input_methods" }
+    ]
+  },
+
+  "UrlKeyedAnonymizedDataCollectionEnabled": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "UrlKeyedAnonymizedDataCollectionEnabled": false },
+    "pref_mappings": [
+      { "pref": "url_keyed_anonymized_data_collection.enabled",
+        "indicator_tests": [
+          { "policy": { "url_keyed_anonymized_data_collection.enabled": false } }
+        ]
+      }
+    ]
+  },
 
   "----- Chrome OS device policies ---------------------------------------": {},
 
@@ -3117,6 +3292,16 @@
   },
 
   "DeviceAutoUpdateP2PEnabled": {
+  },
+
+  "DeviceRollbackAllowedMilestones": {
+    "os": ["chromeos"],
+    "note": "Chrome OS device policy used by update_engine only, not used in Chrome."
+  },
+
+  "DeviceRollbackToTargetVersion": {
+    "os": ["chromeos"],
+    "note": "Chrome OS device policy used by update_engine only, not used in Chrome."
   },
 
   "DeviceTargetVersionPrefix": {
@@ -3469,7 +3654,152 @@
     ]
   },
 
+  "SafeBrowsingExtendedReportingEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "SafeBrowsingExtendedReportingEnabled": true },
+    "pref_mappings": [
+      { "pref": "safebrowsing.scout_reporting_enabled" }
+    ]
+  },
+
+
   "RestrictAccountsToPatterns": {
+  },
+
+  "PasswordProtectionWarningTrigger": {
+  },
+
+  "DeviceOffHours": {
+    "os": ["chromeos"],
+    "test_policy": {"DeviceOffHours": {"intervals": [{"start" : {"day_of_week" : 1, "time": 12840000}, "end": {"day_of_week" : 1, "time": 21720000}}], "timezone" : "GMT", "ignored_policy_proto_tags": [8, 3]}}
+  },
+
+  "DeviceKerberosEncryptionTypes": {
+    "os": ["chromeos"],
+    "note": "Chrome OS device policy used by authpolicyd only, not used in Chrome"
+  },
+
+  "DeviceUserPolicyLoopbackProcessingMode": {
+    "os": ["chromeos"],
+    "note": "Chrome OS device policy used by authpolicyd only, not used in Chrome"
+  },
+
+  "DeviceMachinePasswordChangeRate": {
+    "os": ["chromeos"],
+    "note": "Chrome OS device policy used by authpolicyd only, not used in Chrome"
+  },
+
+  "DeviceLoginScreenIsolateOrigins": {
+    "os": ["chromeos"],
+    "note": "Chrome OS device policy used by session_manager only"
+  },
+
+  "DeviceLoginScreenSitePerProcess": {
+    "os": ["chromeos"],
+    "note": "Chrome OS device policy used by session_manager only"
+  },
+
+  "VirtualMachinesAllowed": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "virtual_machines_allowed": false
+    },
+    "pref_mappings": [
+      { "pref": "cros.virtual_machines_allowed"}
+    ]
+  },
+
+  "DeviceSamlLoginAuthenticationType": {
+  },
+
+  "ChromeCleanupEnabled": {
+    "os": ["win"],
+    "test_policy": { "ChromeCleanupEnabled": true },
+    "pref_mappings": [
+      { "pref": "software_reporter.enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "ChromeCleanupReportingEnabled": {
+    "os": ["win"],
+    "test_policy": { "ChromeCleanupReportingEnabled": false },
+    "pref_mappings": [
+      { "pref": "software_reporter.reporting",
+        "local_state": true
+      }
+    ]
+  },
+
+  "SafeBrowsingWhitelistDomains": {
+  },
+
+  "PasswordProtectionLoginURLs": {
+  },
+
+  "PasswordProtectionChangePasswordURL": {
+  },
+
+  "AutoplayAllowed": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "AutoplayAllowed": false },
+    "pref_mappings": [
+      { "pref": "media.autoplay_allowed" }
+    ]
+  },
+
+  "AutoplayWhitelist": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": {
+      "AutoplayWhitelist": [
+        "https://mydomain.com", "https://test.mydomain.com"
+      ]
+    },
+    "pref_mappings": [
+      { "pref": "media.autoplay_whitelist" }
+    ]
+  },
+
+  "TabUnderAllowed": {
+    "note": "This policy is deprecated and removed since Chrome 68."
+  },
+
+  "ArcAppInstallEventLoggingEnabled": {
+    "os": ["chromeos"],
+    "test_policy": { "ArcAppInstallEventLoggingEnabled": true },
+    "pref_mappings": [
+      { "pref": "arc.app_install_event_logging_enabled" }
+    ]
+  },
+
+  "UsageTimeLimit": {
+    "os": ["chromeos"],
+    "test_policy": { "UsageTimeLimit": { "time_window_limit": { "entries": [{ "effective_day": "WEDNESDAY", "starts_at": { "hour": 21, "minute": 0 }, "ends_at": { "hour": 7, "minute": 30 }, "last_updated_millis": "1000000" }, { "effective_day": "SATURDAY", "starts_at": { "hour": 14, "minute": 0 }, "ends_at": { "hour": 16, "minute": 15 }, "last_updated_millis": "1400000" }]}, "time_usage_limit": { "monday": { "usage_quota_mins": 120, "last_updated_millis": "1200000" }, "thursday": { "usage_quota_mins": 15, "last_updated_millis": "1600000" }, "reset_at": { "hour": 6, "minute": 0 }}, "overrides": [{ "action": "UNLOCK", "created_at_millis": "1250000", "action_specific_data": { "duration_mins": 30 }}]}},
+    "can_be_recommended": false,
+    "pref_mappings": [{ "pref": "screen_time.limit" }]
+  },
+
+  "EnableSyncConsent": {
+    "os": ["chromeos"],
+    "test_policy": { "EnableSyncConsent": false },
+    "pref_mappings": [{ "pref": "sync_consent.enabled" }]
+  },
+
+  "ContextualSuggestionsEnabled": {
+    "os": ["android"],
+    "test_policy": { "ContextualSuggestionsEnabled": false },
+    "pref_mappings": [{ "pref": "contextual_suggestions.enabled" }]
+  },
+
+  "DeviceAutoUpdateTimeRestrictions": {
+    "os": ["chromeos"],
+    "test_policy": {"UpdateTimeRestrictions": [{"start" : {"day_of_week" : "Wednesday", "minutes": 30, "hours": 3}, "end": {"day_of_week" : "Thursday", "minutes": 20, "hours": 13}}, {"start": {"day_of_week": "Monday", "minutes": 45, "hours": 1}, "end": {"day_of_week": "Monday", "minutes": 50, "hours": 15}}]}
+  },
+
+  "DeviceUpdateStagingPercentOfFleetPerWeek": {
+    "os": ["chromeos"],
+    "note": "Chrome OS device policy used by update_engine only, not used in Chrome."
   },
 
   "----- Chrome Frame policies -------------------------------------------": {},
@@ -3498,8 +3828,28 @@
   "SkipMetadataCheck": {
   },
 
-  "DeviceOffHours": {
+  "ArcBackupRestoreServiceEnabled": {
     "os": ["chromeos"],
-    "test_policy": {"DeviceOffHours": {"intervals": [{"start" : {"day_of_week" : 1, "time": 12840000}, "end": {"day_of_week" : 1, "time": 21720000}}], "timezone" : "GMT", "ignored_policy_proto_tags": [8, 3]}}
+    "can_be_recommended": false,
+    "test_policy": { "ArcBackupRestoreServiceEnabled": 0 },
+    "pref_mappings": [
+      { "pref": "arc.backup_restore.enabled" }
+    ]
+  },
+
+  "ArcGoogleLocationServicesEnabled": {
+    "os": ["chromeos"],
+    "can_be_recommended": false,
+    "test_policy": { "ArcGoogleLocationServicesEnabled": 0 },
+    "pref_mappings": [
+      { "pref": "arc.location_service.enabled" }
+    ]
+  },
+
+  "SafeSitesFilterBehavior": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "can_be_recommended": false,
+    "test_policy": { "SafeSitesFilterBehavior": 0 },
+    "note": "pref_mappings cannot be tested here as the code where the pref will be registered is not yet ready."
   }
 }

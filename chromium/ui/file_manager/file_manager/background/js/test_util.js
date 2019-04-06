@@ -37,7 +37,31 @@ test.util.sync.getSelectedFiles = function(contentWindow) {
 };
 
 /**
+ * Returns the name of the item currently selected in the directory tree.
+ * Returns null if no entry is selected.
+ *
+ * @param {Window} contentWindow Window to be tested.
+ * @return {string} Name of selected tree item.
+ */
+test.util.sync.getSelectedTreeItem = function(contentWindow) {
+  var tree = contentWindow.document.querySelector('#directory-tree');
+  var items = tree.querySelectorAll('.tree-item');
+  var selected = [];
+  for (var i = 0; i < items.length; ++i) {
+    if (items[i].hasAttribute('selected')) {
+      return items[i].querySelector('.label').textContent;
+    }
+  }
+  console.error('Unexpected; no tree item currently selected');
+  return null;
+};
+
+
+/**
  * Returns an array with the files on the file manager's file list.
+ *
+ * TODO(sashab): Since we recycle DOM elements, this only returns the first ~11
+ * visible elements. crbug.com/850834.
  *
  * @param {Window} contentWindow Window to be tested.
  * @return {Array<Array<string>>} Array of rows.
@@ -95,7 +119,7 @@ test.util.sync.openFile = function(contentWindow, filename) {
 };
 
 /**
- * Selects a volume specified by its icon name
+ * Selects a volume specified by its icon name.
  *
  * @param {Window} contentWindow Window to be tested.
  * @param {string} iconName Name of the volume icon.
@@ -103,13 +127,29 @@ test.util.sync.openFile = function(contentWindow, filename) {
  *     whether the target is found and mousedown and click events are sent.
  */
 test.util.async.selectVolume = function(contentWindow, iconName, callback) {
-  var query = '#directory-tree [volume-type-icon=' + iconName + ']';
-  var driveQuery = '#directory-tree [volume-type-icon=drive]';
-  var isDriveSubVolume = iconName == 'drive_recent' ||
-                         iconName == 'drive_shared_with_me' ||
-                         iconName == 'drive_offline';
-  var preSelection = false;
-  var steps = {
+  const query = '#directory-tree [volume-type-icon=' + iconName + ']';
+  const isDriveSubVolume = iconName == 'drive_recent' ||
+      iconName == 'drive_shared_with_me' || iconName == 'drive_offline';
+  return test.util.async.selectInDirectoryTree(
+      contentWindow, query, isDriveSubVolume, callback);
+
+};
+
+/**
+ * Selects element in directory tree specified by query selector.
+ *
+ * @param {Window} contentWindow Window to be tested.
+ * @param {string} query to find the element to be selected on directory tree.
+ * @param {boolean} isDriveSubVolume set to true if query is targeted to a
+ *     sub-item of Drive.
+ * @param {function(boolean)} callback Callback function to notify the caller
+ *     whether the target is found and mousedown and click events are sent.
+ */
+test.util.async.selectInDirectoryTree = function(
+    contentWindow, query, isDriveSubVolume, callback) {
+  const driveQuery = '#directory-tree [volume-type-icon=drive]';
+  let preSelection = false;
+  const steps = {
     checkQuery: function() {
       if (contentWindow.document.querySelector(query)) {
         steps.sendEvents();
@@ -142,6 +182,108 @@ test.util.async.selectVolume = function(contentWindow, iconName, callback) {
 };
 
 /**
+ * Fakes pressing the down arrow until the given |folderName| is selected in the
+ * navigation tree.
+ *
+ * @param {Window} contentWindow Window to be tested.
+ * @param {string} folderName Name of the folder to be selected.
+ * @return {boolean} True if file got selected, false otherwise.
+ */
+test.util.sync.selectFolderInTree = function(contentWindow, folderName) {
+  var items =
+      contentWindow.document.querySelectorAll('#directory-tree .tree-item');
+  test.util.sync.fakeKeyDown(
+      contentWindow, '#directory-tree', 'Home', 'Home', false, false, false);
+  for (var index = 0; index < items.length; ++index) {
+    var selectedTreeItemName =
+        test.util.sync.getSelectedTreeItem(contentWindow);
+    if (selectedTreeItemName === folderName) {
+      test.util.sync.fakeKeyDown(
+          contentWindow, '#directory-tree', 'Enter', 'Enter', false, false,
+          false);
+      return true;
+    }
+    test.util.sync.fakeKeyDown(
+        contentWindow, '#directory-tree', 'ArrowDown', 'Down', false, false,
+        false);
+  }
+
+  console.error('Failed to select folder in tree "' + folderName + '"');
+  return false;
+};
+
+/**
+ * Fakes pressing the right arrow to expand the selected folder in the
+ * navigation tree.
+ *
+ * @param {Window} contentWindow Window to be tested.
+ * @return {boolean} True if folder got expanded, false otherwise.
+ */
+test.util.sync.expandSelectedFolderInTree = function(contentWindow) {
+  var selectedItem = contentWindow.document.querySelector(
+      '#directory-tree .tree-item[selected]');
+  if (!selectedItem) {
+    console.error('Unexpected; no tree item currently selected.');
+    return false;
+  }
+  test.util.sync.fakeKeyDown(
+      contentWindow, '#directory-tree .tree-item[selected]', 'ArrowRight',
+      'Right', false, false, false);
+  return true;
+};
+
+/**
+ * Fakes pressing the left arrow to collapse the selected folder in the
+ * navigation tree.
+ *
+ * @param {Window} contentWindow Window to be tested.
+ * @return {boolean} True if folder got expanded, false otherwise.
+ */
+test.util.sync.collapseSelectedFolderInTree = function(contentWindow) {
+  var selectedItem = contentWindow.document.querySelector(
+      '#directory-tree .tree-item[selected]');
+  if (!selectedItem) {
+    console.error('Unexpected; no tree item currently selected.');
+    return false;
+  }
+  test.util.sync.fakeKeyDown(
+      contentWindow, '#directory-tree .tree-item[selected]', 'ArrowLeft',
+      'Left', false, false, false);
+  return true;
+};
+
+/**
+ * Fakes pressing the down arrow until the given |folderName| is selected in the
+ * navigation tree.
+ * TODO(sashab): Merge this functionality into selectTeamDrive and remove this
+ * function.
+ *
+ * @param {Window} contentWindow Window to be tested.
+ * @param {string} folderName Name of the folder to be selected.
+ * @return {boolean} True if Team Drive folder got selected, false otherwise.
+ */
+test.util.sync.selectTeamDrive = function(contentWindow, teamDriveName) {
+  // Select + expand Team Drives gran root.
+  const teamDrivesSelector = '#directory-tree .tree-item ' +
+      '[entry-label="Team Drives"]:not([hidden])';
+  if (!test.util.sync.fakeMouseClick(contentWindow, teamDrivesSelector))
+    return false;
+
+  // Expand the 'Team Drives' root.
+  if (!test.util.sync.expandSelectedFolderInTree(contentWindow))
+    return false;
+
+  // Select the team drive folder.
+  const teamDriveNameSelector = '#directory-tree .tree-item ' +
+      '[entry-label="' + teamDriveName + '"]:not([hidden])';
+  if (!test.util.sync.fakeMouseClick(contentWindow, teamDriveNameSelector))
+    return false;
+
+  return true;
+};
+
+
+/**
  * Obtains visible tree items.
  *
  * @param {Window} contentWindow Window to be tested.
@@ -157,6 +299,16 @@ test.util.sync.getTreeItems = function(contentWindow) {
     result.push(items[i].querySelector('.entry-name').textContent);
   }
   return result;
+};
+
+/**
+ * Returns the last URL visited with visitURL() (e.g. for "Manage in Drive").
+ *
+ * @param {Window} contentWindow The window where visitURL() was called.
+ * @return {!string} The URL of the last URL visited.
+ */
+test.util.sync.getLastVisitedURL = function(contentWindow) {
+  return contentWindow.util.getLastVisitedURL();
 };
 
 /**

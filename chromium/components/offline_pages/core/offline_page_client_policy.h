@@ -49,6 +49,8 @@ struct LifetimePolicy {
 struct FeaturePolicy {
   // Whether pages are shown in download ui.
   bool is_supported_by_download;
+  // Whether a download was initiated in response to user action.
+  bool is_user_requested_download;
   // Whether pages are shown in recent tabs ui.
   bool is_supported_by_recent_tabs;
   // Whether pages should only be viewed in the tab they were generated in.
@@ -60,14 +62,18 @@ struct FeaturePolicy {
   bool disabled_when_prefetch_disabled;
   // Whether the pages originated from suggestions by zine or elsewhere.
   bool is_suggested;
+  // whether we should allow pages to trigger downloads.
+  bool should_allow_download;
 
   FeaturePolicy()
       : is_supported_by_download(false),
+        is_user_requested_download(false),
         is_supported_by_recent_tabs(false),
         only_shown_in_original_tab(false),
         is_removed_on_cache_reset(true),
         disabled_when_prefetch_disabled(false),
-        is_suggested(false) {}
+        is_suggested(false),
+        should_allow_download(false) {}
 };
 
 // The struct describing policies for various namespaces (Bookmark, Last-N etc.)
@@ -132,6 +138,13 @@ class OfflinePageClientPolicyBuilder {
     return *this;
   }
 
+  OfflinePageClientPolicyBuilder& SetIsUserRequestedDownload(
+      const bool is_user_requested_download) {
+    policy_.feature_policy.is_user_requested_download =
+        is_user_requested_download;
+    return *this;
+  }
+
   OfflinePageClientPolicyBuilder& SetIsSupportedByRecentTabs(
       const bool is_recent_tabs) {
     policy_.feature_policy.is_supported_by_recent_tabs = is_recent_tabs;
@@ -160,6 +173,12 @@ class OfflinePageClientPolicyBuilder {
 
   OfflinePageClientPolicyBuilder& SetIsSuggested(const bool is_suggested) {
     policy_.feature_policy.is_suggested = is_suggested;
+    return *this;
+  }
+
+  OfflinePageClientPolicyBuilder& SetShouldAllowDownload(
+      const bool should_allow_download) {
+    policy_.feature_policy.should_allow_download = should_allow_download;
     return *this;
   }
 

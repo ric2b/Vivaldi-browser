@@ -7,11 +7,16 @@
 
 #include <memory>
 
+#include "base/memory/ref_counted.h"
 #include "components/feedback/system_logs/system_logs_source.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/common/api/feedback_private.h"
 #include "ui/gfx/geometry/rect.h"
+
+namespace feedback {
+class FeedbackData;
+}  // namespace feedback
 
 namespace extensions {
 
@@ -133,7 +138,12 @@ class FeedbackPrivateSendFeedbackFunction : public UIThreadExtensionFunction {
   ResponseAction Run() override;
 
  private:
-  void OnCompleted(bool success);
+  void OnAllLogsFetched(
+      scoped_refptr<feedback::FeedbackData> feedback_data,
+      bool send_histograms,
+      bool send_bluetooth_logs,
+      std::unique_ptr<FeedbackCommon::SystemLogsMap> sys_logs);
+  void OnCompleted(api::feedback_private::LandingPageType type, bool success);
 };
 
 class FeedbackPrivateLogSrtPromptResultFunction
@@ -144,7 +154,7 @@ class FeedbackPrivateLogSrtPromptResultFunction
 
  protected:
   ~FeedbackPrivateLogSrtPromptResultFunction() override {}
-  AsyncExtensionFunction::ResponseAction Run() override;
+  ResponseAction Run() override;
 };
 
 }  // namespace extensions

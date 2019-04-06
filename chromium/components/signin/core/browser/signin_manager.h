@@ -15,7 +15,10 @@
 #ifndef COMPONENTS_SIGNIN_CORE_BROWSER_SIGNIN_MANAGER_H_
 #define COMPONENTS_SIGNIN_CORE_BROWSER_SIGNIN_MANAGER_H_
 
+#include "build/build_config.h"
+
 #if defined(OS_CHROMEOS)
+
 #include "components/signin/core/browser/signin_manager_base.h"
 
 #else
@@ -28,12 +31,12 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "build/build_config.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_member.h"
 #include "components/signin/core/browser/account_info.h"
 #include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/profile_management_switches.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_internals_util.h"
 #include "components/signin/core/browser/signin_manager_base.h"
@@ -47,6 +50,10 @@ class ProfileOAuth2TokenService;
 class SigninClient;
 class SigninErrorController;
 
+namespace identity {
+class IdentityManager;
+}
+
 class SigninManager : public SigninManagerBase,
                       public AccountTrackerService::Observer,
                       public OAuth2TokenService::Observer {
@@ -56,6 +63,16 @@ class SigninManager : public SigninManagerBase,
   // callers to load policy and prompt the user appropriately before completing
   // signin. The callback is passed the just-fetched OAuth login refresh token.
   typedef base::Callback<void(const std::string&)> OAuthTokenFetchedCallback;
+
+  // Used to remove accounts from the token service and the account tracker.
+  enum class RemoveAccountsOption {
+    // Do not remove accounts.
+    kKeepAllAccounts,
+    // Remove all the accounts.
+    kRemoveAllAccounts,
+    // Removes the authenticated account if it is in authentication error.
+    kRemoveAuthenticatedAccountIfInError
+  };
 
   // This is used to distinguish URLs belonging to the special web signin flow
   // running in the special signin process from other URLs on the same domain.
@@ -68,12 +85,18 @@ class SigninManager : public SigninManagerBase,
                 ProfileOAuth2TokenService* token_service,
                 AccountTrackerService* account_tracker_service,
                 GaiaCookieManagerService* cookie_manager_service,
-                SigninErrorController* signin_error_controller);
+                SigninErrorController* signin_error_controller,
+                signin::AccountConsistencyMethod account_consistency);
   ~SigninManager() override;
 
   // Returns true if the username is allowed based on the policy string.
   static bool IsUsernameAllowedByPolicy(const std::string& username,
                                         const std::string& policy);
+
+  // Returns |manager| as a SigninManager instance. Relies on the fact that on
+  // platforms where signin_manager.* is built, all SigninManagerBase instances
+  // are actually SigninManager instances.
+  static SigninManager* FromSigninManagerBase(SigninManagerBase* manager);
 
   // Attempt to sign in this user with a refresh token.
   // If |refresh_token| is not empty, then SigninManager will add it to the
@@ -98,10 +121,11 @@ class SigninManager : public SigninManagerBase,
   // associated with the authenticated user, and canceling all auth in progress.
   // On mobile and on desktop pre-DICE, this also removes all accounts from
   // Chrome by revoking all refresh tokens.
-  // On desktop with DICE enabled, this will not remove all accounts from
-  // Chrome.
+  // On desktop with DICE enabled, this will remove the authenticated account
+  // from Chrome only if it is in authentication error. No other accounts are
+  // removed.
   void SignOut(signin_metrics::ProfileSignout signout_source_metric,
-               signin_metrics::SignoutDelete signout_delete_metric) override;
+               signin_metrics::SignoutDelete signout_delete_metric);
 
   // Signs a user out, removing the preference, erasing all keys
   // associated with the authenticated user, and canceling all auth in progress.
@@ -148,6 +172,10 @@ class SigninManager : public SigninManagerBase,
   // authenticated. Returns an empty string if no auth is in progress.
   const std::string& GetAccountIdForAuthInProgress() const;
 
+  // If an authentication is in progress, return the gaia id being
+  // authenticated. Returns an empty string if no auth is in progress.
+  const std::string& GetGaiaIdForAuthInProgress() const;
+
   // If an authentication is in progress, return the username being
   // authenticated. Returns an empty string if no auth is in progress.
   const std::string& GetUsernameForAuthInProgress() const;
@@ -172,9 +200,26 @@ class SigninManager : public SigninManagerBase,
   // The sign out process which is started by SigninClient::PreSignOut()
   virtual void DoSignOut(signin_metrics::ProfileSignout signout_source_metric,
                          signin_metrics::SignoutDelete signout_delete_metric,
-                         bool remove_all_accounts);
+                         RemoveAccountsOption remove_option);
 
  private:
+  // Interface that gives information on internal SigninManager operations. Only
+  // for use by IdentityManager during the conversion of the codebase to use
+  // //services/identity/public/cpp.
+  class DiagnosticsClient {
+   public:
+    // Sent just before GoogleSigninSucceeded() is fired on observers.
+    virtual void WillFireGoogleSigninSucceeded(
+        const AccountInfo& account_info) = 0;
+    // Sent just before GoogleSignedOut() is fired on observers.
+    virtual void WillFireGoogleSignedOut(const AccountInfo& account_info) = 0;
+  };
+
+  void set_diagnostics_client(DiagnosticsClient* diagnostics_client) {
+    DCHECK(!diagnostics_client_ || !diagnostics_client);
+    diagnostics_client_ = diagnostics_client;
+  }
+
   enum SigninType {
     SIGNIN_TYPE_NONE,
     SIGNIN_TYPE_WITH_REFRESH_TOKEN,
@@ -183,6 +228,7 @@ class SigninManager : public SigninManagerBase,
 
   std::string SigninTypeToString(SigninType type);
   friend class FakeSigninManager;
+  friend class identity::IdentityManager;
   FRIEND_TEST_ALL_PREFIXES(SigninManagerTest, ClearTransientSigninData);
   FRIEND_TEST_ALL_PREFIXES(SigninManagerTest, ProvideSecondFactorSuccess);
   FRIEND_TEST_ALL_PREFIXES(SigninManagerTest, ProvideSecondFactorFailure);
@@ -208,6 +254,10 @@ class SigninManager : public SigninManagerBase,
   // Send all observers |GoogleSigninSucceeded| notifications.
   void FireGoogleSigninSucceeded();
 
+  // Send all observers |GoogleSignedOut| notifications.
+  void FireGoogleSignedOut(const std::string& account_id,
+                           const AccountInfo& account_info);
+
   // Waits for the AccountTrackerService, then sends GoogleSigninSucceeded to
   // the client and clears the local password.
   void PostSignedIn();
@@ -232,7 +282,7 @@ class SigninManager : public SigninManagerBase,
   // Starts the sign out process.
   void StartSignOut(signin_metrics::ProfileSignout signout_source_metric,
                     signin_metrics::SignoutDelete signout_delete_metric,
-                    bool remove_all_accounts);
+                    RemoveAccountsOption remove_option);
 
   void OnSigninAllowedPrefChanged();
   void OnGoogleServicesUsernamePatternChanged();
@@ -255,6 +305,9 @@ class SigninManager : public SigninManagerBase,
   // object.
   SigninClient* client_;
 
+  // The DiagnosticsClient object associated with this object. May be null.
+  DiagnosticsClient* diagnostics_client_;
+
   // The ProfileOAuth2TokenService instance associated with this object. Must
   // outlive this object.
   ProfileOAuth2TokenService* token_service_;
@@ -268,6 +321,8 @@ class SigninManager : public SigninManagerBase,
 
   // Helper object to listen for changes to the signin allowed preference.
   BooleanPrefMember signin_allowed_;
+
+  signin::AccountConsistencyMethod account_consistency_;
 
   // Two gate conditions for when PostSignedIn should be called. Verify
   // that the SigninManager has reached OnSignedIn() and the AccountTracker

@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_export.h"
+#include "device/bluetooth/bluetooth_gatt_characteristic.h"
 #include "device/bluetooth/bluetooth_gatt_service.h"
 #include "device/bluetooth/bluetooth_uuid.h"
 
@@ -86,6 +87,31 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLocalGattService
         const base::Closure& callback,
         const ErrorCallback& error_callback) = 0;
 
+    // Called when a remote device |device| requests to prepare write the value
+    // of the characteristic |characteristic| starting at offset |offset|.
+    // This method is only called if the characteristic was specified as
+    // reliable writable and any authentication and authorization challenges
+    // were satisfied by the remote device.
+    //
+    // |has_subsequent_request| is true when the reliable write session is still
+    // ongoing, false otherwise. When |has_subsequent_request| is false,
+    // delegates MUST tear down the current reliable write session with |device|
+    // and commit all the prepare writes in that session in order.
+    //
+    // To respond to the request with success the delegate must invoke
+    // |callback|. To respond to the request with failure delegates must invoke
+    // |error_callback|. If neither callback parameter is invoked, the request
+    // will time out and result in an error. Therefore, delegates MUST invoke
+    // either |callback| or |error_callback|.
+    virtual void OnCharacteristicPrepareWriteRequest(
+        const BluetoothDevice* device,
+        const BluetoothLocalGattCharacteristic* characteristic,
+        const std::vector<uint8_t>& value,
+        int offset,
+        bool has_subsequent_request,
+        const base::Closure& callback,
+        const ErrorCallback& error_callback) = 0;
+
     // Called when a remote device |device| requests to read the value of the
     // descriptor |descriptor| starting at offset |offset|.
     // This method is only called if the descriptor was specified as
@@ -126,10 +152,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLocalGattService
         const ErrorCallback& error_callback) = 0;
 
     // Called when a remote device |device| requests notifications to start for
-    // |characteristic|. This is only called if the characteristic has
-    // specified the notify or indicate property.
+    // |characteristic|. |notification_type| is either notify or indicate,
+    // depending on the request from |device|. This is only called if the
+    // characteristic has specified the notify or indicate property.
     virtual void OnNotificationsStart(
         const BluetoothDevice* device,
+        device::BluetoothGattCharacteristic::NotificationType notification_type,
         const BluetoothLocalGattCharacteristic* characteristic) = 0;
 
     // Called when a remote device |device| requests notifications to stop for

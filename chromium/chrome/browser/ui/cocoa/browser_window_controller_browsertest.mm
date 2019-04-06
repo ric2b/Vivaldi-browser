@@ -7,21 +7,23 @@
 #include <stddef.h>
 #import "base/mac/mac_util.h"
 
+#include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
-#include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
@@ -31,9 +33,7 @@
 #import "chrome/browser/ui/cocoa/fast_resize_view.h"
 #import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_controller.h"
 #import "chrome/browser/ui/cocoa/history_overlay_controller.h"
-#import "chrome/browser/ui/cocoa/infobars/infobar_cocoa.h"
 #import "chrome/browser/ui/cocoa/infobars/infobar_container_controller.h"
-#import "chrome/browser/ui/cocoa/infobars/infobar_controller.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_base_controller.h"
 #import "chrome/browser/ui/cocoa/tab_contents/overlayable_contents_controller.h"
@@ -44,13 +44,10 @@
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/browser/ui/find_bar/find_bar.h"
 #include "chrome/browser/ui/find_bar/find_bar_controller.h"
-#include "chrome/browser/ui/infobar_container_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/infobars/core/infobar_delegate.h"
-#include "components/infobars/core/simple_alert_infobar_delegate.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "content/public/browser/web_contents.h"
@@ -84,15 +81,15 @@ void CreateProfileCallback(const base::Closure& quit_closure,
     quit_closure.Run();
 }
 
-enum ViewID {
-  VIEW_ID_TOOLBAR,
-  VIEW_ID_BOOKMARK_BAR,
-  VIEW_ID_INFO_BAR,
-  VIEW_ID_FIND_BAR,
-  VIEW_ID_DOWNLOAD_SHELF,
-  VIEW_ID_TAB_CONTENT_AREA,
-  VIEW_ID_FULLSCREEN_FLOATING_BAR,
-  VIEW_ID_COUNT,
+enum BrowserViewID {
+  BROWSER_VIEW_ID_TOOLBAR,
+  BROWSER_VIEW_ID_BOOKMARK_BAR,
+  BROWSER_VIEW_ID_INFO_BAR,
+  BROWSER_VIEW_ID_FIND_BAR,
+  BROWSER_VIEW_ID_DOWNLOAD_SHELF,
+  BROWSER_VIEW_ID_TAB_CONTENT_AREA,
+  BROWSER_VIEW_ID_FULLSCREEN_FLOATING_BAR,
+  BROWSER_VIEW_ID_COUNT,
 };
 
 // Checks that no views draw on top of the supposedly exposed view.
@@ -218,23 +215,6 @@ class ViewExposedChecker {
 
 @end
 
-@interface InfoBarContainerController(TestingAPI)
-- (BOOL)isTopInfoBarAnimationRunning;
-@end
-
-@implementation InfoBarContainerController(TestingAPI)
-- (BOOL)isTopInfoBarAnimationRunning {
-  InfoBarController* infoBarController = [infobarControllers_ objectAtIndex:0];
-  if (infoBarController) {
-    const gfx::SlideAnimation& infobarAnimation =
-        static_cast<const InfoBarCocoa*>(
-            infoBarController.infobar)->animation();
-    return infobarAnimation.is_animating();
-  }
-  return NO;
-}
-@end
-
 class BrowserWindowControllerTest : public InProcessBrowserTest {
  public:
   BrowserWindowControllerTest() : InProcessBrowserTest() {
@@ -250,29 +230,21 @@ class BrowserWindowControllerTest : public InProcessBrowserTest {
         browser()->window()->GetNativeWindow()];
   }
 
-  static void ShowInfoBar(Browser* browser) {
-    SimpleAlertInfoBarDelegate::Create(
-        InfoBarService::FromWebContents(
-            browser->tab_strip_model()->GetActiveWebContents()),
-        infobars::InfoBarDelegate::TEST_INFOBAR, nullptr, base::string16(),
-        false);
-  }
-
-  NSView* GetViewWithID(ViewID view_id) const {
+  NSView* GetViewWithID(BrowserViewID view_id) const {
     switch (view_id) {
-      case VIEW_ID_FULLSCREEN_FLOATING_BAR:
+      case BROWSER_VIEW_ID_FULLSCREEN_FLOATING_BAR:
         return [controller() floatingBarBackingView];
-      case VIEW_ID_TOOLBAR:
+      case BROWSER_VIEW_ID_TOOLBAR:
         return [[controller() toolbarController] view];
-      case VIEW_ID_BOOKMARK_BAR:
+      case BROWSER_VIEW_ID_BOOKMARK_BAR:
         return [[controller() bookmarkBarController] view];
-      case VIEW_ID_INFO_BAR:
+      case BROWSER_VIEW_ID_INFO_BAR:
         return [[controller() infoBarContainerController] view];
-      case VIEW_ID_FIND_BAR:
+      case BROWSER_VIEW_ID_FIND_BAR:
         return [[controller() findBarCocoaController] view];
-      case VIEW_ID_DOWNLOAD_SHELF:
+      case BROWSER_VIEW_ID_DOWNLOAD_SHELF:
         return [[controller() downloadShelf] view];
-      case VIEW_ID_TAB_CONTENT_AREA:
+      case BROWSER_VIEW_ID_TAB_CONTENT_AREA:
         return [controller() tabContentArea];
       default:
         NOTREACHED();
@@ -280,7 +252,7 @@ class BrowserWindowControllerTest : public InProcessBrowserTest {
     }
   }
 
-  void VerifyZOrder(const std::vector<ViewID>& view_list) const {
+  void VerifyZOrder(const std::vector<BrowserViewID>& view_list) const {
     std::vector<NSView*> visible_views;
     for (size_t i = 0; i < view_list.size(); ++i) {
       NSView* view = GetViewWithID(view_list[i]);
@@ -297,28 +269,12 @@ class BrowserWindowControllerTest : public InProcessBrowserTest {
     }
 
     // Views not in |view_list| must either be nil or not parented.
-    for (size_t i = 0; i < VIEW_ID_COUNT; ++i) {
+    for (size_t i = 0; i < BROWSER_VIEW_ID_COUNT; ++i) {
       if (!base::ContainsValue(view_list, i)) {
-        NSView* view = GetViewWithID(static_cast<ViewID>(i));
+        NSView* view = GetViewWithID(static_cast<BrowserViewID>(i));
         EXPECT_TRUE(!view || ![view superview]);
       }
     }
-  }
-
-  CGFloat GetViewHeight(ViewID viewID) const {
-    CGFloat height = NSHeight([GetViewWithID(viewID) frame]);
-    if (viewID == VIEW_ID_INFO_BAR) {
-      height -= [[controller() infoBarContainerController]
-          overlappingTipHeight];
-    }
-    return height;
-  }
-
-  static void CheckTopInfoBarAnimation(
-      InfoBarContainerController* info_bar_container_controller,
-      const base::Closure& quit_task) {
-    if (![info_bar_container_controller isTopInfoBarAnimationRunning])
-      quit_task.Run();
   }
 
   static void CheckBookmarkBarAnimation(
@@ -328,25 +284,11 @@ class BrowserWindowControllerTest : public InProcessBrowserTest {
       quit_task.Run();
   }
 
-  void WaitForTopInfoBarAnimationToFinish() {
-    scoped_refptr<content::MessageLoopRunner> runner =
-        new content::MessageLoopRunner;
-
-    base::Timer timer(false, true);
-    timer.Start(
-        FROM_HERE,
-        base::TimeDelta::FromMilliseconds(15),
-        base::Bind(&CheckTopInfoBarAnimation,
-                   [controller() infoBarContainerController],
-                   runner->QuitClosure()));
-    runner->Run();
-  }
-
   void WaitForBookmarkBarAnimationToFinish() {
     scoped_refptr<content::MessageLoopRunner> runner =
         new content::MessageLoopRunner;
 
-    base::Timer timer(false, true);
+    base::RepeatingTimer timer;
     timer.Start(
         FROM_HERE,
         base::TimeDelta::FromMilliseconds(15),
@@ -354,22 +296,6 @@ class BrowserWindowControllerTest : public InProcessBrowserTest {
                    [controller() bookmarkBarController],
                    runner->QuitClosure()));
     runner->Run();
-  }
-
-  NSInteger GetExpectedTopInfoBarTipHeight() {
-    InfoBarContainerController* info_bar_container_controller =
-        [controller() infoBarContainerController];
-    CGFloat overlapping_tip_height =
-        [info_bar_container_controller overlappingTipHeight];
-    LocationBarViewMac* location_bar_view = [controller() locationBarBridge];
-    NSPoint icon_bottom = location_bar_view->GetInfoBarAnchorPoint();
-
-    NSPoint info_bar_top = NSMakePoint(0,
-        NSHeight([info_bar_container_controller view].frame) -
-        overlapping_tip_height);
-    info_bar_top = [[info_bar_container_controller view]
-        convertPoint:info_bar_top toView:nil];
-    return icon_bottom.y - info_bar_top.y;
   }
 
   // Nothing should draw on top of the window controls.
@@ -515,13 +441,13 @@ IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest,
 IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest, ZOrderNormal) {
   browser()->GetFindBarController();  // add find bar
 
-  std::vector<ViewID> view_list;
-  view_list.push_back(VIEW_ID_DOWNLOAD_SHELF);
-  view_list.push_back(VIEW_ID_BOOKMARK_BAR);
-  view_list.push_back(VIEW_ID_TOOLBAR);
-  view_list.push_back(VIEW_ID_INFO_BAR);
-  view_list.push_back(VIEW_ID_TAB_CONTENT_AREA);
-  view_list.push_back(VIEW_ID_FIND_BAR);
+  std::vector<BrowserViewID> view_list;
+  view_list.push_back(BROWSER_VIEW_ID_DOWNLOAD_SHELF);
+  view_list.push_back(BROWSER_VIEW_ID_BOOKMARK_BAR);
+  view_list.push_back(BROWSER_VIEW_ID_TOOLBAR);
+  view_list.push_back(BROWSER_VIEW_ID_INFO_BAR);
+  view_list.push_back(BROWSER_VIEW_ID_TAB_CONTENT_AREA);
+  view_list.push_back(BROWSER_VIEW_ID_FIND_BAR);
   VerifyZOrder(view_list);
 
   [controller() showOverlay];
@@ -541,14 +467,14 @@ IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest,
   chrome::ToggleFullscreenMode(browser());
   browser()->GetFindBarController();  // add find bar
 
-  std::vector<ViewID> view_list;
-  view_list.push_back(VIEW_ID_INFO_BAR);
-  view_list.push_back(VIEW_ID_TAB_CONTENT_AREA);
-  view_list.push_back(VIEW_ID_FULLSCREEN_FLOATING_BAR);
-  view_list.push_back(VIEW_ID_BOOKMARK_BAR);
-  view_list.push_back(VIEW_ID_TOOLBAR);
-  view_list.push_back(VIEW_ID_FIND_BAR);
-  view_list.push_back(VIEW_ID_DOWNLOAD_SHELF);
+  std::vector<BrowserViewID> view_list;
+  view_list.push_back(BROWSER_VIEW_ID_INFO_BAR);
+  view_list.push_back(BROWSER_VIEW_ID_TAB_CONTENT_AREA);
+  view_list.push_back(BROWSER_VIEW_ID_FULLSCREEN_FLOATING_BAR);
+  view_list.push_back(BROWSER_VIEW_ID_BOOKMARK_BAR);
+  view_list.push_back(BROWSER_VIEW_ID_TOOLBAR);
+  view_list.push_back(BROWSER_VIEW_ID_FIND_BAR);
+  view_list.push_back(BROWSER_VIEW_ID_DOWNLOAD_SHELF);
   VerifyZOrder(view_list);
 }
 
@@ -562,20 +488,20 @@ IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest,
   chrome::ToggleFullscreenMode(browser());
 
   NSView* fullscreen_floating_bar =
-      GetViewWithID(VIEW_ID_FULLSCREEN_FLOATING_BAR);
+      GetViewWithID(BROWSER_VIEW_ID_FULLSCREEN_FLOATING_BAR);
   [fullscreen_floating_bar removeFromSuperview];
   [[[controller() window] contentView] addSubview:fullscreen_floating_bar
                                        positioned:NSWindowBelow
                                        relativeTo:nil];
   [controller() updateSubviewZOrder];
 
-  std::vector<ViewID> view_list;
-  view_list.push_back(VIEW_ID_INFO_BAR);
-  view_list.push_back(VIEW_ID_TAB_CONTENT_AREA);
-  view_list.push_back(VIEW_ID_FULLSCREEN_FLOATING_BAR);
-  view_list.push_back(VIEW_ID_BOOKMARK_BAR);
-  view_list.push_back(VIEW_ID_TOOLBAR);
-  view_list.push_back(VIEW_ID_DOWNLOAD_SHELF);
+  std::vector<BrowserViewID> view_list;
+  view_list.push_back(BROWSER_VIEW_ID_INFO_BAR);
+  view_list.push_back(BROWSER_VIEW_ID_TAB_CONTENT_AREA);
+  view_list.push_back(BROWSER_VIEW_ID_FULLSCREEN_FLOATING_BAR);
+  view_list.push_back(BROWSER_VIEW_ID_BOOKMARK_BAR);
+  view_list.push_back(BROWSER_VIEW_ID_TOOLBAR);
+  view_list.push_back(BROWSER_VIEW_ID_DOWNLOAD_SHELF);
   VerifyZOrder(view_list);
 }
 
@@ -636,7 +562,9 @@ IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest, SheetPosition) {
   EXPECT_FALSE([popupController hasToolbar]);
 
   // Open sheet in an application window.
-  [popupController showWindow:nil];
+  NSWindowController* nsWindowController = [popupController nsWindowController];
+  EXPECT_TRUE(nsWindowController);
+  [nsWindowController showWindow:nil];
   sheetLocation = [popupController window:popupWindow
                         willPositionSheet:sheet
                                 usingRect:defaultLocation];
@@ -644,28 +572,7 @@ IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest, SheetPosition) {
 
   // Close the application window.
   popup_browser->tab_strip_model()->CloseSelectedTabs();
-  [popupController close];
-}
-
-// Verify that the info bar tip is hidden when the toolbar is not visible.
-IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest,
-                       InfoBarTipHiddenForWindowWithoutToolbar) {
-  ShowInfoBar(browser());
-  EXPECT_FALSE(
-      [[controller() infoBarContainerController] shouldSuppressTopInfoBarTip]);
-
-  OpenAppShortcutWindow(browser()->profile(), GURL("about:blank"));
-  Browser* popup_browser = BrowserList::GetInstance()->GetLastActive();
-  NSWindow* popupWindow = popup_browser->window()->GetNativeWindow();
-  BrowserWindowController* popupController =
-      [BrowserWindowController browserWindowControllerForWindow:popupWindow];
-  EXPECT_FALSE([popupController hasToolbar]);
-
-  // Show infobar for controller.
-  ShowInfoBar(popup_browser);
-  EXPECT_TRUE(
-      [[popupController infoBarContainerController]
-          shouldSuppressTopInfoBarTip]);
+  [nsWindowController close];
 }
 
 // Tests that status bubble's base frame does move when devTools are docked.
@@ -682,35 +589,6 @@ IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest,
   EXPECT_NSNE(origin, originWithDevTools);
 
   DevToolsWindowTesting::CloseDevToolsWindowSync(devtools_window);
-}
-
-// Tests that top infobar tip is streched when bookmark bar becomes SHOWN/HIDDEN
-IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest,
-                       InfoBarTipStretchedWhenBookmarkBarStatusChanged) {
-  EXPECT_FALSE([controller() isBookmarkBarVisible]);
-  ShowInfoBar(browser());
-  // The infobar tip is animated during the infobar is being added, wait until
-  // it completes.
-  WaitForTopInfoBarAnimationToFinish();
-
-  EXPECT_FALSE([[controller() infoBarContainerController]
-      shouldSuppressTopInfoBarTip]);
-
-  NSInteger max_tip_height =
-      InfoBarContainerDelegate::kMaximumArrowTargetHeight +
-          InfoBarContainerDelegate::kSeparatorLineHeight;
-
-  chrome::ExecuteCommand(browser(), IDC_SHOW_BOOKMARK_BAR);
-  WaitForBookmarkBarAnimationToFinish();
-  EXPECT_TRUE([controller() isBookmarkBarVisible]);
-  EXPECT_EQ(std::min(GetExpectedTopInfoBarTipHeight(), max_tip_height),
-            [[controller() infoBarContainerController] overlappingTipHeight]);
-
-  chrome::ExecuteCommand(browser(), IDC_SHOW_BOOKMARK_BAR);
-  WaitForBookmarkBarAnimationToFinish();
-  EXPECT_FALSE([controller() isBookmarkBarVisible]);
-  EXPECT_EQ(std::min(GetExpectedTopInfoBarTipHeight(), max_tip_height),
-            [[controller() infoBarContainerController] overlappingTipHeight]);
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest, TrafficLightZOrder) {
@@ -898,4 +776,34 @@ IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest,
   histogram_tester.ExpectBucketCount("OSX.Fullscreen.ToolbarStyle",
                                      (int)FullscreenToolbarStyle::TOOLBAR_NONE,
                                      3);
+}
+
+// Ensure that some steps performed during process shutdown can be performed
+// during a tab drag. Regression test for https://crbug.com/788271.
+IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest, ShutdownDuringTabDrag) {
+  // Rather than trying to trick TabDragController into calling showOverlay,
+  // call it directly. Retain it (as if by the OS). Then remove the overlay (to
+  // trigger the bug).
+  [controller() showOverlay];
+  base::scoped_nsobject<NSWindow> simulate_os_retain(
+      [[controller() overlayWindow] retain]);
+  [controller() removeOverlay];
+  EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
+
+  // To kick things along, close the window rather than waiting for
+  // BrowserCloseManager to do it asynchronously.
+  browser()->tab_strip_model()->CloseAllTabs();
+  [[controller() window] close];
+
+  content::RunAllPendingInMessageLoop();
+  AutoreleasePool()->Recycle();
+  EXPECT_EQ(0u, chrome::GetTotalBrowserCount());
+
+  // All browsers are now closed, so this should immediately invoke
+  // ShutdownIfNoBrowsers() and HandleAppExitingForPlatform(), which invokes
+  // views::Widget::CloseAllSecondaryWidgets(). Must be done via PostTask() to
+  // avoid a DCHECK in BrowserProcessImpl::Unpin(), which checks for a run loop.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&chrome::CloseAllBrowsersAndQuit));
+  content::RunAllPendingInMessageLoop();
 }

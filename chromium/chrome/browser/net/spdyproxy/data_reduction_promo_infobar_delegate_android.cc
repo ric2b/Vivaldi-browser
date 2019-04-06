@@ -4,7 +4,6 @@
 
 #include "chrome/browser/net/spdyproxy/data_reduction_promo_infobar_delegate_android.h"
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "components/infobars/core/infobar.h"
 #include "content/public/browser/web_contents.h"
@@ -21,7 +20,7 @@ void DataReductionPromoInfoBarDelegateAndroid::Create(
   infobar_service->AddInfoBar(
       DataReductionPromoInfoBarDelegateAndroid::CreateInfoBar(
           infobar_service,
-          base::MakeUnique<DataReductionPromoInfoBarDelegateAndroid>()));
+          std::make_unique<DataReductionPromoInfoBarDelegateAndroid>()));
 }
 
 DataReductionPromoInfoBarDelegateAndroid::

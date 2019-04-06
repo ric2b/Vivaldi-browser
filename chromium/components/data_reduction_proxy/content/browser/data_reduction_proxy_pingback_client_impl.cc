@@ -16,9 +16,9 @@
 #include "base/task_scheduler/task_traits.h"
 #include "base/time/time.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_page_load_timing.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/proto/client_config.pb.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/variations/net/variations_http_headers.h"
@@ -26,9 +26,9 @@
 #include "net/base/load_flags.h"
 #include "net/nqe/effective_connection_type.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "net/url_request/url_fetcher.h"
-#include "net/url_request/url_request_context_getter.h"
-#include "net/url_request/url_request_status.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/simple_url_loader.h"
 #include "url/gurl.h"
 
 namespace data_reduction_proxy {
@@ -106,6 +106,12 @@ void AddDataToPageloadMetrics(const DataReductionProxyData& request_data,
             timing.load_event_start.value())
             .release());
   }
+  if (timing.first_input_delay) {
+    request->set_allocated_first_input_delay(
+        protobuf_parser::CreateDurationFromTimeDelta(
+            timing.first_input_delay.value())
+            .release());
+  }
   if (timing.parse_blocked_on_script_load_duration) {
     request->set_allocated_parse_blocked_on_script_load_duration(
         protobuf_parser::CreateDurationFromTimeDelta(
@@ -121,8 +127,13 @@ void AddDataToPageloadMetrics(const DataReductionProxyData& request_data,
   request->set_effective_connection_type(
       protobuf_parser::ProtoEffectiveConnectionTypeFromEffectiveConnectionType(
           request_data.effective_connection_type()));
+  request->set_connection_type(
+      protobuf_parser::ProtoConnectionTypeFromConnectionType(
+          request_data.connection_type()));
   request->set_compressed_page_size_bytes(timing.network_bytes);
   request->set_original_page_size_bytes(timing.original_network_bytes);
+  request->set_total_page_size_bytes(timing.total_page_size_bytes);
+  request->set_cached_fraction(timing.cached_fraction);
   request->set_renderer_memory_usage_kb(timing.renderer_memory_usage_kb);
 
   request->set_renderer_crash_type(crash_type);
@@ -138,8 +149,30 @@ void AddDataToPageloadMetrics(const DataReductionProxyData& request_data,
   } else if (request_data.lite_page_received()) {
     request->set_previews_type(PageloadMetrics_PreviewsType_LITE_PAGE);
     was_preview_shown = true;
+  } else if (request_data.black_listed()) {
+    request->set_previews_type(
+        PageloadMetrics_PreviewsType_CLIENT_BLACKLIST_PREVENTED_PREVIEW);
   } else {
     request->set_previews_type(PageloadMetrics_PreviewsType_NONE);
+  }
+
+  for (auto request_info_data : request_data.request_info()) {
+    RequestInfo* request_info = request->add_main_frame_network_request();
+    request_info->set_protocol(
+        protobuf_parser::ProtoRequestInfoProtocolFromRequestInfoProtocol(
+            request_info_data.protocol));
+    request_info->set_proxy_bypass(request_info_data.proxy_bypass);
+    request_info->set_allocated_dns_time(
+        protobuf_parser::CreateDurationFromTimeDelta(request_info_data.dns_time)
+            .release());
+    request_info->set_allocated_connect_time(
+        protobuf_parser::CreateDurationFromTimeDelta(
+            request_info_data.connect_time)
+            .release());
+    request_info->set_allocated_http_time(
+        protobuf_parser::CreateDurationFromTimeDelta(
+            request_info_data.http_time)
+            .release());
   }
 
   // Only report opt out information if a server preview was shown (otherwise,
@@ -178,18 +211,18 @@ std::string AddBatchInfoAndSerializeRequest(
 }  // namespace
 
 DataReductionProxyPingbackClientImpl::DataReductionProxyPingbackClientImpl(
-    net::URLRequestContextGetter* url_request_context,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner)
-    : url_request_context_(url_request_context),
+    : url_loader_factory_(std::move(url_loader_factory)),
       pingback_url_(util::AddApiKeyToUrl(params::GetPingbackURL())),
       pingback_reporting_fraction_(0.0),
-      current_fetcher_message_count_(0u),
-      current_fetcher_crash_count_(0u),
+      current_loader_message_count_(0u),
+      current_loader_crash_count_(0u),
       ui_task_runner_(std::move(ui_task_runner)),
 #if defined(OS_ANDROID)
       scoped_observer_(this),
       weak_factory_(this) {
-  auto* crash_manager = breakpad::CrashDumpManager::GetInstance();
+  auto* crash_manager = crash_reporter::CrashMetricsReporter::GetInstance();
   DCHECK(crash_manager);
   scoped_observer_.Add(crash_manager);
 #else
@@ -201,31 +234,28 @@ DataReductionProxyPingbackClientImpl::~DataReductionProxyPingbackClientImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
-void DataReductionProxyPingbackClientImpl::OnURLFetchComplete(
-    const net::URLFetcher* source) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(source == current_fetcher_.get());
+void DataReductionProxyPingbackClientImpl::OnSimpleLoaderComplete(
+    std::unique_ptr<std::string> response_body) {
+  bool is_success = !!response_body;
   // For each message in the batched message, we should report UMA.
   // Historically, batched requests are not common, so this loop usually only
   // has 1 iteration.
-  for (size_t message = 0u; message < current_fetcher_message_count_;
+  for (size_t message = 0u; message < current_loader_message_count_;
        ++message) {
-    UMA_HISTOGRAM_BOOLEAN(kHistogramSucceeded,
-                          source->GetStatus().is_success());
+    UMA_HISTOGRAM_BOOLEAN(kHistogramSucceeded, is_success);
   }
 
   // For each crash we should report UMA.
-  for (size_t crash = 0u; crash < current_fetcher_crash_count_; ++crash) {
-    UMA_HISTOGRAM_ENUMERATION(
-        kHistogramCrash,
-        (source->GetStatus().is_success() ? CrashAction::kSentSuccessfully
+  for (size_t crash = 0u; crash < current_loader_crash_count_; ++crash) {
+    UMA_HISTOGRAM_ENUMERATION(kHistogramCrash,
+                              (is_success ? CrashAction::kSentSuccessfully
                                           : CrashAction::kSendUnuccessful),
-        CrashAction::kLast);
+                              CrashAction::kLast);
   }
 
-  current_fetcher_.reset();
+  current_loader_.reset();
   if (metrics_request_.pageloads_size() > 0) {
-    CreateFetcherForDataAndStart();
+    CreateLoaderForDataAndStart();
   }
 }
 
@@ -259,9 +289,11 @@ void DataReductionProxyPingbackClientImpl::SendPingback(
 
 #if defined(OS_ANDROID)
 void DataReductionProxyPingbackClientImpl::OnCrashDumpProcessed(
-    const breakpad::CrashDumpManager::CrashDumpDetails& details) {
+    int rph_id,
+    const crash_reporter::CrashMetricsReporter::ReportedCrashTypeSet&
+        reported_counts) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  auto iter = crash_map_.find(details.process_host_id);
+  auto iter = crash_map_.find(rph_id);
   if (iter == crash_map_.end())
     return;
   const CrashPageLoadInformation& crash_page_load_information = iter->second;
@@ -269,8 +301,10 @@ void DataReductionProxyPingbackClientImpl::OnCrashDumpProcessed(
   UMA_HISTOGRAM_ENUMERATION(kHistogramCrash, CrashAction::kAnalsisSucceeded,
                             CrashAction::kLast);
 
-  bool renderer_foreground_oom =
-      breakpad::CrashDumpManager::IsForegroundOom(details);
+  // Record only main frame OOMs.
+  bool renderer_foreground_oom = reported_counts.count(
+      crash_reporter::CrashMetricsReporter::ProcessedCrashCounts::
+          kRendererForegroundVisibleOom);
   CreateReport(std::get<0>(crash_page_load_information),
                std::get<1>(crash_page_load_information),
                renderer_foreground_oom
@@ -284,9 +318,9 @@ void DataReductionProxyPingbackClientImpl::AddRequestToCrashMap(
     const DataReductionProxyPageLoadTiming& timing) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // It is guaranteed that |AddRequestToCrashMap| is called before
-  // |OnCrashDumpProcessed| due to the nature of both events being triggered
-  // from the channel closing, and SendPingback being called on the same stack,
-  // while OnCrashDumpProcessed is called from a PostTask.
+  // |OnCrashDumpProcessed| due to the nature of both events being
+  // triggered from the channel closing, and SendPingback being called on the
+  // same stack, while OnCrashDumpProcessed is called from a PostTask.
   crash_map_.insert(
       std::make_pair(timing.host_id, std::make_tuple(request_data, timing)));
   // If the crash hasn't been processed in 5 seconds, send the report without it
@@ -326,24 +360,24 @@ void DataReductionProxyPingbackClientImpl::CreateReport(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   PageloadMetrics* pageload_metrics = metrics_request_.add_pageloads();
   AddDataToPageloadMetrics(request_data, timing, crash_type, pageload_metrics);
-  if (current_fetcher_.get())
+  if (current_loader_)
     return;
   DCHECK_EQ(1, metrics_request_.pageloads_size());
-  CreateFetcherForDataAndStart();
+  CreateLoaderForDataAndStart();
 }
 
-void DataReductionProxyPingbackClientImpl::CreateFetcherForDataAndStart() {
-  DCHECK(!current_fetcher_);
+void DataReductionProxyPingbackClientImpl::CreateLoaderForDataAndStart() {
+  DCHECK(!current_loader_);
   DCHECK_GE(metrics_request_.pageloads_size(), 1);
   std::string serialized_request =
       AddBatchInfoAndSerializeRequest(&metrics_request_, CurrentTime());
 
-  current_fetcher_message_count_ = metrics_request_.pageloads_size();
-  current_fetcher_crash_count_ = 0u;
+  current_loader_message_count_ = metrics_request_.pageloads_size();
+  current_loader_crash_count_ = 0u;
   for (const auto& iter : metrics_request_.pageloads()) {
     if (iter.renderer_crash_type() !=
         PageloadMetrics_RendererCrashType_NO_CRASH) {
-      ++current_fetcher_crash_count_;
+      ++current_loader_crash_count_;
     }
   }
 
@@ -373,30 +407,33 @@ void DataReductionProxyPingbackClientImpl::CreateFetcherForDataAndStart() {
             "enabled, this feature cannot be disabled by settings."
           policy_exception_justification: "Not implemented."
         })");
-  current_fetcher_ = net::URLFetcher::Create(
-      pingback_url_, net::URLFetcher::POST, this, traffic_annotation);
-  data_use_measurement::DataUseUserData::AttachToFetcher(
-      current_fetcher_.get(),
-      data_use_measurement::DataUseUserData::DATA_REDUCTION_PROXY);
-  current_fetcher_->SetLoadFlags(net::LOAD_BYPASS_PROXY |
+  auto resource_request = std::make_unique<network::ResourceRequest>();
+  resource_request->url = pingback_url_;
+  resource_request->load_flags = net::LOAD_BYPASS_PROXY |
                                  net::LOAD_DO_NOT_SEND_COOKIES |
-                                 net::LOAD_DO_NOT_SAVE_COOKIES);
-  current_fetcher_->SetUploadData("application/x-protobuf", serialized_request);
-  current_fetcher_->SetRequestContext(url_request_context_);
-  // |current_fetcher_| should not retry on 5xx errors since the server may
+                                 net::LOAD_DO_NOT_SAVE_COOKIES;
+  resource_request->method = "POST";
+  // Attach variations headers.
+  variations::AppendVariationHeaders(
+      pingback_url_, variations::InIncognito::kNo, variations::SignedIn::kNo,
+      &resource_request->headers);
+  // TODO(https://crbug.com/808498): Re-add data use measurement once
+  // SimpleURLLoader supports it.
+  // ID=data_use_measurement::DataUseUserData::DATA_REDUCTION_PROXY
+  current_loader_ = network::SimpleURLLoader::Create(
+      std::move(resource_request), traffic_annotation);
+  current_loader_->AttachStringForUpload(serialized_request,
+                                         "application/x-protobuf");
+  // |current_loader_| should not retry on 5xx errors since the server may
   // already be overloaded.
   static const int kMaxRetries = 5;
-  current_fetcher_->SetAutomaticallyRetryOnNetworkChanges(kMaxRetries);
-
-  // Attach variations headers.
-  net::HttpRequestHeaders headers;
-  variations::AppendVariationHeaders(pingback_url_,
-                                     variations::InIncognito::kNo,
-                                     variations::SignedIn::kNo, &headers);
-  if (!headers.IsEmpty())
-    current_fetcher_->SetExtraRequestHeaders(headers.ToString());
-
-  current_fetcher_->Start();
+  current_loader_->SetRetryOptions(
+      kMaxRetries, network::SimpleURLLoader::RETRY_ON_NETWORK_CHANGE);
+  current_loader_->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
+      url_loader_factory_.get(),
+      base::BindOnce(
+          &DataReductionProxyPingbackClientImpl::OnSimpleLoaderComplete,
+          base::Unretained(this)));
 }
 
 bool DataReductionProxyPingbackClientImpl::ShouldSendPingback() const {

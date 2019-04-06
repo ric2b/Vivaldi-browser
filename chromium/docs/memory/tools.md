@@ -26,7 +26,7 @@ If that seems like a lot of tools and complexity, it is [but there's a reason](#
 -----------
 ## <a name="global-memory-dumps"> Global Memory Dumps
 Many Chrome subsystems implement the
-[`trace_event::MemoryDumpProvider`](../../ase/trace_event/memory_dump_provider.h)
+[`trace_event::MemoryDumpProvider`](../../base/trace_event/memory_dump_provider.h)
 interface to provide self-reported stats detailing their memory usage. The
 Global Memory Dump view provides a snapshot-oriented view of these subsystems
 that can be collected and viewed via the chrome://tracing infrastructure.
@@ -123,7 +123,7 @@ TODO(awong): Write about options to script and the flame graph.
 Heap dumps provide extremely detailed data about object allocations and is
 useful for finding code locations that are generating a large number of live
 allocations. Data is tracked and recorded using the [Out-of-process Heap
-Profiler (OOPHP)](../../src/chrome/profiling/README.md).
+Profiler (OOPHP)](../../components/services/heap_profiling/README.md).
 
 For the Browser and GPU process, this often quickly finds objects that leak over
 time.
@@ -138,10 +138,11 @@ looking similar due to the nature of DOM node allocation.
     `VirtualAlloc()`) will not be tracked.
   * Utility processes are currently not profiled.
   * Allocations are only recorded after the
-    [ProfilingService](../../src/chrome/profiling/profiling_service.h) has spun up the
-    profiling process and created a connection to the target process. The ProfilingService
-    is a mojo service that can be configured to start early in browser startup
-    but it still takes time to spin up and early allocations are thus lost.
+    [HeapProfilingService](../../components/services/heap_profiling/heap_profiling_service.h)
+    has spun up the profiling process and created a connection to the target
+    process. The HeapProfilingService is a mojo service that can be configured to
+    start early in browser startup but it still takes time to spin up and early
+    allocations are thus lost.
 
 ### Instructions
 #### <a name="configure-oophp"></a>Configuration and setup
@@ -164,7 +165,7 @@ looking similar due to the nature of DOM node allocation.
      dump of all the profiled processes. On Android, enable debugging via USB
      and use chrome://inspect/?tracing#devices to take a memory-infra trace
      which will have the heap dump embedded.
-  2. Symbolize trace using  [`symbolize_trace.py`](../../third_party/catapult/experimental/tracing/bin/symbolize_trace.py)
+  2. Symbolize trace using  [`symbolize_trace.py`](../../third_party/catapult/tracing/bin/symbolize_trace). If the Chrome binary was built locally, pass the flag "--is-local-build".
   3. Analyze resuing heap dump using [`diff_heap_profiler.py`](#diff-heap-profiler), or [Heap Profile view in Chrome Tracing](#tracing-heap-profile)
 
 On deskop, using chrome://memory-internals to take a heap dump is more reliable

@@ -27,11 +27,11 @@ class PreviewModeClient : public PDFEngine::Client {
   ~PreviewModeClient() override {}
 
   // PDFEngine::Client implementation.
-  void DocumentSizeUpdated(const pp::Size& size) override;
   void Invalidate(const pp::Rect& rect) override;
-  void Scroll(const pp::Point& point) override;
+  void DidScroll(const pp::Point& point) override;
   void ScrollToX(int x_in_screen_coords) override;
   void ScrollToY(int y_in_screen_coords, bool compensate_for_toolbar) override;
+  void ScrollBy(const pp::Point& point) override;
   void ScrollToPage(int page) override;
   void NavigateTo(const std::string& url,
                   WindowOpenDisposition disposition) override;
@@ -39,8 +39,6 @@ class PreviewModeClient : public PDFEngine::Client {
   void UpdateTickMarks(const std::vector<pp::Rect>& tickmarks) override;
   void NotifyNumberOfFindResultsChanged(int total, bool final_result) override;
   void NotifySelectedFindResultChanged(int current_find_index) override;
-  void NotifyPageBecameVisible(
-      const PDFEngine::PageFeatures* page_features) override;
   void GetDocumentPassword(
       pp::CompletionCallbackWithOutput<pp::Var> callback) override;
   void Alert(const std::string& message) override;
@@ -58,22 +56,20 @@ class PreviewModeClient : public PDFEngine::Client {
                   const void* data,
                   int length) override;
   pp::URLLoader CreateURLLoader() override;
-  void ScheduleCallback(int id, base::TimeDelta delay) override;
-  void ScheduleTouchTimerCallback(int id, base::TimeDelta delay) override;
   std::vector<SearchStringResult> SearchString(const base::char16* string,
                                                const base::char16* term,
                                                bool case_sensitive) override;
   void DocumentPaintOccurred() override;
   void DocumentLoadComplete(
-      const PDFEngine::DocumentFeatures& document_features) override;
+      const PDFEngine::DocumentFeatures& document_features,
+      uint32_t file_size) override;
   void DocumentLoadFailed() override;
   void FontSubstituted() override;
   pp::Instance* GetPluginInstance() override;
   void DocumentHasUnsupportedFeature(const std::string& feature) override;
-  void DocumentLoadProgress(uint32_t available, uint32_t doc_size) override;
   void FormTextFieldFocusChange(bool in_focus) override;
   bool IsPrintPreview() override;
-  void CancelBrowserDownload() override;
+  float GetToolbarHeightInScreenCoords() override;
   uint32_t GetBackgroundColor() override;
 
  private:

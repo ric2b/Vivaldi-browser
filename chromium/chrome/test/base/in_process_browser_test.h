@@ -22,6 +22,7 @@
 
 #if defined(OS_MACOSX)
 #include "ui/base/test/scoped_fake_full_keyboard_access.h"
+#include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 #endif
 
 namespace base {
@@ -40,6 +41,10 @@ class ScopedCOMInitializer;
 }
 #endif  // defined(OS_WIN)
 }  // namespace base
+
+#if defined(TOOLKIT_VIEWS)
+class AccessibilityChecker;
+#endif
 
 class Browser;
 class Profile;
@@ -147,6 +152,11 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   // outstanding resources.
   void CloseAllBrowsers();
 
+  // Runs the main thread message loop until the BrowserProcess indicates
+  // we should quit. This will normally be called automatically during test
+  // teardown, but may instead be run manually by the test, if necessary.
+  void RunUntilBrowserProcessQuits();
+
   // Convenience methods for adding tabs to a Browser.
   void AddTabAtIndexToBrowser(Browser* browser,
                               int index,
@@ -188,8 +198,9 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   // finish loading and shows the browser.
   Browser* CreateBrowser(Profile* profile);
 
-  // Similar to |CreateBrowser|, but creates an incognito browser.
-  Browser* CreateIncognitoBrowser();
+  // Similar to |CreateBrowser|, but creates an incognito browser. If |profile|
+  // is omitted, the currently active profile will be used.
+  Browser* CreateIncognitoBrowser(Profile* profile = nullptr);
 
   // Creates a browser for a popup window with a single tab (about:blank), waits
   // for the tab to finish loading, and shows the browser.
@@ -202,13 +213,6 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   // Called from the various CreateBrowser methods to add a blank tab, wait for
   // the navigation to complete, and show the browser's window.
   void AddBlankTabAndShow(Browser* browser);
-
-  // Enables running of accessibility audit for a particular test case.
-  //  - Call in test body to enable/disable for one test case.
-  //  - Call in SetUpOnMainThread() to enable for all test cases.
-  void EnableAccessibilityChecksForTestCase(bool enabled) {
-    run_accessibility_checks_for_test_case_ = enabled;
-  }
 
 #if !defined OS_MACOSX
   // Return a CommandLine object that is used to relaunch the browser_test
@@ -235,9 +239,6 @@ class InProcessBrowserTest : public content::BrowserTestBase {
     open_about_blank_on_browser_launch_ = value;
   }
 
-  // Runs accessibility checks and sets |error_message| if it fails.
-  bool RunAccessibilityChecks(std::string* error_message);
-
  private:
   // Creates a user data directory for the test if one is needed. Returns true
   // if successful.
@@ -251,6 +252,9 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   // Browser created in BrowserMain().
   Browser* browser_;
 
+  // Used to run the process until the BrowserProcess signals the test to quit.
+  std::unique_ptr<base::RunLoop> run_loop_;
+
   // Temporary user data directory. Used only when a user data directory is not
   // specified in the command line.
   base::ScopedTempDir temp_user_data_dir_;
@@ -261,12 +265,12 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   // True if the about:blank tab should be opened when the browser is launched.
   bool open_about_blank_on_browser_launch_;
 
-  // True if the accessibility test should run for a particular test case.
-  // This is reset for every test case.
-  bool run_accessibility_checks_for_test_case_;
-
   // We use hardcoded quota settings to have a consistent testing environment.
   storage::QuotaSettings quota_settings_;
+
+  // Use a default download directory to make sure downloads don't end up in the
+  // system default location.
+  base::ScopedTempDir default_download_dir_;
 
   base::test::ScopedFeatureList scoped_feature_list_;
 
@@ -279,10 +283,20 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   // more consistent with other platforms, where most views are focusable by
   // default.
   ui::test::ScopedFakeFullKeyboardAccess faked_full_keyboard_access_;
+
+  // Don't allow browser tests to enter real fullscreen - it might trigger races
+  // in WindowServer in test configurations. This is a temporary debugging hack.
+  // TODO(ellyjones): Remove this or make it permanent -
+  // https://crbug.com/828031.
+  ui::test::ScopedFakeNSWindowFullscreen faked_fullscreen_;
 #endif  // OS_MACOSX
 
 #if defined(OS_WIN)
   std::unique_ptr<base::win::ScopedCOMInitializer> com_initializer_;
+#endif
+
+#if defined(TOOLKIT_VIEWS)
+  std::unique_ptr<AccessibilityChecker> accessibility_checker_;
 #endif
 };
 

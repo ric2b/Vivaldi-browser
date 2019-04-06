@@ -6,18 +6,16 @@
 
 #include "base/bind.h"
 #include "base/callback_forward.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/test/test_simple_task_runner.h"
-#include "chromeos/components/tether/ble_constants.h"
-#include "chromeos/components/tether/error_tolerant_ble_advertisement_impl.h"
-#include "chromeos/components/tether/fake_ble_synchronizer.h"
-#include "chromeos/components/tether/fake_error_tolerant_ble_advertisement.h"
-#include "components/cryptauth/ble/ble_advertisement_generator.h"
-#include "components/cryptauth/ble/fake_ble_advertisement_generator.h"
-#include "components/cryptauth/mock_foreground_eid_generator.h"
-#include "components/cryptauth/mock_local_device_data_provider.h"
-#include "components/cryptauth/mock_remote_beacon_seed_fetcher.h"
+#include "chromeos/services/secure_channel/ble_constants.h"
+#include "chromeos/services/secure_channel/device_id_pair.h"
+#include "chromeos/services/secure_channel/error_tolerant_ble_advertisement_impl.h"
+#include "chromeos/services/secure_channel/fake_ble_service_data_helper.h"
+#include "chromeos/services/secure_channel/fake_ble_synchronizer.h"
+#include "chromeos/services/secure_channel/fake_error_tolerant_ble_advertisement.h"
 #include "components/cryptauth/proto/cryptauth_api.pb.h"
 #include "components/cryptauth/remote_device_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -27,6 +25,8 @@ namespace chromeos {
 namespace tether {
 
 namespace {
+
+const char kStubLocalDeviceId[] = "N/A";
 
 std::vector<cryptauth::DataWithTimestamp> GenerateFakeAdvertisements() {
   cryptauth::DataWithTimestamp advertisement1("advertisement1", 1000L, 2000L);
@@ -39,44 +39,48 @@ std::vector<cryptauth::DataWithTimestamp> GenerateFakeAdvertisements() {
 }
 
 class FakeErrorTolerantBleAdvertisementFactory
-    : public ErrorTolerantBleAdvertisementImpl::Factory {
+    : public secure_channel::ErrorTolerantBleAdvertisementImpl::Factory {
  public:
   FakeErrorTolerantBleAdvertisementFactory() = default;
   ~FakeErrorTolerantBleAdvertisementFactory() override = default;
 
-  const std::vector<FakeErrorTolerantBleAdvertisement*>&
+  const std::vector<secure_channel::FakeErrorTolerantBleAdvertisement*>&
   active_advertisements() {
     return active_advertisements_;
   }
 
   size_t num_created() { return num_created_; }
 
-  // ErrorTolerantBleAdvertisementImpl::Factory:
-  std::unique_ptr<ErrorTolerantBleAdvertisement> BuildInstance(
-      const std::string& device_id,
+  // secure_channel::ErrorTolerantBleAdvertisementImpl::Factory:
+  std::unique_ptr<secure_channel::ErrorTolerantBleAdvertisement> BuildInstance(
+      const secure_channel::DeviceIdPair& device_id_pair,
       std::unique_ptr<cryptauth::DataWithTimestamp> advertisement_data,
-      BleSynchronizerBase* ble_synchronizer) override {
-    FakeErrorTolerantBleAdvertisement* fake_advertisement =
-        new FakeErrorTolerantBleAdvertisement(
-            device_id, base::Bind(&FakeErrorTolerantBleAdvertisementFactory::
-                                      OnFakeAdvertisementDeleted,
-                                  base::Unretained(this)));
-    active_advertisements_.push_back(fake_advertisement);
+      secure_channel::BleSynchronizerBase* ble_synchronizer) override {
+    auto fake_advertisement =
+        std::make_unique<secure_channel::FakeErrorTolerantBleAdvertisement>(
+            device_id_pair,
+            base::BindOnce(&FakeErrorTolerantBleAdvertisementFactory::
+                               OnFakeAdvertisementDeleted,
+                           base::Unretained(this)));
+    active_advertisements_.push_back(fake_advertisement.get());
     ++num_created_;
-    return base::WrapUnique(fake_advertisement);
+    return fake_advertisement;
   }
 
  protected:
   void OnFakeAdvertisementDeleted(
-      FakeErrorTolerantBleAdvertisement* fake_advertisement) {
-    EXPECT_TRUE(std::find(active_advertisements_.begin(),
-                          active_advertisements_.end(),
-                          fake_advertisement) != active_advertisements_.end());
-    base::Erase(active_advertisements_, fake_advertisement);
+      const secure_channel::DeviceIdPair& device_id_pair) {
+    auto it = std::find_if(
+        active_advertisements_.begin(), active_advertisements_.end(),
+        [&device_id_pair](const auto* advertisement) {
+          return advertisement->device_id_pair() == device_id_pair;
+        });
+    active_advertisements_.erase(it);
   }
 
  private:
-  std::vector<FakeErrorTolerantBleAdvertisement*> active_advertisements_;
+  std::vector<secure_channel::FakeErrorTolerantBleAdvertisement*>
+      active_advertisements_;
   size_t num_created_ = 0;
 };
 
@@ -123,29 +127,35 @@ class DeletingObserver final : public BleAdvertiser::Observer {
 class BleAdvertiserImplTest : public testing::Test {
  protected:
   BleAdvertiserImplTest()
-      : fake_devices_(cryptauth::GenerateTestRemoteDevices(3)),
+      : fake_devices_(cryptauth::CreateRemoteDeviceRefListForTest(3)),
         fake_advertisements_(GenerateFakeAdvertisements()) {}
 
   void SetUp() override {
-    fake_generator_ =
-        std::make_unique<cryptauth::FakeBleAdvertisementGenerator>();
-    cryptauth::BleAdvertisementGenerator::SetInstanceForTesting(
-        fake_generator_.get());
+    fake_ble_service_data_helper_ =
+        std::make_unique<secure_channel::FakeBleServiceDataHelper>();
+    fake_ble_service_data_helper_->SetAdvertisement(
+        secure_channel::DeviceIdPair(fake_devices_[0].GetDeviceId(),
+                                     kStubLocalDeviceId),
+        fake_advertisements_[0]);
+    fake_ble_service_data_helper_->SetAdvertisement(
+        secure_channel::DeviceIdPair(fake_devices_[1].GetDeviceId(),
+                                     kStubLocalDeviceId),
+        fake_advertisements_[1]);
+    fake_ble_service_data_helper_->SetAdvertisement(
+        secure_channel::DeviceIdPair(fake_devices_[2].GetDeviceId(),
+                                     kStubLocalDeviceId),
+        fake_advertisements_[2]);
 
-    mock_seed_fetcher_ =
-        std::make_unique<cryptauth::MockRemoteBeaconSeedFetcher>();
-    mock_local_data_provider_ =
-        std::make_unique<cryptauth::MockLocalDeviceDataProvider>();
-    fake_ble_synchronizer_ = std::make_unique<FakeBleSynchronizer>();
+    fake_ble_synchronizer_ =
+        std::make_unique<secure_channel::FakeBleSynchronizer>();
 
     fake_advertisement_factory_ =
         base::WrapUnique(new FakeErrorTolerantBleAdvertisementFactory());
-    ErrorTolerantBleAdvertisementImpl::Factory::SetInstanceForTesting(
-        fake_advertisement_factory_.get());
+    secure_channel::ErrorTolerantBleAdvertisementImpl::Factory::
+        SetFactoryForTesting(fake_advertisement_factory_.get());
 
-    ble_advertiser_ = std::make_unique<BleAdvertiserImpl>(
-        mock_local_data_provider_.get(), mock_seed_fetcher_.get(),
-        fake_ble_synchronizer_.get());
+    ble_advertiser_ = base::WrapUnique(new BleAdvertiserImpl(
+        fake_ble_service_data_helper_.get(), fake_ble_synchronizer_.get()));
 
     test_task_runner_ = base::MakeRefCounted<base::TestSimpleTaskRunner>();
     ble_advertiser_->SetTaskRunnerForTesting(test_task_runner_);
@@ -155,38 +165,37 @@ class BleAdvertiserImplTest : public testing::Test {
   }
 
   void TearDown() override {
-    ErrorTolerantBleAdvertisementImpl::Factory::SetInstanceForTesting(nullptr);
-    cryptauth::BleAdvertisementGenerator::SetInstanceForTesting(nullptr);
+    secure_channel::ErrorTolerantBleAdvertisementImpl::Factory::
+        SetFactoryForTesting(nullptr);
   }
 
   void VerifyAdvertisementHasBeenStopped(
       size_t index,
       const std::string& expected_device_id) {
-    FakeErrorTolerantBleAdvertisement* advertisement =
+    secure_channel::FakeErrorTolerantBleAdvertisement* advertisement =
         fake_advertisement_factory_->active_advertisements()[index];
-    EXPECT_EQ(expected_device_id, advertisement->device_id());
+    EXPECT_EQ(expected_device_id,
+              advertisement->device_id_pair().remote_device_id());
     EXPECT_TRUE(advertisement->HasBeenStopped());
   }
 
   void InvokeAdvertisementStoppedCallback(
       size_t index,
       const std::string& expected_device_id) {
-    FakeErrorTolerantBleAdvertisement* advertisement =
+    secure_channel::FakeErrorTolerantBleAdvertisement* advertisement =
         fake_advertisement_factory_->active_advertisements()[index];
-    EXPECT_EQ(expected_device_id, advertisement->device_id());
+    EXPECT_EQ(expected_device_id,
+              advertisement->device_id_pair().remote_device_id());
     advertisement->InvokeStopCallback();
   }
 
   const base::test::ScopedTaskEnvironment scoped_task_environment_;
-  const std::vector<cryptauth::RemoteDevice> fake_devices_;
+  const cryptauth::RemoteDeviceRefList fake_devices_;
   const std::vector<cryptauth::DataWithTimestamp> fake_advertisements_;
 
-  std::unique_ptr<cryptauth::MockRemoteBeaconSeedFetcher> mock_seed_fetcher_;
-  std::unique_ptr<cryptauth::MockLocalDeviceDataProvider>
-      mock_local_data_provider_;
-  std::unique_ptr<FakeBleSynchronizer> fake_ble_synchronizer_;
-
-  std::unique_ptr<cryptauth::FakeBleAdvertisementGenerator> fake_generator_;
+  std::unique_ptr<secure_channel::FakeBleServiceDataHelper>
+      fake_ble_service_data_helper_;
+  std::unique_ptr<secure_channel::FakeBleSynchronizer> fake_ble_synchronizer_;
 
   scoped_refptr<base::TestSimpleTaskRunner> test_task_runner_;
 
@@ -202,17 +211,18 @@ class BleAdvertiserImplTest : public testing::Test {
 };
 
 TEST_F(BleAdvertiserImplTest, CannotGenerateAdvertisement) {
-  fake_generator_->set_advertisement(nullptr);
+  fake_ble_service_data_helper_->RemoveAdvertisement(
+      secure_channel::DeviceIdPair(fake_devices_[0].GetDeviceId(),
+                                   kStubLocalDeviceId));
+
   EXPECT_FALSE(ble_advertiser_->StartAdvertisingToDevice(
       fake_devices_[0].GetDeviceId()));
   EXPECT_EQ(0u, fake_advertisement_factory_->num_created());
   EXPECT_EQ(0u, test_observer_->num_times_all_advertisements_unregistered());
 }
 
+// ryan
 TEST_F(BleAdvertiserImplTest, AdvertisementRegisteredSuccessfully) {
-  fake_generator_->set_advertisement(
-      std::make_unique<cryptauth::DataWithTimestamp>(fake_advertisements_[0]));
-
   EXPECT_TRUE(ble_advertiser_->StartAdvertisingToDevice(
       fake_devices_[0].GetDeviceId()));
   EXPECT_EQ(1u, fake_advertisement_factory_->num_created());
@@ -241,9 +251,6 @@ TEST_F(BleAdvertiserImplTest, AdvertisementRegisteredSuccessfully) {
 }
 
 TEST_F(BleAdvertiserImplTest, AdvertisementRegisteredSuccessfully_TwoDevices) {
-  // Register device 0.
-  fake_generator_->set_advertisement(
-      std::make_unique<cryptauth::DataWithTimestamp>(fake_advertisements_[0]));
   EXPECT_TRUE(ble_advertiser_->StartAdvertisingToDevice(
       fake_devices_[0].GetDeviceId()));
   EXPECT_EQ(1u, fake_advertisement_factory_->num_created());
@@ -251,9 +258,6 @@ TEST_F(BleAdvertiserImplTest, AdvertisementRegisteredSuccessfully_TwoDevices) {
   EXPECT_TRUE(ble_advertiser_->AreAdvertisementsRegistered());
   EXPECT_EQ(0u, test_observer_->num_times_all_advertisements_unregistered());
 
-  // Register device 1.
-  fake_generator_->set_advertisement(
-      std::make_unique<cryptauth::DataWithTimestamp>(fake_advertisements_[1]));
   EXPECT_TRUE(ble_advertiser_->StartAdvertisingToDevice(
       fake_devices_[1].GetDeviceId()));
   EXPECT_EQ(2u, fake_advertisement_factory_->num_created());
@@ -284,27 +288,21 @@ TEST_F(BleAdvertiserImplTest, AdvertisementRegisteredSuccessfully_TwoDevices) {
 }
 
 TEST_F(BleAdvertiserImplTest, TooManyDevicesRegistered) {
-  ASSERT_EQ(2u, kMaxConcurrentAdvertisements);
+  ASSERT_EQ(2u, secure_channel::kMaxConcurrentAdvertisements);
 
   // Register device 0.
-  fake_generator_->set_advertisement(
-      std::make_unique<cryptauth::DataWithTimestamp>(fake_advertisements_[0]));
   EXPECT_TRUE(ble_advertiser_->StartAdvertisingToDevice(
       fake_devices_[0].GetDeviceId()));
   EXPECT_EQ(1u, fake_advertisement_factory_->num_created());
   EXPECT_EQ(1u, fake_advertisement_factory_->active_advertisements().size());
 
   // Register device 1.
-  fake_generator_->set_advertisement(
-      std::make_unique<cryptauth::DataWithTimestamp>(fake_advertisements_[1]));
   EXPECT_TRUE(ble_advertiser_->StartAdvertisingToDevice(
       fake_devices_[1].GetDeviceId()));
   EXPECT_EQ(2u, fake_advertisement_factory_->num_created());
   EXPECT_EQ(2u, fake_advertisement_factory_->active_advertisements().size());
 
   // Register device 2. This should fail, since it is over the limit.
-  fake_generator_->set_advertisement(
-      std::make_unique<cryptauth::DataWithTimestamp>(fake_advertisements_[2]));
   EXPECT_FALSE(ble_advertiser_->StartAdvertisingToDevice(
       fake_devices_[2].GetDeviceId()));
   EXPECT_EQ(2u, fake_advertisement_factory_->num_created());
@@ -334,12 +332,14 @@ TEST_F(BleAdvertiserImplTest, TooManyDevicesRegistered) {
 
   // Verify that the remaining active advertisements correspond to the correct
   // devices.
-  EXPECT_EQ(
-      fake_devices_[0].GetDeviceId(),
-      fake_advertisement_factory_->active_advertisements()[0]->device_id());
-  EXPECT_EQ(
-      fake_devices_[2].GetDeviceId(),
-      fake_advertisement_factory_->active_advertisements()[1]->device_id());
+  EXPECT_EQ(fake_devices_[0].GetDeviceId(),
+            fake_advertisement_factory_->active_advertisements()[0]
+                ->device_id_pair()
+                .remote_device_id());
+  EXPECT_EQ(fake_devices_[2].GetDeviceId(),
+            fake_advertisement_factory_->active_advertisements()[1]
+                ->device_id_pair()
+                .remote_device_id());
 }
 
 // Regression test for crbug.com/739883. This issue arises when the following
@@ -354,9 +354,6 @@ TEST_F(BleAdvertiserImplTest, TooManyDevicesRegistered) {
 // that the new advertisement in step (3) above does not start until the
 // previous one has been finished.
 TEST_F(BleAdvertiserImplTest, SameAdvertisementAdded_FirstHasNotBeenStopped) {
-  fake_generator_->set_advertisement(
-      std::make_unique<cryptauth::DataWithTimestamp>(fake_advertisements_[0]));
-
   EXPECT_TRUE(ble_advertiser_->StartAdvertisingToDevice(
       fake_devices_[0].GetDeviceId()));
   EXPECT_EQ(1u, fake_advertisement_factory_->num_created());
@@ -371,8 +368,6 @@ TEST_F(BleAdvertiserImplTest, SameAdvertisementAdded_FirstHasNotBeenStopped) {
   // Start advertising again, to the same device. Since the previous
   // advertisement has not successfully stopped, no new advertisement should
   // have been created yet.
-  fake_generator_->set_advertisement(
-      std::make_unique<cryptauth::DataWithTimestamp>(fake_advertisements_[0]));
   EXPECT_TRUE(ble_advertiser_->StartAdvertisingToDevice(
       fake_devices_[0].GetDeviceId()));
   EXPECT_EQ(1u, fake_advertisement_factory_->num_created());
@@ -398,8 +393,6 @@ TEST_F(BleAdvertiserImplTest, ObserverDeletesObjectWhenNotified) {
   DeletingObserver deleting_observer(ble_advertiser_);
   ble_advertiser_->RemoveObserver(test_observer_.get());
 
-  fake_generator_->set_advertisement(
-      std::make_unique<cryptauth::DataWithTimestamp>(fake_advertisements_[0]));
   ble_advertiser_->StartAdvertisingToDevice(fake_devices_[0].GetDeviceId());
   ble_advertiser_->StopAdvertisingToDevice(fake_devices_[0].GetDeviceId());
   InvokeAdvertisementStoppedCallback(0u /* index */,

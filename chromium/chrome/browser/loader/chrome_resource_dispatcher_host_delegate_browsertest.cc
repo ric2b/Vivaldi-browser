@@ -22,11 +22,13 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/test/scoped_command_line.h"
+#include "build/buildflag.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_browsertest.h"
 #include "chrome/browser/loader/chrome_navigation_data.h"
 #include "chrome/browser/policy/cloud/policy_header_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/scoped_account_consistency.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
@@ -35,13 +37,10 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
-#include "components/policy/core/common/cloud/policy_header_io_helper.h"
 #include "components/policy/core/common/cloud/policy_header_service.h"
 #include "components/policy/core/common/policy_switches.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/profile_management_switches.h"
-#include "components/signin/core/browser/scoped_account_consistency.h"
-#include "components/signin/core/browser/signin_header_helper.h"
+#include "components/signin/core/browser/signin_buildflags.h"
 #include "components/signin/core/browser/signin_pref_names.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -58,7 +57,13 @@
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_filter.h"
+#include "services/network/public/cpp/features.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
+#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
+
+#if !BUILDFLAG(ENABLE_DICE_SUPPORT)
+#include "components/signin/core/browser/signin_header_helper.h"
+#endif
 
 using content::ResourceType;
 using testing::HasSubstr;
@@ -66,30 +71,16 @@ using testing::Not;
 
 namespace {
 
-static const char kTestPolicyHeader[] = "test_header";
-static const char kServerRedirectUrl[] = "/server-redirect";
-
 std::unique_ptr<net::test_server::HttpResponse> HandleTestRequest(
     const net::test_server::HttpRequest& request) {
-  if (base::StartsWith(request.relative_url, kServerRedirectUrl,
-                       base::CompareCase::SENSITIVE)) {
-    // Extract the target URL and redirect there.
-    size_t query_string_pos = request.relative_url.find('?');
-    std::string redirect_target =
-        request.relative_url.substr(query_string_pos + 1);
-
-    std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
-        new net::test_server::BasicHttpResponse);
-    http_response->set_code(net::HTTP_MOVED_PERMANENTLY);
-    http_response->AddCustomHeader("Location", redirect_target);
-    return std::move(http_response);
-  } else {
+  if (request.relative_url == "/") {
     std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
         new net::test_server::BasicHttpResponse);
     http_response->set_code(net::HTTP_OK);
     http_response->set_content("Success");
     return std::move(http_response);
   }
+  return nullptr;
 }
 
 class TestDispatcherHostDelegate : public ChromeResourceDispatcherHostDelegate {
@@ -218,28 +209,6 @@ class ChromeResourceDispatcherHostDelegateBrowserTest :
     embedded_test_server()->RegisterRequestHandler(
         base::Bind(&HandleTestRequest));
     ASSERT_TRUE(embedded_test_server()->Start());
-    // Tell chrome that this is our DM server.
-    dm_url_ = embedded_test_server()->GetURL("/DeviceManagement");
-
-    // At this point, the Profile is already initialized and it's too
-    // late to set the DMServer URL via command line flags, so directly
-    // inject it to the PolicyHeaderIOHelper.
-    policy::PolicyHeaderService* policy_header_service =
-        policy::PolicyHeaderServiceFactory::GetForBrowserContext(
-            browser()->profile());
-    std::vector<policy::PolicyHeaderIOHelper*> helpers =
-        policy_header_service->GetHelpersForTest();
-    for (std::vector<policy::PolicyHeaderIOHelper*>::const_iterator it =
-             helpers.begin();
-         it != helpers.end(); ++it) {
-      (*it)->SetServerURLForTest(dm_url_.spec());
-      (*it)->UpdateHeader(kTestPolicyHeader);
-    }
-
-    // Set up temp directory for downloads.
-    ASSERT_TRUE(downloads_directory_.CreateUniqueTempDir());
-    browser()->profile()->GetPrefs()->SetFilePath(
-        prefs::kDownloadDefaultDirectory, downloads_directory_.GetPath());
   }
 
   void TearDownOnMainThread() override {
@@ -266,57 +235,21 @@ class ChromeResourceDispatcherHostDelegateBrowserTest :
   }
 
  protected:
-  // The fake URL for DMServer we are using.
-  GURL dm_url_;
   std::unique_ptr<TestDispatcherHostDelegate> dispatcher_host_delegate_;
 
  private:
-  // Location of the downloads directory for tests that use one.
-  base::ScopedTempDir downloads_directory_;
-
   DISALLOW_COPY_AND_ASSIGN(ChromeResourceDispatcherHostDelegateBrowserTest);
 };
 
-
-IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
-                       NoPolicyHeader) {
-  // When fetching non-DMServer URLs, we should not add a policy header to the
-  // request.
-  DCHECK(!embedded_test_server()->base_url().spec().empty());
-  ui_test_utils::NavigateToURL(browser(), embedded_test_server()->base_url());
-  ASSERT_FALSE(dispatcher_host_delegate_->request_headers().HasHeader(
-      policy::kChromePolicyHeader));
-}
-
-IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
-                       PolicyHeader) {
-  // When fetching a DMServer URL, we should add a policy header to the
-  // request.
-  ui_test_utils::NavigateToURL(browser(), dm_url_);
-  std::string value;
-  ASSERT_TRUE(dispatcher_host_delegate_->request_headers().GetHeader(
-      policy::kChromePolicyHeader, &value));
-  ASSERT_EQ(kTestPolicyHeader, value);
-}
-
-IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
-                       PolicyHeaderForRedirect) {
-  // Build up a URL that results in a redirect to the DMServer URL to make
-  // sure the policy header is still added.
-  std::string redirect_url;
-  redirect_url += kServerRedirectUrl;
-  redirect_url += "?";
-  redirect_url += dm_url_.spec();
-  ui_test_utils::NavigateToURL(browser(), embedded_test_server()->GetURL(
-      redirect_url));
-  std::string value;
-  ASSERT_TRUE(dispatcher_host_delegate_->request_headers().GetHeader(
-      policy::kChromePolicyHeader, &value));
-  ASSERT_EQ(kTestPolicyHeader, value);
-}
-
 IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
                        NavigationDataProcessed) {
+  // The network service code path doesn't go through ResourceDispatcherHost.
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;
+  // Servicified service worker doesn't set NavigationData.
+  if (blink::ServiceWorkerUtils::IsServicificationEnabled())
+    return;
+
   ui_test_utils::NavigateToURL(browser(), embedded_test_server()->base_url());
   {
     DidFinishNavigationObserver nav_observer(
@@ -331,6 +264,9 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
     ui_test_utils::NavigateToURL(browser(), embedded_test_server()->base_url());
   }
 }
+
+// Mirror is not supported on Dice platforms.
+#if !BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 namespace {
 
@@ -460,6 +396,14 @@ void SetDelegateOnIO(content::ResourceDispatcherHostDelegate* new_delegate) {
   content::ResourceDispatcherHost::Get()->SetDelegate(new_delegate);
 }
 
+// Subclass of ChromeResourceDispatcherHostDelegateBrowserTest with Mirror
+// enabled.
+class ChromeResourceDispatcherHostDelegateMirrorBrowserTest
+    : public ChromeResourceDispatcherHostDelegateBrowserTest {
+ private:
+  ScopedAccountConsistencyMirror scoped_mirror_;
+};
+
 // Verify the following items:
 // 1- X-Chrome-Connected is appended on Google domains if account
 //    consistency is enabled and access is secure.
@@ -468,19 +412,15 @@ void SetDelegateOnIO(content::ResourceDispatcherHostDelegate* new_delegate) {
 // 3- The header is NOT stripped in case it is added directly by the page
 //    and not because it was on a secure Google domain.
 // This is a regression test for crbug.com/588492.
-IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
+IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateMirrorBrowserTest,
                        MirrorRequestHeader) {
-  // Enable account consistency so that mirror actually sets the
-  // X-Chrome-Connected header in requests to Google.
-  signin::ScopedAccountConsistencyMirror scoped_mirror;
-
   browser()->profile()->GetPrefs()->SetString(prefs::kGoogleServicesUsername,
                                               "user@gmail.com");
   browser()->profile()->GetPrefs()->SetString(
       prefs::kGoogleServicesUserAccountId, "account_id");
 
   base::FilePath root_http;
-  PathService::Get(chrome::DIR_TEST_DATA, &root_http);
+  base::PathService::Get(chrome::DIR_TEST_DATA, &root_http);
   root_http = root_http.AppendASCII("mirror_request_header");
 
   struct TestCase {
@@ -519,7 +459,7 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
     std::unique_ptr<HeaderTestDispatcherHostDelegate> dispatcher_host_delegate;
     if (test_case.inject_header) {
       dispatcher_host_delegate =
-          base::MakeUnique<HeaderTestDispatcherHostDelegate>(
+          std::make_unique<HeaderTestDispatcherHostDelegate>(
               test_case.original_url);
       content::BrowserThread::PostTask(
           content::BrowserThread::IO, FROM_HERE,
@@ -566,7 +506,7 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
     content::BrowserThread::PostTaskAndReply(content::BrowserThread::IO,
                                              FROM_HERE,
                                              // Flush IO thread...
-                                             base::BindOnce(&base::DoNothing),
+                                             base::DoNothing(),
                                              // ... and UI thread.
                                              run_loop.QuitClosure());
     run_loop.Run();
@@ -592,12 +532,18 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
   }
 }
 
+#endif  // !BUILDFLAG(ENABLE_DICE_SUPPORT)
+
 // Check that exactly one set of throttles is added to smaller downloads, which
 // have their mime type determined only after the response is completely
 // received.
 // See https://crbug.com/640545
 IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
                        ThrottlesAddedExactlyOnceToTinySniffedDownloads) {
+  // This code path isn't used when the network service is enabled.
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;
+
   GURL url = embedded_test_server()->GetURL("/downloads/tiny_binary.bin");
   DownloadTestObserverNotInProgress download_observer(
       content::BrowserContext::GetDownloadManager(browser()->profile()), 1);
@@ -611,6 +557,10 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
 // have their mime type determined before the end of the response is reported.
 IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
                        ThrottlesAddedExactlyOnceToLargeSniffedDownloads) {
+  // This code path isn't used when the network service is enabled.
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;
+
   GURL url = embedded_test_server()->GetURL("/downloads/thisdayinhistory.xls");
   DownloadTestObserverNotInProgress download_observer(
       content::BrowserContext::GetDownloadManager(browser()->profile()), 1);
@@ -624,6 +574,10 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
 // <a download> click.
 IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
                        ThrottlesAddedExactlyOnceToADownloads) {
+  // This code path isn't used when the network service is enabled.
+  if (base::FeatureList::IsEnabled(network::features::kNetworkService))
+    return;
+
   DownloadTestObserverNotInProgress download_observer(
       content::BrowserContext::GetDownloadManager(browser()->profile()), 1);
   download_observer.StartObserving();

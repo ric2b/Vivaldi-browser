@@ -55,10 +55,8 @@ void PopulateValidatedMethodData(
   method_data_vector.reserve(method_data_mojom.size());
   for (const mojom::PaymentMethodDataPtr& method_data_entry :
        method_data_mojom) {
-    for (const std::string& method : method_data_entry->supported_methods) {
-      (*stringified_method_data)[method].insert(
-          method_data_entry->stringified_data);
-    }
+    (*stringified_method_data)[method_data_entry->supported_method].insert(
+        method_data_entry->stringified_data);
 
     method_data_vector.push_back(ConvertPaymentMethodData(method_data_entry));
   }
@@ -155,15 +153,15 @@ bool PaymentRequestSpec::IsMethodSupportedThroughBasicCard(
 
 base::string16 PaymentRequestSpec::GetFormattedCurrencyAmount(
     const mojom::PaymentCurrencyAmountPtr& currency_amount) {
-  CurrencyFormatter* formatter = GetOrCreateCurrencyFormatter(
-      currency_amount->currency, currency_amount->currency_system, app_locale_);
+  CurrencyFormatter* formatter =
+      GetOrCreateCurrencyFormatter(currency_amount->currency, app_locale_);
   return formatter->Format(currency_amount->value);
 }
 
 std::string PaymentRequestSpec::GetFormattedCurrencyCode(
     const mojom::PaymentCurrencyAmountPtr& currency_amount) {
-  CurrencyFormatter* formatter = GetOrCreateCurrencyFormatter(
-      currency_amount->currency, currency_amount->currency_system, app_locale_);
+  CurrencyFormatter* formatter =
+      GetOrCreateCurrencyFormatter(currency_amount->currency, app_locale_);
 
   return formatter->formatted_currency_code();
 }
@@ -189,7 +187,7 @@ const mojom::PaymentItemPtr& PaymentRequestSpec::GetTotal(
     PaymentInstrument* selected_instrument) const {
   const mojom::PaymentDetailsModifierPtr* modifier =
       GetApplicableModifier(selected_instrument);
-  return modifier ? (*modifier)->total : details_->total;
+  return modifier && (*modifier)->total ? (*modifier)->total : details_->total;
 }
 
 std::vector<const mojom::PaymentItemPtr*> PaymentRequestSpec::GetDisplayItems(
@@ -212,10 +210,6 @@ std::vector<const mojom::PaymentItemPtr*> PaymentRequestSpec::GetDisplayItems(
 const std::vector<mojom::PaymentShippingOptionPtr>&
 PaymentRequestSpec::GetShippingOptions() const {
   return details_->shipping_options;
-}
-
-bool PaymentRequestSpec::HasBasicCardMethodName() const {
-  return !supported_card_networks_set_.empty();
 }
 
 const mojom::PaymentDetailsModifierPtr*
@@ -241,7 +235,7 @@ PaymentRequestSpec::GetApplicableModifier(
         &payment_method_identifiers_set, &stringified_method_data);
 
     if (selected_instrument->IsValidForModifier(
-            modifier->method_data->supported_methods,
+            modifier->method_data->supported_method,
             !modifier->method_data->supported_networks.empty(),
             supported_card_networks_set,
             !modifier->method_data->supported_types.empty(), supported_types)) {
@@ -306,14 +300,13 @@ void PaymentRequestSpec::NotifyOnSpecUpdated() {
 
 CurrencyFormatter* PaymentRequestSpec::GetOrCreateCurrencyFormatter(
     const std::string& currency_code,
-    const std::string& currency_system,
     const std::string& locale_name) {
   // Create a currency formatter for |currency_code|, or if already created
   // return the cached version.
   std::pair<std::map<std::string, CurrencyFormatter>::iterator, bool>
       emplace_result = currency_formatters_.emplace(
           std::piecewise_construct, std::forward_as_tuple(currency_code),
-          std::forward_as_tuple(currency_code, currency_system, locale_name));
+          std::forward_as_tuple(currency_code, locale_name));
 
   return &(emplace_result.first->second);
 }

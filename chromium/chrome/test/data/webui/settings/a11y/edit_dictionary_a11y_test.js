@@ -29,15 +29,15 @@ AccessibilityTest.define('SettingsAccessibilityTest', {
   /** @override */
   violationFilter:
       Object.assign({}, SettingsAccessibilityTest.violationFilter, {
-        // Excuse Polymer paper-input elements.
+        // Excuse custom input elements.
         'aria-valid-attr-value': function(nodeResult) {
           const describerId =
               nodeResult.element.getAttribute('aria-describedby');
-          return describerId === '' && nodeResult.element.id === 'input';
+          return describerId === '' && nodeResult.element.tagName == 'INPUT';
         },
-        'button-name': function(nodeResult) {
-          const node = nodeResult.element;
-          return node.classList.contains('icon-expand-more');
+        'tabindex': function(nodeResult) {
+          // TODO(crbug.com/808276): remove this exception when bug is fixed.
+          return nodeResult.element.getAttribute('tabindex') == '0';
         },
       })
 });

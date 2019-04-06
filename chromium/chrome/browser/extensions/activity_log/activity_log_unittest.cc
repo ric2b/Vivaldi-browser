@@ -10,7 +10,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "build/build_config.h"
@@ -218,13 +217,8 @@ TEST_F(ActivityLogTest, LogAndFetchActions) {
   activity_log->LogAction(action);
 
   activity_log->GetFilteredActions(
-      kExtensionId,
-      Action::ACTION_ANY,
-      "",
-      "",
-      "",
-      0,
-      base::Bind(ActivityLogTest::RetrieveActions_LogAndFetchActions2));
+      kExtensionId, Action::ACTION_ANY, "", "", "", 0,
+      base::BindOnce(ActivityLogTest::RetrieveActions_LogAndFetchActions2));
 }
 
 TEST_F(ActivityLogTest, LogPrerender) {
@@ -243,7 +237,7 @@ TEST_F(ActivityLogTest, LogPrerender) {
   GURL url("http://www.google.com");
 
   prerender::test_utils::RestorePrerenderMode restore_prerender_mode;
-  prerender::PrerenderManager::SetOmniboxMode(
+  prerender::PrerenderManager::SetMode(
       prerender::PrerenderManager::PRERENDER_MODE_ENABLED);
   prerender::PrerenderManager* prerender_manager =
       prerender::PrerenderManagerFactory::GetForBrowserContext(profile());
@@ -268,13 +262,8 @@ TEST_F(ActivityLogTest, LogPrerender) {
       ->OnScriptsExecuted(contents, executing_scripts, url);
 
   activity_log->GetFilteredActions(
-      extension->id(),
-      Action::ACTION_ANY,
-      "",
-      "",
-      "",
-      0,
-      base::Bind(ActivityLogTest::Arguments_Prerender));
+      extension->id(), Action::ACTION_ANY, "", "", "", 0,
+      base::BindOnce(ActivityLogTest::Arguments_Prerender));
 
   prerender_manager->CancelAllPrerenders();
 }
@@ -337,13 +326,8 @@ TEST_F(ActivityLogTest, ArgUrlExtraction) {
   activity_log->LogAction(action);
 
   activity_log->GetFilteredActions(
-      kExtensionId,
-      Action::ACTION_ANY,
-      "",
-      "",
-      "",
-      -1,
-      base::Bind(ActivityLogTest::RetrieveActions_ArgUrlExtraction));
+      kExtensionId, Action::ACTION_ANY, "", "", "", -1,
+      base::BindOnce(ActivityLogTest::RetrieveActions_ArgUrlExtraction));
 }
 
 TEST_F(ActivityLogTest, UninstalledExtension) {
@@ -375,13 +359,8 @@ TEST_F(ActivityLogTest, UninstalledExtension) {
   activity_log->OnExtensionUninstalled(
       NULL, extension.get(), extensions::UNINSTALL_REASON_FOR_TESTING);
   activity_log->GetFilteredActions(
-      extension->id(),
-      Action::ACTION_ANY,
-      "",
-      "",
-      "",
-      -1,
-      base::Bind(ActivityLogTest::RetrieveActions_LogAndFetchActions0));
+      extension->id(), Action::ACTION_ANY, "", "", "", -1,
+      base::BindOnce(ActivityLogTest::RetrieveActions_LogAndFetchActions0));
 }
 
 TEST_F(ActivityLogTest, ArgUrlApiCalls) {
@@ -403,13 +382,8 @@ TEST_F(ActivityLogTest, ArgUrlApiCalls) {
   }
 
   activity_log->GetFilteredActions(
-      kExtensionId,
-      Action::ACTION_ANY,
-      "",
-      "",
-      "",
-      -1,
-      base::Bind(ActivityLogTest::RetrieveActions_ArgUrlApiCalls));
+      kExtensionId, Action::ACTION_ANY, "", "", "", -1,
+      base::BindOnce(ActivityLogTest::RetrieveActions_ArgUrlApiCalls));
 }
 
 class ActivityLogTestWithoutSwitch : public ActivityLogTest {

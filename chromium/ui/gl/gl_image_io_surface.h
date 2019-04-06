@@ -58,7 +58,9 @@ class GL_EXPORT GLImageIOSurface : public GLImage {
                             int z_order,
                             gfx::OverlayTransform transform,
                             const gfx::Rect& bounds_rect,
-                            const gfx::RectF& crop_rect) override;
+                            const gfx::RectF& crop_rect,
+                            bool enable_blend,
+                            std::unique_ptr<gfx::GpuFence> gpu_fence) override;
   void SetColorSpace(const gfx::ColorSpace& color_space) override;
   void Flush() override {}
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
@@ -85,11 +87,11 @@ class GL_EXPORT GLImageIOSurface : public GLImage {
   static GLImageIOSurface* FromGLImage(GLImage* image);
 
  protected:
-  ~GLImageIOSurface() override;
-
- private:
   GLImageIOSurface(const gfx::Size& size, unsigned internalformat);
+  ~GLImageIOSurface() override;
+  virtual bool BindTexImageImpl(unsigned internalformat);
 
+  static bool ValidFormat(gfx::BufferFormat format);
   Type GetType() const override;
   class RGBConverter;
 

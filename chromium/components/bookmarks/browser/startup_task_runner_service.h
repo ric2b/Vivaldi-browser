@@ -33,22 +33,12 @@ class StartupTaskRunnerService : public KeyedService {
   // bookmarks only after the history finished).
   scoped_refptr<base::DeferredSequencedTaskRunner> GetBookmarkTaskRunner();
 
-  // Returns sequenced task runner where all notes I/O operations are
-  // performed.
-  // This method should only be called from the UI thread.
-  // Note: Using a separate task runner per profile service gives a better
-  // management of the sequence in which the task are started in order to avoid
-  // congestion during start-up (e.g the caller may decide to start loading the
-  // bookmarks only after the history finished).
-  scoped_refptr<base::DeferredSequencedTaskRunner> GetNotesTaskRunner();
-
- // Starts the task runners that are deferred during start-up.
+  // Starts the task runners that are deferred during start-up.
   void StartDeferredTaskRunners();
 
  private:
   scoped_refptr<base::SequencedTaskRunner> io_task_runner_;
   scoped_refptr<base::DeferredSequencedTaskRunner> bookmark_task_runner_;
-  scoped_refptr<base::DeferredSequencedTaskRunner> notes_task_runner_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

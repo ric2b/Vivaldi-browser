@@ -22,7 +22,7 @@ Throbber::~Throbber() = default;
 
 void Throbber::NotifyClientFloatAnimated(float value,
                                          int target_property_id,
-                                         cc::Animation* animation) {
+                                         cc::KeyframeModel* animation) {
   if (target_property_id == CIRCLE_GROW) {
     DCHECK(!IsAnimatingProperty(TRANSFORM));
     DCHECK(!IsAnimatingProperty(OPACITY));
@@ -40,16 +40,16 @@ void Throbber::NotifyClientFloatAnimated(float value,
 
 void Throbber::SetCircleGrowAnimationEnabled(bool enabled) {
   if (!enabled) {
-    if (animation_player().IsAnimatingProperty(CIRCLE_GROW)) {
+    if (animation().IsAnimatingProperty(CIRCLE_GROW)) {
       SetOpacity(opacity_before_animation_);
       SetScale(scale_before_animation_.scale.x, scale_before_animation_.scale.y,
                scale_before_animation_.scale.z);
     }
-    animation_player().RemoveAnimations(CIRCLE_GROW);
+    animation().RemoveKeyframeModels(CIRCLE_GROW);
     return;
   }
 
-  if (animation_player().IsAnimatingProperty(CIRCLE_GROW))
+  if (animation().IsAnimatingProperty(CIRCLE_GROW))
     return;
 
   scale_before_animation_ = GetTargetTransform().at(kScaleIndex);
@@ -63,11 +63,11 @@ void Throbber::SetCircleGrowAnimationEnabled(bool enabled) {
       base::TimeDelta::FromMilliseconds(kCircleGrowAnimationTimeMs), kEndScale,
       nullptr));
 
-  std::unique_ptr<cc::Animation> animation(cc::Animation::Create(
-      std::move(curve), AnimationPlayer::GetNextAnimationId(),
-      AnimationPlayer::GetNextGroupId(), CIRCLE_GROW));
-  animation->set_iterations(-1);
-  AddAnimation(std::move(animation));
+  std::unique_ptr<cc::KeyframeModel> keyframe_model(cc::KeyframeModel::Create(
+      std::move(curve), Animation::GetNextKeyframeModelId(),
+      Animation::GetNextGroupId(), CIRCLE_GROW));
+  keyframe_model->set_iterations(-1);
+  AddKeyframeModel(std::move(keyframe_model));
 }
 
 }  // namespace vr

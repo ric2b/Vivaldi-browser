@@ -7,12 +7,8 @@
 namespace drive {
 
 FileSystemMetadata::FileSystemMetadata()
-    : largest_changestamp(0),
-      refreshing(false),
-      last_update_check_error(FILE_ERROR_OK) {
-}
+    : refreshing(false), last_update_check_error(FILE_ERROR_OK) {}
 
-FileSystemMetadata::~FileSystemMetadata() {
-}
+FileSystemMetadata::~FileSystemMetadata() = default;
 
 }  // namespace drive

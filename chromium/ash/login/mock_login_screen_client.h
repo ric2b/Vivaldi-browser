@@ -5,6 +5,7 @@
 #ifndef ASH_LOGIN_MOCK_LOGIN_SCREEN_CLIENT_H_
 #define ASH_LOGIN_MOCK_LOGIN_SCREEN_CLIENT_H_
 
+#include "ash/public/interfaces/kiosk_app_info.mojom.h"
 #include "ash/public/interfaces/login_screen.mojom.h"
 #include "components/password_manager/core/browser/hash_password_manager.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -19,13 +20,11 @@ class MockLoginScreenClient : public mojom::LoginScreenClient {
 
   mojom::LoginScreenClientPtr CreateInterfacePtrAndBind();
 
-  MOCK_METHOD5(
-      AuthenticateUser_,
-      void(const AccountId& account_id,
-           const std::string& password,
-           const password_manager::SyncPasswordData& sync_password_data_unused,
-           bool authenticated_by_pin,
-           AuthenticateUserCallback& callback));
+  MOCK_METHOD4(AuthenticateUser_,
+               void(const AccountId& account_id,
+                    const std::string& password,
+                    bool authenticated_by_pin,
+                    AuthenticateUserCallback& callback));
 
   // Set the result that should be passed to |callback| in |AuthenticateUser|.
   void set_authenticate_user_callback_result(bool value) {
@@ -43,7 +42,6 @@ class MockLoginScreenClient : public mojom::LoginScreenClient {
   void AuthenticateUser(
       const AccountId& account_id,
       const std::string& password,
-      const password_manager::SyncPasswordData& sync_password_data,
       bool authenticated_by_pin,
       AuthenticateUserCallback callback) override;
   MOCK_METHOD1(AttemptUnlock, void(const AccountId& account_id));
@@ -58,6 +56,21 @@ class MockLoginScreenClient : public mojom::LoginScreenClient {
   MOCK_METHOD1(OnMaxIncorrectPasswordAttempted,
                void(const AccountId& account_id));
   MOCK_METHOD1(FocusLockScreenApps, void(bool reverse));
+  MOCK_METHOD2(ShowGaiaSignin,
+               void(bool can_close,
+                    const base::Optional<AccountId>& prefilled_account));
+  MOCK_METHOD0(OnRemoveUserWarningShown, void());
+  MOCK_METHOD1(RemoveUser, void(const AccountId& account_id));
+  MOCK_METHOD3(LaunchPublicSession,
+               void(const AccountId& account_id,
+                    const std::string& locale,
+                    const std::string& input_method));
+  MOCK_METHOD2(RequestPublicSessionKeyboardLayouts,
+               void(const AccountId& account_id, const std::string& locale));
+  MOCK_METHOD0(ShowFeedback, void());
+  MOCK_METHOD1(LaunchKioskApp, void(const std::string& app_id));
+  MOCK_METHOD1(LaunchArcKioskApp, void(const AccountId& account_id));
+  MOCK_METHOD0(ShowResetScreen, void());
 
  private:
   bool authenticate_user_callback_result_ = true;

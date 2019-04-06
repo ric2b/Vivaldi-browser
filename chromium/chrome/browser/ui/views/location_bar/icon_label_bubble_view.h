@@ -9,7 +9,6 @@
 
 #include "base/macros.h"
 #include "base/strings/string16.h"
-#include "ui/compositor/layer_animation_observer.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/animation/ink_drop_host_view.h"
@@ -38,16 +37,12 @@ class IconLabelBubbleView : public views::InkDropObserver,
   static constexpr int kTrailingPaddingPreMd = 2;
 
   // A view that draws the separator.
-  class SeparatorView : public views::View,
-                        public ui::ImplicitAnimationObserver {
+  class SeparatorView : public views::View {
    public:
     explicit SeparatorView(IconLabelBubbleView* owner);
 
     // views::View:
     void OnPaint(gfx::Canvas* canvas) override;
-
-    // ui::ImplicitAnimationObserver:
-    void OnImplicitAnimationsCompleted() override;
 
     // Updates the opacity based on the ink drop's state.
     void UpdateOpacity();
@@ -72,6 +67,9 @@ class IconLabelBubbleView : public views::InkDropObserver,
   void InkDropAnimationStarted() override;
   void InkDropRippleAnimationEnded(views::InkDropState state) override;
 
+  // Returns true when the label should be visible.
+  virtual bool ShouldShowLabel() const;
+
   void SetLabel(const base::string16& label);
   void SetImage(const gfx::ImageSkia& image);
 
@@ -84,6 +82,8 @@ class IconLabelBubbleView : public views::InkDropObserver,
   void set_next_element_interior_padding(int padding) {
     next_element_interior_padding_ = padding;
   }
+
+  void OnBubbleCreated(views::Widget* bubble_widget);
 
  protected:
   static constexpr int kOpenTimeMS = 150;
@@ -99,8 +99,20 @@ class IconLabelBubbleView : public views::InkDropObserver,
   // Gets the color for displaying text.
   virtual SkColor GetTextColor() const = 0;
 
-  // Returns true when the label should be visible.
-  virtual bool ShouldShowLabel() const;
+  // Returns true when the separator should be visible.
+  virtual bool ShouldShowSeparator() const;
+
+  // Returns true when additional padding equal to GetPrefixedSeparatorWidth()
+  // should be added to the end of the view. This is useful in the case where
+  // it's required to layout subsequent views in the same position regardless
+  // of whether the separator is shown or not.
+  virtual bool ShouldShowExtraEndSpace() const;
+
+  // Returns true when additional padding equal to GetPrefixedSeparatorWidth()
+  // should be added between the icon and the label. This is useful in the case
+  // where it's required to align the label in the same position as text that
+  // would normally follow this view.
+  virtual bool ShouldShowExtraInternalSpace() const;
 
   // Returns a multiplier used to calculate the actual width of the view based
   // on its desired width.  This ranges from 0 for a zero-width view to 1 for a
@@ -127,15 +139,18 @@ class IconLabelBubbleView : public views::InkDropObserver,
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
   std::unique_ptr<views::InkDrop> CreateInkDrop() override;
+  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
       const override;
-  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
   SkColor GetInkDropBaseColor() const override;
+  std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
 
   // views::Button:
   bool IsTriggerableEvent(const ui::Event& event) override;
   bool ShouldUpdateInkDropOnClickCanceled() const override;
   void NotifyClick(const ui::Event& event) override;
+  void OnFocus() override;
+  void OnBlur() override;
 
   // views::WidgetObserver:
   void OnWidgetDestroying(views::Widget* widget) override;
@@ -147,26 +162,16 @@ class IconLabelBubbleView : public views::InkDropObserver,
 
   gfx::Size GetSizeForLabelWidth(int label_width) const;
 
-  // Returns the maximum size for the label width. The value ignores
-  // WidthMultiplier().
-  gfx::Size GetMaxSizeForLabelWidth(int label_width) const;
-
  private:
-  // Amount of padding from the leading edge of the view to the leading edge of
-  // the image, and from the trailing edge of the label (or image, if the label
-  // is invisible) to the trailing edge of the view.
-  int GetOuterPadding() const;
-
   // Spacing between the image and the label.
   int GetInternalSpacing() const;
 
-  // Returns the amount of space reserved for the separator in DIP.
-  int GetSeparatorLayoutWidth() const;
+  // Retrieves the width taken the separator including padding before the
+  // separator stroke, taking into account whether it is shown or not.
+  int GetPrefixedSeparatorWidth() const;
 
   // Padding after the separator.
-  int GetPostSeparatorPadding() const;
-
-  float GetScaleFactor() const;
+  int GetEndPadding() const;
 
   // The view has been activated by a user gesture such as spacebar.
   // Returns true if some handling was performed.

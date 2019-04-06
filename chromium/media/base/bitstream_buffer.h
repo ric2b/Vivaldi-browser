@@ -9,8 +9,10 @@
 #include <stdint.h>
 
 #include "base/macros.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/time/time.h"
+#include "media/base/decoder_buffer.h"
 #include "media/base/decrypt_config.h"
 #include "media/base/media_export.h"
 #include "media/base/timestamp_constants.h"
@@ -44,7 +46,20 @@ class MEDIA_EXPORT BitstreamBuffer {
 
   ~BitstreamBuffer();
 
-  void SetDecryptConfig(const DecryptConfig& decrypt_config);
+  // Produce an equivalent DecoderBuffer. This consumes handle(), even if
+  // nullptr is returned.
+  //
+  // This method is only intended to be used by VDAs that are being converted to
+  // use DecoderBuffer.
+  //
+  // TODO(sandersd): Remove once all VDAs are converted.
+  scoped_refptr<DecoderBuffer> ToDecoderBuffer() const;
+
+  // TODO(crbug.com/813845): As this is only used by Android, include
+  // EncryptionMode and optional EncryptionPattern when updating for Android.
+  void SetDecryptionSettings(const std::string& key_id,
+                             const std::string& iv,
+                             const std::vector<SubsampleEntry>& subsamples);
 
   int32_t id() const { return id_; }
   base::SharedMemoryHandle handle() const { return handle_; }
@@ -63,8 +78,7 @@ class MEDIA_EXPORT BitstreamBuffer {
 
   void set_handle(const base::SharedMemoryHandle& handle) { handle_ = handle; }
 
-  // The following methods come from DecryptConfig.
-
+  // The following methods come from SetDecryptionSettings().
   const std::string& key_id() const { return key_id_; }
   const std::string& iv() const { return iv_; }
   const std::vector<SubsampleEntry>& subsamples() const { return subsamples_; }
@@ -80,10 +94,11 @@ class MEDIA_EXPORT BitstreamBuffer {
   // determine the output order.
   base::TimeDelta presentation_timestamp_;
 
-  // The following fields come from DecryptConfig.
+  // Note that BitstreamBuffer uses the settings in Audio/VideoDecoderConfig
+  // to determine the encryption mode and pattern (if required by the encryption
+  // scheme).
   // TODO(timav): Try to DISALLOW_COPY_AND_ASSIGN and include these params as
   // std::unique_ptr<DecryptConfig> or explain why copy & assign is needed.
-
   std::string key_id_;                      // key ID.
   std::string iv_;                          // initialization vector
   std::vector<SubsampleEntry> subsamples_;  // clear/cypher sizes

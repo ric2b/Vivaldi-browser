@@ -141,6 +141,19 @@ void PaymentRequestDialogView::ShowDialog() {
   constrained_window::ShowWebModalDialogViews(this, request_->web_contents());
 }
 
+void PaymentRequestDialogView::ShowDialogAtPaymentHandlerSheet(
+    const GURL& url,
+    PaymentHandlerOpenWindowCallback callback) {
+  view_stack_->Push(CreateViewAndInstallController(
+                        std::make_unique<PaymentHandlerWebFlowViewController>(
+                            request_->spec(), request_->state(), this,
+                            GetProfile(), url, std::move(callback)),
+                        &controller_map_),
+                    /* animate = */ false);
+  HideProcessingSpinner();
+  ShowDialog();
+}
+
 void PaymentRequestDialogView::CloseDialog() {
   // This calls PaymentRequestDialogView::Cancel() before closing.
   // ViewHierarchyChanged() also gets called after Cancel().
@@ -308,7 +321,7 @@ void PaymentRequestDialogView::ShowCreditCardEditor(
           std::make_unique<CreditCardEditorViewController>(
               request_->spec(), request_->state(), this, back_navigation_type,
               next_ui_tag, std::move(on_edited), std::move(on_added),
-              credit_card),
+              credit_card, request_->IsIncognito()),
           &controller_map_),
       /* animate = */ true);
   if (observer_for_testing_)
@@ -324,7 +337,8 @@ void PaymentRequestDialogView::ShowShippingAddressEditor(
       CreateViewAndInstallController(
           std::make_unique<ShippingAddressEditorViewController>(
               request_->spec(), request_->state(), this, back_navigation_type,
-              std::move(on_edited), std::move(on_added), profile),
+              std::move(on_edited), std::move(on_added), profile,
+              request_->IsIncognito()),
           &controller_map_),
       /* animate = */ true);
   if (observer_for_testing_)
@@ -340,7 +354,8 @@ void PaymentRequestDialogView::ShowContactInfoEditor(
       CreateViewAndInstallController(
           std::make_unique<ContactInfoEditorViewController>(
               request_->spec(), request_->state(), this, back_navigation_type,
-              std::move(on_edited), std::move(on_added), profile),
+              std::move(on_edited), std::move(on_added), profile,
+              request_->IsIncognito()),
           &controller_map_),
       /* animate = */ true);
   if (observer_for_testing_)
@@ -389,21 +404,24 @@ void PaymentRequestDialogView::SetupSpinnerOverlay() {
   throbber_overlay_.SetVisible(false);
   // The throbber overlay has to have a solid white background to hide whatever
   // would be under it.
-  throbber_overlay_.SetBackground(views::CreateSolidBackground(SK_ColorWHITE));
+  throbber_overlay_.SetBackground(views::CreateThemedSolidBackground(
+      &throbber_overlay_, ui::NativeTheme::kColorId_DialogBackground));
 
   views::GridLayout* layout = throbber_overlay_.SetLayoutManager(
       std::make_unique<views::GridLayout>(&throbber_overlay_));
   views::ColumnSet* throbber_columns = layout->AddColumnSet(0);
   throbber_columns->AddPaddingColumn(0.5, 0);
   throbber_columns->AddColumn(views::GridLayout::Alignment::CENTER,
-                              views::GridLayout::Alignment::TRAILING, 0,
+                              views::GridLayout::Alignment::TRAILING,
+                              views::GridLayout::kFixedSize,
                               views::GridLayout::SizeType::USE_PREF, 0, 0);
   throbber_columns->AddPaddingColumn(0.5, 0);
 
   views::ColumnSet* label_columns = layout->AddColumnSet(1);
   label_columns->AddPaddingColumn(0.5, 0);
   label_columns->AddColumn(views::GridLayout::Alignment::CENTER,
-                           views::GridLayout::Alignment::LEADING, 0,
+                           views::GridLayout::Alignment::LEADING,
+                           views::GridLayout::kFixedSize,
                            views::GridLayout::SizeType::USE_PREF, 0, 0);
   label_columns->AddPaddingColumn(0.5, 0);
 

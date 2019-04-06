@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "chrome/browser/vr/elements/textured_element.h"
+#include "chrome/browser/vr/vr_ui_export.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace gfx {
@@ -19,15 +20,16 @@ namespace vr {
 
 class VectorIconTexture;
 
-class VectorIcon : public TexturedElement {
+class VR_UI_EXPORT VectorIcon : public TexturedElement {
  public:
-  explicit VectorIcon(int maximum_width_pixels);
+  explicit VectorIcon(int texture_width);
   ~VectorIcon() override;
 
   // TODO(vollick): should just use TexturedElement::SetForegroundColor.
   void SetColor(SkColor color);
   SkColor GetColor() const;
   void SetIcon(const gfx::VectorIcon& icon);
+  void SetIcon(const gfx::VectorIcon* icon);
 
   static void DrawVectorIcon(gfx::Canvas* canvas,
                              const gfx::VectorIcon& icon,
@@ -39,7 +41,12 @@ class VectorIcon : public TexturedElement {
   UiTexture* GetTexture() const override;
 
  private:
+  bool TextureDependsOnMeasurement() const override;
+  gfx::Size MeasureTextureSize() override;
+
   std::unique_ptr<VectorIconTexture> texture_;
+  int texture_width_ = 0;
+
   DISALLOW_COPY_AND_ASSIGN(VectorIcon);
 };
 

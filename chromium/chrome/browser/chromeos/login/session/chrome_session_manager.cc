@@ -8,7 +8,6 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/sys_info.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
@@ -18,29 +17,38 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/arc/arc_service_launcher.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
+#include "chrome/browser/chromeos/child_accounts/consumer_status_reporting_service_factory.h"
+#include "chrome/browser/chromeos/child_accounts/screen_time_controller_factory.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
+#include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/lock/webui_screen_locker.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
+#include "chrome/browser/chromeos/policy/app_install_event_log_manager_wrapper.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/tether/tether_service.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/ui/ash/ash_util.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "components/account_id/account_id.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/account_id/account_id.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_names.h"
+#include "components/user_manager/user_type.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/service_manager_connection.h"
+#include "services/identity/public/cpp/identity_manager.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 namespace chromeos {
 
@@ -103,14 +111,43 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
       LOG(ERROR) << "Could not get active user after crash.";
       return;
     }
+
+    chromeos::DemoSession* demo_session =
+        chromeos::DemoSession::StartIfInDemoMode();
+    // In demo session, delay starting user session until the offline demo
+    // session resources have been loaded.
+    if (demo_session && demo_session->started() &&
+        !demo_session->offline_resources_loaded()) {
+      demo_session->EnsureOfflineResourcesLoaded(
+          base::BindOnce(&StartUserSession, user_profile, login_user_id));
+      LOG(WARNING) << "Delay demo user session start until offline demo "
+                   << "resources are loaded";
+      return;
+    }
+
     user_session_mgr->InitRlz(user_profile);
     user_session_mgr->InitializeCerts(user_profile);
     user_session_mgr->InitializeCRLSetFetcher(user);
     user_session_mgr->InitializeCertificateTransparencyComponents(user);
+
+    ProfileHelper::Get()->ProfileStartup(user_profile);
+
     if (lock_screen_apps::StateController::IsEnabled())
       lock_screen_apps::StateController::Get()->SetPrimaryProfile(user_profile);
 
+    if (user->GetType() == user_manager::USER_TYPE_REGULAR) {
+      // App install logs are uploaded via the user's communication channel with
+      // the management server. This channel exists for regular users only.
+      // The |AppInstallEventLogManagerWrapper| manages its own lifetime and
+      // self-destructs on logout.
+      policy::AppInstallEventLogManagerWrapper::CreateForProfile(user_profile);
+    }
     arc::ArcServiceLauncher::Get()->OnPrimaryUserProfilePrepared(user_profile);
+
+    if (user->GetType() == user_manager::USER_TYPE_CHILD) {
+      ScreenTimeControllerFactory::GetForBrowserContext(user_profile);
+      ConsumerStatusReportingServiceFactory::GetForBrowserContext(user_profile);
+    }
 
     // Send the PROFILE_PREPARED notification and call SessionStarted()
     // so that the Launcher and other Profile dependent classes are created.
@@ -139,24 +176,18 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
     TetherService* tether_service = TetherService::Get(user_profile);
     if (tether_service)
       tether_service->StartTetherIfPossible();
+
+    // Associates AppListClient with the current active profile.
+    AppListClientImpl::GetInstance()->UpdateProfile();
   }
 
   UserSessionManager::GetInstance()->CheckEolStatus(user_profile);
 }
 
-// Starts a user session with stub user. This also happens on a dev machine
-// when running Chrome w/o login flow. See PreEarlyInitialization().
-void StartStubLoginSession(Profile* user_profile,
-                           const std::string& login_user_id) {
-  // For dev machines and stub user emulate as if sync has been initialized.
-  SigninManagerFactory::GetForProfile(user_profile)
-      ->SetAuthenticatedAccountInfo(login_user_id, login_user_id);
-  StartUserSession(user_profile, login_user_id);
-}
-
 }  // namespace
 
-ChromeSessionManager::ChromeSessionManager() {}
+ChromeSessionManager::ChromeSessionManager()
+    : oobe_configuration_(std::make_unique<OobeConfiguration>()) {}
 ChromeSessionManager::~ChromeSessionManager() {}
 
 void ChromeSessionManager::Initialize(
@@ -183,17 +214,32 @@ void ChromeSessionManager::Initialize(
     return;
   }
 
+  DemoSession::PreloadOfflineResourcesIfInDemoMode();
   if (parsed_command_line.HasSwitch(switches::kLoginManager) &&
       (!is_running_test || force_login_screen_in_test)) {
     VLOG(1) << "Starting Chrome with login/oobe screen.";
+    LoadOobeConfiguration();
     StartLoginOobeSession();
     return;
+  } else if (is_running_test) {
+    LoadOobeConfiguration();
   }
 
   if (!base::SysInfo::IsRunningOnChromeOS() &&
       login_account_id == user_manager::StubAccountId()) {
+    // Start a user session with stub user. This also happens on a dev machine
+    // when running Chrome w/o login flow. See PreEarlyInitialization().
+    // In these contexts, emulate as if sync has been initialized.
     VLOG(1) << "Starting Chrome with stub login.";
-    StartStubLoginSession(profile, login_account_id.GetUserEmail());
+
+    // TODO(https://crbug.com/814787): Change this flow to go through a
+    // mainstream Identity Service API once that API exists. Note that this
+    // might require supplying a valid refresh token here as opposed to an
+    // empty string.
+    std::string login_user_id = login_account_id.GetUserEmail();
+    IdentityManagerFactory::GetForProfile(profile)
+        ->SetPrimaryAccountSynchronously(login_user_id, login_user_id, "");
+    StartUserSession(profile, login_user_id);
     return;
   }
 
@@ -219,10 +265,21 @@ void ChromeSessionManager::SessionStarted() {
   chromeos::WebUIScreenLocker::RequestPreload();
 }
 
+void ChromeSessionManager::LoadOobeConfiguration() {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kOobeConfiguration))
+    return;
+  VLOG(1) << "Loading OOBE configuration ";
+  oobe_configuration_->LoadConfiguration(
+      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
+          chromeos::switches::kOobeConfiguration));
+}
+
 void ChromeSessionManager::NotifyUserLoggedIn(const AccountId& user_account_id,
                                               const std::string& user_id_hash,
                                               bool browser_restart,
                                               bool is_child) {
+  oobe_configuration_->ResetConfiguration();
   BootTimesRecorder* btl = BootTimesRecorder::Get();
   btl->AddLoginTimeMarker("UserLoggedIn-Start", false);
   session_manager::SessionManager::NotifyUserLoggedIn(

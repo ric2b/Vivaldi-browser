@@ -88,6 +88,16 @@ std::string FakePeripheral::AddFakeService(
   return it->second->GetIdentifier();
 }
 
+bool FakePeripheral::RemoveFakeService(const std::string& identifier) {
+  auto it = gatt_services_.find(identifier);
+  if (it == gatt_services_.end()) {
+    return false;
+  }
+
+  gatt_services_.erase(it);
+  return true;
+}
+
 uint32_t FakePeripheral::GetBluetoothClass() const {
   NOTREACHED();
   return 0;
@@ -281,8 +291,8 @@ bool FakePeripheral::IsGattServicesDiscoveryComplete() const {
   if (!pending_gatt_discovery_ && !discovery_complete) {
     pending_gatt_discovery_ = true;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&FakePeripheral::DispatchDiscoveryResponse,
-                              weak_ptr_factory_.GetWeakPtr()));
+        FROM_HERE, base::BindOnce(&FakePeripheral::DispatchDiscoveryResponse,
+                                  weak_ptr_factory_.GetWeakPtr()));
   }
 
   return discovery_complete;
@@ -290,8 +300,8 @@ bool FakePeripheral::IsGattServicesDiscoveryComplete() const {
 
 void FakePeripheral::CreateGattConnectionImpl() {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&FakePeripheral::DispatchConnectionResponse,
-                            weak_ptr_factory_.GetWeakPtr()));
+      FROM_HERE, base::BindOnce(&FakePeripheral::DispatchConnectionResponse,
+                                weak_ptr_factory_.GetWeakPtr()));
 }
 
 void FakePeripheral::DispatchConnectionResponse() {
@@ -327,5 +337,18 @@ void FakePeripheral::DispatchDiscoveryResponse() {
 
 void FakePeripheral::DisconnectGatt() {
 }
+
+#if defined(OS_CHROMEOS)
+void FakePeripheral::ExecuteWrite(
+    const base::Closure& callback,
+    const ExecuteWriteErrorCallback& error_callback) {
+  NOTIMPLEMENTED();
+}
+
+void FakePeripheral::AbortWrite(const base::Closure& callback,
+                                const AbortWriteErrorCallback& error_callback) {
+  NOTIMPLEMENTED();
+}
+#endif
 
 }  // namespace bluetooth

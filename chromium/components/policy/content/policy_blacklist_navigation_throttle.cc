@@ -43,16 +43,11 @@ PolicyBlacklistFactory::PolicyBlacklistFactory()
 
 PolicyBlacklistFactory::~PolicyBlacklistFactory() {}
 
-void PolicyBlacklistFactory::SetBlacklistOverride(
-    policy::URLBlacklistManager::OverrideBlacklistCallback callback) {
-  override_blacklist_ = callback;
-}
-
 KeyedService* PolicyBlacklistFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   PrefService* pref_service = user_prefs::UserPrefs::Get(context);
-  auto url_blacklist_manager = std::make_unique<policy::URLBlacklistManager>(
-      pref_service, override_blacklist_);
+  auto url_blacklist_manager =
+      std::make_unique<policy::URLBlacklistManager>(pref_service);
   return new PolicyBlacklistService(std::move(url_blacklist_manager));
 }
 
@@ -74,8 +69,7 @@ PolicyBlacklistNavigationThrottle::~PolicyBlacklistNavigationThrottle() {}
 
 content::NavigationThrottle::ThrottleCheckResult
 PolicyBlacklistNavigationThrottle::WillStartRequest() {
-  if (blacklist_service_ &&
-      blacklist_service_->IsURLBlocked(navigation_handle()->GetURL())) {
+  if (blacklist_service_->IsURLBlocked(navigation_handle()->GetURL())) {
     return ThrottleCheckResult(BLOCK_REQUEST,
                                net::ERR_BLOCKED_BY_ADMINISTRATOR);
   }

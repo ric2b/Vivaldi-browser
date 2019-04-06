@@ -28,7 +28,7 @@ const char kApplicationLocale[] = "intl.app_locale";
 class MockPrefService : public TestingPrefServiceSimple {
  public:
   MockPrefService() {}
-  virtual ~MockPrefService() {}
+  ~MockPrefService() override {}
 
   MOCK_METHOD2(AddPrefObserver, void(const std::string&, PrefObserver*));
   MOCK_METHOD2(RemovePrefObserver, void(const std::string&, PrefObserver*));
@@ -44,9 +44,7 @@ class PrefChangeRegistrarTest : public testing::Test {
  protected:
   void SetUp() override;
 
-  base::Closure observer() const {
-    return base::Bind(&base::DoNothing);
-  }
+  base::Closure observer() const { return base::DoNothing(); }
 
   MockPrefService* service() const { return service_.get(); }
 
@@ -128,7 +126,7 @@ TEST_F(PrefChangeRegistrarTest, RemoveAll) {
 
 class ObserveSetOfPreferencesTest : public testing::Test {
  public:
-  virtual void SetUp() {
+  void SetUp() override {
     pref_service_.reset(new TestingPrefServiceSimple);
     PrefRegistrySimple* registry = pref_service_->registry();
     registry->RegisterStringPref(kHomePage, "http://google.com");
@@ -138,7 +136,7 @@ class ObserveSetOfPreferencesTest : public testing::Test {
 
   PrefChangeRegistrar* CreatePrefChangeRegistrar() {
     PrefChangeRegistrar* pref_set = new PrefChangeRegistrar();
-    base::Closure callback = base::Bind(&base::DoNothing);
+    base::Closure callback = base::DoNothing();
     pref_set->Init(pref_service_.get());
     pref_set->Add(kHomePage, callback);
     pref_set->Add(kHomePageIsNewTabPage, callback);

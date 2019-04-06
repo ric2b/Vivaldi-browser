@@ -19,12 +19,14 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkSurface.h"
+#include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_generator.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_manager.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_controller.h"
 #include "ui/ozone/platform/drm/gpu/mock_drm_device.h"
 #include "ui/ozone/platform/drm/gpu/mock_dumb_buffer_generator.h"
+#include "ui/ozone/platform/drm/gpu/scanout_buffer.h"
 #include "ui/ozone/platform/drm/gpu/screen_manager.h"
 #include "ui/ozone/public/surface_ozone_canvas.h"
 
@@ -70,10 +72,13 @@ class DrmWindowTest : public testing::Test {
   void SetUp() override;
   void TearDown() override;
 
-  void OnSwapBuffers(gfx::SwapResult result,
-                     const gfx::PresentationFeedback& feedback) {
-    on_swap_buffers_count_++;
+  void OnSubmission(gfx::SwapResult result,
+                    std::unique_ptr<gfx::GpuFence> out_fence) {
     last_swap_buffers_result_ = result;
+  }
+
+  void OnPresentation(const gfx::PresentationFeedback& feedback) {
+    on_swap_buffers_count_++;
     last_presentation_feedback_ = feedback;
   }
 
@@ -97,7 +102,7 @@ void DrmWindowTest::SetUp() {
   last_swap_buffers_result_ = gfx::SwapResult::SWAP_FAILED;
 
   message_loop_.reset(new base::MessageLoopForUI);
-  drm_ = new ui::MockDrmDevice();
+  drm_ = new ui::MockDrmDevice;
   buffer_generator_.reset(new ui::MockDumbBufferGenerator());
   screen_manager_.reset(new ui::ScreenManager(buffer_generator_.get()));
   screen_manager_->AddDisplayController(drm_, kDefaultCrtc, kDefaultConnector);
@@ -154,7 +159,7 @@ TEST_F(DrmWindowTest, CheckCursorSurfaceAfterChangingDevice) {
                   gfx::Point(4, 2), 0);
 
   // Add another device.
-  scoped_refptr<ui::MockDrmDevice> drm = new ui::MockDrmDevice();
+  scoped_refptr<ui::MockDrmDevice> drm = new ui::MockDrmDevice;
   screen_manager_->AddDisplayController(drm, kDefaultCrtc, kDefaultConnector);
   screen_manager_->ConfigureDisplayController(
       drm, kDefaultCrtc, kDefaultConnector,
@@ -170,29 +175,35 @@ TEST_F(DrmWindowTest, CheckCursorSurfaceAfterChangingDevice) {
   EXPECT_NE(0u, drm->get_cursor_handle_for_crtc(kDefaultCrtc));
 }
 
-TEST_F(DrmWindowTest, CheckCallbackOnFailedSwap) {
+TEST_F(DrmWindowTest, CheckDeathOnFailedSwap) {
   const gfx::Size window_size(6, 4);
   ui::MockDumbBufferGenerator buffer_generator;
   ui::DrmWindow* window = screen_manager_->GetWindow(kDefaultWidgetHandle);
-  ui::OverlayPlane plane(
-      buffer_generator.Create(drm_, DRM_FORMAT_XRGB8888, window_size),
-      base::kInvalidPlatformFile);
+  ui::DrmOverlayPlane plane(
+      buffer_generator.Create(drm_, DRM_FORMAT_XRGB8888, {}, window_size),
+      nullptr);
 
   drm_->set_page_flip_expectation(false);
 
+  ui::DrmOverlayPlaneList planes;
+  planes.push_back(plane.Clone());
+
   // Window was re-sized, so the expectation is to re-create the buffers first.
   window->SchedulePageFlip(
-      std::vector<ui::OverlayPlane>(1, ui::OverlayPlane(plane)),
-      base::Bind(&DrmWindowTest::OnSwapBuffers, base::Unretained(this)));
+      ui::DrmOverlayPlane::Clone(planes),
+      base::BindOnce(&DrmWindowTest::OnSubmission, base::Unretained(this)),
+      base::BindOnce(&DrmWindowTest::OnPresentation, base::Unretained(this)));
   EXPECT_EQ(1, on_swap_buffers_count_);
   EXPECT_EQ(gfx::SwapResult::SWAP_NAK_RECREATE_BUFFERS,
             last_swap_buffers_result_);
-  EXPECT_EQ(gfx::PresentationFeedback(), last_presentation_feedback_);
+  EXPECT_EQ(static_cast<uint32_t>(gfx::PresentationFeedback::Flags::kFailure),
+            last_presentation_feedback_.flags);
 
-  window->SchedulePageFlip(
-      std::vector<ui::OverlayPlane>(1, ui::OverlayPlane(plane)),
-      base::Bind(&DrmWindowTest::OnSwapBuffers, base::Unretained(this)));
-  EXPECT_EQ(2, on_swap_buffers_count_);
-  EXPECT_EQ(gfx::SwapResult::SWAP_FAILED, last_swap_buffers_result_);
-  EXPECT_EQ(gfx::PresentationFeedback(), last_presentation_feedback_);
+  EXPECT_DEATH_IF_SUPPORTED(
+      window->SchedulePageFlip(
+          ui::DrmOverlayPlane::Clone(planes),
+          base::BindOnce(&DrmWindowTest::OnSubmission, base::Unretained(this)),
+          base::BindOnce(&DrmWindowTest::OnPresentation,
+                         base::Unretained(this))),
+      "SchedulePageFlip failed");
 }

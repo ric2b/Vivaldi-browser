@@ -36,8 +36,8 @@ struct MultiprocessInfo;
 //! Subclasses are expected to implement the parent and child by overriding the
 //! appropriate methods.
 //!
-//! On Windows, this class is only an internal implementation detail of
-//! MultiprocessExec and all tests must use that class.
+//! On Windows and Fuchsia, this class is only an internal implementation
+//! detail of MultiprocessExec and all tests must use that class.
 class Multiprocess {
  public:
   //! \brief The termination type for a child process.
@@ -49,11 +49,13 @@ class Multiprocess {
     //! that call `exit()` or `_exit()`.
     kTerminationNormal = false,
 
+#if !defined(OS_FUCHSIA)  // There are no signals on Fuchsia.
     //! \brief The child terminated by signal.
     //!
     //! Signal termination happens as a result of a crash, a call to `abort()`,
     //! assertion failure (including gtest assertions), etc.
     kTerminationSignal,
+#endif  // !defined(OS_FUCHSIA)
   };
 
   Multiprocess();
@@ -87,8 +89,15 @@ class Multiprocess {
   //! \param[in] code If \a reason is TerminationReason::kTerminationNormal,
   //!     this is the expected exit status of the child. If \a reason is
   //!     TerminationReason::kTerminationSignal, this is the signal that is
-  //!     expected to kill the child.
+  //!     expected to kill the child. On Linux platforms, SIG_DFL will be
+  //!     installed for \a code in the child process.
   void SetExpectedChildTermination(TerminationReason reason, int code);
+
+#if !defined(OS_WIN)
+  //! \brief Sets termination reason and code appropriately for a child that
+  //!     terminates via `__builtin_trap()`.
+  void SetExpectedChildTerminationBuiltinTrap();
+#endif  // !OS_WIN
 
  protected:
   ~Multiprocess();
@@ -110,14 +119,18 @@ class Multiprocess {
   //!
   //! Subclass implementations may signal failure by raising their own fatal
   //! gtest assertions.
-  virtual void PreFork();
+  virtual void PreFork()
+#if defined(OS_WIN) || defined(OS_FUCHSIA)
+      = 0
+#endif  // OS_WIN || OS_FUCHSIA
+      ;
 
-#if !defined(OS_WIN)
+#if !defined(OS_WIN) && !defined(OS_FUCHSIA)
   //! \brief Returns the child process’ process ID.
   //!
   //! This method may only be called by the parent process.
   pid_t ChildPID() const;
-#endif  // !OS_WIN
+#endif  // !OS_WIN && !OS_FUCHSIA
 
   //! \brief Returns the read pipe’s file handle.
   //!

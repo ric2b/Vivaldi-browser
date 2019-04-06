@@ -25,6 +25,8 @@ void sqlite3DeleteTriggerStep(sqlite3 *db, TriggerStep *pTriggerStep){
     sqlite3ExprListDelete(db, pTmp->pExprList);
     sqlite3SelectDelete(db, pTmp->pSelect);
     sqlite3IdListDelete(db, pTmp->pIdList);
+    sqlite3UpsertDelete(db, pTmp->pUpsert);
+    sqlite3DbFree(db, pTmp->zSpan);
 
     sqlite3DbFree(db, pTmp);
   }
@@ -340,13 +342,29 @@ triggerfinish_cleanup:
 }
 
 /*
+** Duplicate a range of text from an SQL statement, then convert all
+** whitespace characters into ordinary space characters.
+*/
+static char *triggerSpanDup(sqlite3 *db, const char *zStart, const char *zEnd){
+  char *z = sqlite3DbSpanDup(db, zStart, zEnd);
+  int i;
+  if( z ) for(i=0; z[i]; i++) if( sqlite3Isspace(z[i]) ) z[i] = ' ';
+  return z;
+}
+
+/*
 ** Turn a SELECT statement (that the pSelect parameter points to) into
 ** a trigger step.  Return a pointer to a TriggerStep structure.
 **
 ** The parser calls this routine when it finds a SELECT statement in
 ** body of a TRIGGER.
 */
-TriggerStep *sqlite3TriggerSelectStep(sqlite3 *db, Select *pSelect){
+TriggerStep *sqlite3TriggerSelectStep(
+  sqlite3 *db,                /* Database connection */
+  Select *pSelect,            /* The SELECT statement */
+  const char *zStart,         /* Start of SQL text */
+  const char *zEnd            /* End of SQL text */
+){
   TriggerStep *pTriggerStep = sqlite3DbMallocZero(db, sizeof(TriggerStep));
   if( pTriggerStep==0 ) {
     sqlite3SelectDelete(db, pSelect);
@@ -355,6 +373,7 @@ TriggerStep *sqlite3TriggerSelectStep(sqlite3 *db, Select *pSelect){
   pTriggerStep->op = TK_SELECT;
   pTriggerStep->pSelect = pSelect;
   pTriggerStep->orconf = OE_Default;
+  pTriggerStep->zSpan = triggerSpanDup(db, zStart, zEnd);
   return pTriggerStep;
 }
 
@@ -367,7 +386,9 @@ TriggerStep *sqlite3TriggerSelectStep(sqlite3 *db, Select *pSelect){
 static TriggerStep *triggerStepAllocate(
   sqlite3 *db,                /* Database connection */
   u8 op,                      /* Trigger opcode */
-  Token *pName                /* The target name */
+  Token *pName,               /* The target name */
+  const char *zStart,         /* Start of SQL text */
+  const char *zEnd            /* End of SQL text */
 ){
   TriggerStep *pTriggerStep;
 
@@ -378,6 +399,7 @@ static TriggerStep *triggerStepAllocate(
     sqlite3Dequote(z);
     pTriggerStep->zTarget = z;
     pTriggerStep->op = op;
+    pTriggerStep->zSpan = triggerSpanDup(db, zStart, zEnd);
   }
   return pTriggerStep;
 }
@@ -394,19 +416,26 @@ TriggerStep *sqlite3TriggerInsertStep(
   Token *pTableName,  /* Name of the table into which we insert */
   IdList *pColumn,    /* List of columns in pTableName to insert into */
   Select *pSelect,    /* A SELECT statement that supplies values */
-  u8 orconf           /* The conflict algorithm (OE_Abort, OE_Replace, etc.) */
+  u8 orconf,          /* The conflict algorithm (OE_Abort, OE_Replace, etc.) */
+  Upsert *pUpsert,    /* ON CONFLICT clauses for upsert */
+  const char *zStart, /* Start of SQL text */
+  const char *zEnd    /* End of SQL text */
 ){
   TriggerStep *pTriggerStep;
 
   assert(pSelect != 0 || db->mallocFailed);
 
-  pTriggerStep = triggerStepAllocate(db, TK_INSERT, pTableName);
+  pTriggerStep = triggerStepAllocate(db, TK_INSERT, pTableName, zStart, zEnd);
   if( pTriggerStep ){
     pTriggerStep->pSelect = sqlite3SelectDup(db, pSelect, EXPRDUP_REDUCE);
     pTriggerStep->pIdList = pColumn;
+    pTriggerStep->pUpsert = pUpsert;
     pTriggerStep->orconf = orconf;
   }else{
+    testcase( pColumn );
     sqlite3IdListDelete(db, pColumn);
+    testcase( pUpsert );
+    sqlite3UpsertDelete(db, pUpsert);
   }
   sqlite3SelectDelete(db, pSelect);
 
@@ -423,11 +452,13 @@ TriggerStep *sqlite3TriggerUpdateStep(
   Token *pTableName,   /* Name of the table to be updated */
   ExprList *pEList,    /* The SET clause: list of column and new values */
   Expr *pWhere,        /* The WHERE clause */
-  u8 orconf            /* The conflict algorithm. (OE_Abort, OE_Ignore, etc) */
+  u8 orconf,           /* The conflict algorithm. (OE_Abort, OE_Ignore, etc) */
+  const char *zStart,  /* Start of SQL text */
+  const char *zEnd     /* End of SQL text */
 ){
   TriggerStep *pTriggerStep;
 
-  pTriggerStep = triggerStepAllocate(db, TK_UPDATE, pTableName);
+  pTriggerStep = triggerStepAllocate(db, TK_UPDATE, pTableName, zStart, zEnd);
   if( pTriggerStep ){
     pTriggerStep->pExprList = sqlite3ExprListDup(db, pEList, EXPRDUP_REDUCE);
     pTriggerStep->pWhere = sqlite3ExprDup(db, pWhere, EXPRDUP_REDUCE);
@@ -446,11 +477,13 @@ TriggerStep *sqlite3TriggerUpdateStep(
 TriggerStep *sqlite3TriggerDeleteStep(
   sqlite3 *db,            /* Database connection */
   Token *pTableName,      /* The table from which rows are deleted */
-  Expr *pWhere            /* The WHERE clause */
+  Expr *pWhere,           /* The WHERE clause */
+  const char *zStart,     /* Start of SQL text */
+  const char *zEnd        /* End of SQL text */
 ){
   TriggerStep *pTriggerStep;
 
-  pTriggerStep = triggerStepAllocate(db, TK_DELETE, pTableName);
+  pTriggerStep = triggerStepAllocate(db, TK_DELETE, pTableName, zStart, zEnd);
   if( pTriggerStep ){
     pTriggerStep->pWhere = sqlite3ExprDup(db, pWhere, EXPRDUP_REDUCE);
     pTriggerStep->orconf = OE_Default;
@@ -705,13 +738,21 @@ static int codeTriggerProgram(
     pParse->eOrconf = (orconf==OE_Default)?pStep->orconf:(u8)orconf;
     assert( pParse->okConstFactor==0 );
 
+#ifndef SQLITE_OMIT_TRACE
+    if( pStep->zSpan ){
+      sqlite3VdbeAddOp4(v, OP_Trace, 0x7fffffff, 1, 0,
+                        sqlite3MPrintf(db, "-- %s", pStep->zSpan),
+                        P4_DYNAMIC);
+    }
+#endif
+
     switch( pStep->op ){
       case TK_UPDATE: {
         sqlite3Update(pParse,
           targetSrcList(pParse, pStep),
           sqlite3ExprListDup(db, pStep->pExprList, 0),
           sqlite3ExprDup(db, pStep->pWhere, 0),
-          pParse->eOrconf
+          pParse->eOrconf, 0, 0, 0
         );
         break;
       }
@@ -720,14 +761,15 @@ static int codeTriggerProgram(
           targetSrcList(pParse, pStep),
           sqlite3SelectDup(db, pStep->pSelect, 0),
           sqlite3IdListDup(db, pStep->pIdList),
-          pParse->eOrconf
+          pParse->eOrconf,
+          sqlite3UpsertDup(db, pStep->pUpsert)
         );
         break;
       }
       case TK_DELETE: {
         sqlite3DeleteFrom(pParse,
           targetSrcList(pParse, pStep),
-          sqlite3ExprDup(db, pStep->pWhere, 0)
+          sqlite3ExprDup(db, pStep->pWhere, 0), 0, 0
         );
         break;
       }
@@ -845,9 +887,11 @@ static TriggerPrg *codeRowTrigger(
       pTab->zName
     ));
 #ifndef SQLITE_OMIT_TRACE
-    sqlite3VdbeChangeP4(v, -1,
-      sqlite3MPrintf(db, "-- TRIGGER %s", pTrigger->zName), P4_DYNAMIC
-    );
+    if( pTrigger->zName ){
+      sqlite3VdbeChangeP4(v, -1,
+        sqlite3MPrintf(db, "-- TRIGGER %s", pTrigger->zName), P4_DYNAMIC
+      );
+    }
 #endif
 
     /* If one was specified, code the WHEN clause. If it evaluates to false
@@ -875,7 +919,7 @@ static TriggerPrg *codeRowTrigger(
     VdbeComment((v, "End: %s.%s", pTrigger->zName, onErrorText(orconf)));
 
     transferParseError(pParse, pSubParse);
-    if( db->mallocFailed==0 ){
+    if( db->mallocFailed==0 && pParse->nErr==0 ){
       pProgram->aOp = sqlite3VdbeTakeOpArray(v, &pProgram->nOp, &pTop->nMaxArg);
     }
     pProgram->nMem = pSubParse->nMem;

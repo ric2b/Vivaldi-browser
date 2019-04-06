@@ -7,24 +7,23 @@
 
 #include <stdint.h>
 
-#include <map>
 #include <memory>
 #include <queue>
 #include <set>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "services/ui/common/types.h"
-#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "services/ui/public/interfaces/window_tree_host.mojom.h"
 #include "services/ui/ws/focus_controller_observer.h"
 #include "services/ui/ws/platform_display.h"
 #include "services/ui/ws/platform_display_delegate.h"
 #include "services/ui/ws/server_window.h"
 #include "services/ui/ws/server_window_observer.h"
-#include "services/ui/ws/user_id_tracker_observer.h"
-#include "services/ui/ws/window_manager_window_tree_factory_set_observer.h"
+#include "services/ui/ws/window_manager_window_tree_factory_observer.h"
 #include "ui/display/display.h"
 #include "ui/events/event_sink.h"
 
@@ -57,8 +56,7 @@ class DisplayTestApi;
 class Display : public PlatformDisplayDelegate,
                 public mojom::WindowTreeHost,
                 public FocusControllerObserver,
-                public UserIdTrackerObserver,
-                public WindowManagerWindowTreeFactorySetObserver,
+                public WindowManagerWindowTreeFactoryObserver,
                 public EventSink {
  public:
   explicit Display(WindowServer* window_server);
@@ -99,30 +97,15 @@ class Display : public PlatformDisplayDelegate,
   ServerWindow* root_window() { return root_.get(); }
   const ServerWindow* root_window() const { return root_.get(); }
 
-  // Returns the ServerWindow whose id is |id|. This does not do a search over
-  // all windows, rather just the display and window manager root windows.
-  //
-  // In general you shouldn't use this, rather use WindowServer::GetWindow(),
-  // which calls this as necessary.
-  ServerWindow* GetRootWithId(const WindowId& id);
-
   WindowManagerDisplayRoot* GetWindowManagerDisplayRootWithRoot(
       const ServerWindow* window);
-  WindowManagerDisplayRoot* GetWindowManagerDisplayRootForUser(
-      const UserId& user_id) {
-    return const_cast<WindowManagerDisplayRoot*>(
-        const_cast<const Display*>(this)->GetWindowManagerDisplayRootForUser(
-            user_id));
+
+  WindowManagerDisplayRoot* window_manager_display_root() {
+    return window_manager_display_root_;
   }
-  const WindowManagerDisplayRoot* GetWindowManagerDisplayRootForUser(
-      const UserId& user_id) const;
-  WindowManagerDisplayRoot* GetActiveWindowManagerDisplayRoot() {
-    return const_cast<WindowManagerDisplayRoot*>(
-        const_cast<const Display*>(this)->GetActiveWindowManagerDisplayRoot());
-  }
-  const WindowManagerDisplayRoot* GetActiveWindowManagerDisplayRoot() const;
-  size_t num_window_manager_states() const {
-    return window_manager_display_root_map_.size();
+
+  const WindowManagerDisplayRoot* window_manager_display_root() const {
+    return window_manager_display_root_;
   }
 
   // TODO(sky): this should only be called by WindowServer, move to interface
@@ -141,8 +124,7 @@ class Display : public PlatformDisplayDelegate,
   // Called just before |tree| is destroyed.
   void OnWillDestroyTree(WindowTree* tree);
 
-  // Removes |display_root| from internal maps. This called prior to
-  // |display_root| being destroyed.
+  // Called prior to |display_root| being destroyed.
   void RemoveWindowManagerDisplayRoot(WindowManagerDisplayRoot* display_root);
 
   // Sets the native cursor to |cursor|.
@@ -163,20 +145,22 @@ class Display : public PlatformDisplayDelegate,
   // Returns the root window of the active user.
   ServerWindow* GetActiveRootWindow();
 
+  // Processes an event. |event_processed_callback| is run once the appropriate
+  // client processes the event.
+  // TODO(sky): move event processing code into standalone classes. Display
+  // shouldn't have logic like this.
+  void ProcessEvent(
+      ui::Event* event,
+      base::OnceClosure event_processed_callback = base::OnceClosure());
+
  private:
   friend class test::DisplayTestApi;
 
-  using WindowManagerDisplayRootMap =
-      std::map<UserId, WindowManagerDisplayRoot*>;
-
   class CursorState;
 
-  // Creates the set of WindowManagerDisplayRoots from the
-  // WindowManagerWindowTreeFactorySet.
-  void CreateWindowManagerDisplayRootsFromFactories();
-
-  void CreateWindowManagerDisplayRootFromFactory(
-      WindowManagerWindowTreeFactory* factory);
+  // Creates a WindowManagerDisplayRoot from the
+  // WindowManagerWindowTreeFactory.
+  void CreateWindowManagerDisplayRootFromFactory();
 
   // Creates the root ServerWindow for this display, where |size| is in physical
   // pixels.
@@ -190,7 +174,6 @@ class Display : public PlatformDisplayDelegate,
   EventSink* GetEventSink() override;
   void OnAcceleratedWidgetAvailable() override;
   void OnNativeCaptureLost() override;
-  OzonePlatform* GetOzonePlatform() override;
   bool IsHostingViz() const override;
 
   // FocusControllerObserver:
@@ -200,10 +183,7 @@ class Display : public PlatformDisplayDelegate,
                       ServerWindow* old_focused_window,
                       ServerWindow* new_focused_window) override;
 
-  // UserIdTrackerObserver:
-  void OnUserIdRemoved(const UserId& id) override;
-
-  // WindowManagerWindowTreeFactorySetObserver:
+  // WindowManagerWindowTreeFactoryObserver:
   void OnWindowManagerWindowTreeFactoryReady(
       WindowManagerWindowTreeFactory* factory) override;
 
@@ -222,7 +202,8 @@ class Display : public PlatformDisplayDelegate,
 
   viz::ParentLocalSurfaceIdAllocator allocator_;
 
-  WindowManagerDisplayRootMap window_manager_display_root_map_;
+  // This is owned by WindowManagerState.
+  WindowManagerDisplayRoot* window_manager_display_root_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(Display);
 };

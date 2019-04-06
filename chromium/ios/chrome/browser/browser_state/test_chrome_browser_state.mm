@@ -10,7 +10,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -28,12 +27,14 @@
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/undo/bookmark_undo_service.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/webdata_services/web_data_service_wrapper.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/autocomplete/in_memory_url_index_factory.h"
 #include "ios/chrome/browser/bookmarks/bookmark_client_impl.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "ios/chrome/browser/bookmarks/bookmark_sync_service_factory.h"
 #include "ios/chrome/browser/browser_state/browser_state_keyed_service_factories.h"
 #include "ios/chrome/browser/history/history_client_impl.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
@@ -42,6 +43,7 @@
 #include "ios/chrome/browser/prefs/browser_prefs.h"
 #include "ios/chrome/browser/prefs/ios_chrome_pref_service_factory.h"
 #include "ios/chrome/browser/sync/glue/sync_start_util.h"
+#include "ios/chrome/browser/undo/bookmark_undo_service_factory.h"
 #include "ios/chrome/browser/web_data_service_factory.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/web/public/web_thread.h"
@@ -65,19 +67,16 @@ std::unique_ptr<KeyedService> BuildBookmarkModel(web::BrowserState* context) {
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromBrowserState(context);
   std::unique_ptr<bookmarks::BookmarkModel> bookmark_model(
-      new bookmarks::BookmarkModel(
-          std::make_unique<BookmarkClientImpl>(browser_state)));
+      new bookmarks::BookmarkModel(std::make_unique<BookmarkClientImpl>(
+          browser_state,
+          ios::BookmarkSyncServiceFactory::GetForBrowserState(browser_state))));
   bookmark_model->Load(
       browser_state->GetPrefs(),
       browser_state->GetStatePath(), browser_state->GetIOTaskRunner(),
       web::WebThread::GetTaskRunnerForThread(web::WebThread::UI));
+  ios::BookmarkUndoServiceFactory::GetForBrowserState(browser_state)
+      ->Start(bookmark_model.get());
   return bookmark_model;
-}
-
-void NotReachedErrorCallback(WebDataServiceWrapper::ErrorType,
-                             sql::InitStatus,
-                             const std::string&) {
-  NOTREACHED();
 }
 
 std::unique_ptr<KeyedService> BuildWebDataService(web::BrowserState* context) {
@@ -86,7 +85,7 @@ std::unique_ptr<KeyedService> BuildWebDataService(web::BrowserState* context) {
       browser_state_path, GetApplicationContext()->GetApplicationLocale(),
       web::WebThread::GetTaskRunnerForThread(web::WebThread::UI),
       ios::sync_start_util::GetFlareForSyncableService(browser_state_path),
-      &NotReachedErrorCallback);
+      base::DoNothing());
 }
 
 base::FilePath CreateTempBrowserStateDir(base::ScopedTempDir* temp_dir) {
@@ -95,7 +94,7 @@ base::FilePath CreateTempBrowserStateDir(base::ScopedTempDir* temp_dir) {
     // Fallback logic in case we fail to create unique temporary directory.
     LOG(ERROR) << "Failed to create unique temporary directory.";
     base::FilePath system_tmp_dir;
-    bool success = PathService::Get(base::DIR_TEMP, &system_tmp_dir);
+    bool success = base::PathService::Get(base::DIR_TEMP, &system_tmp_dir);
 
     // We're severely screwed if we can't get the system temporary
     // directory. Die now to avoid writing to the filesystem root
@@ -257,10 +256,6 @@ TestChromeBrowserState::GetOffTheRecordChromeBrowserState() {
 }
 
 PrefProxyConfigTracker* TestChromeBrowserState::GetProxyConfigTracker() {
-  return nullptr;
-}
-
-net::SSLConfigService* TestChromeBrowserState::GetSSLConfigService() {
   return nullptr;
 }
 

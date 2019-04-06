@@ -157,7 +157,8 @@ void WaitForHistoryDBThread(int index) {
   base::WaitableEvent wait_event(
       base::WaitableEvent::ResetPolicy::MANUAL,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
-  service->ScheduleDBTask(std::unique_ptr<history::HistoryDBTask>(
+  service->ScheduleDBTask(FROM_HERE,
+                          std::unique_ptr<history::HistoryDBTask>(
                               new FlushHistoryDBQueueTask(&wait_event)),
                           &tracker);
   wait_event.Wait();
@@ -206,7 +207,8 @@ history::URLRows GetTypedUrlsFromHistoryService(
   base::WaitableEvent wait_event(
       base::WaitableEvent::ResetPolicy::MANUAL,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
-  service->ScheduleDBTask(std::unique_ptr<history::HistoryDBTask>(
+  service->ScheduleDBTask(FROM_HERE,
+                          std::unique_ptr<history::HistoryDBTask>(
                               new GetTypedUrlsTask(&rows, &wait_event)),
                           &tracker);
   wait_event.Wait();
@@ -221,7 +223,8 @@ bool GetUrlFromHistoryService(history::HistoryService* service,
       base::WaitableEvent::ResetPolicy::MANUAL,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
   bool found = false;
-  service->ScheduleDBTask(std::unique_ptr<history::HistoryDBTask>(
+  service->ScheduleDBTask(FROM_HERE,
+                          std::unique_ptr<history::HistoryDBTask>(
                               new GetUrlTask(url, row, &found, &wait_event)),
                           &tracker);
   wait_event.Wait();
@@ -236,7 +239,8 @@ history::VisitVector GetVisitsFromHistoryService(
       base::WaitableEvent::ResetPolicy::MANUAL,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
   history::VisitVector visits;
-  service->ScheduleDBTask(std::unique_ptr<history::HistoryDBTask>(
+  service->ScheduleDBTask(FROM_HERE,
+                          std::unique_ptr<history::HistoryDBTask>(
                               new GetVisitsTask(id, &visits, &wait_event)),
                           &tracker);
   wait_event.Wait();
@@ -249,7 +253,8 @@ void RemoveVisitsFromHistoryService(history::HistoryService* service,
   base::WaitableEvent wait_event(
       base::WaitableEvent::ResetPolicy::MANUAL,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
-  service->ScheduleDBTask(std::unique_ptr<history::HistoryDBTask>(
+  service->ScheduleDBTask(FROM_HERE,
+                          std::unique_ptr<history::HistoryDBTask>(
                               new RemoveVisitsTask(visits, &wait_event)),
                           &tracker);
   wait_event.Wait();
@@ -263,7 +268,8 @@ void GetMetadataBatchFromHistoryService(history::HistoryService* service,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
 
   service->ScheduleDBTask(
-      std::make_unique<GetTypedUrlsMetadataTask>(batch, &wait_event), &tracker);
+      FROM_HERE, std::make_unique<GetTypedUrlsMetadataTask>(batch, &wait_event),
+      &tracker);
   wait_event.Wait();
 }
 
@@ -345,6 +351,14 @@ void AddUrlToHistoryWithTimestamp(int index,
   // Wait until the AddPage() request has completed so we know the change has
   // filtered down to the sync observers (don't need to wait for the
   // verifier profile since it doesn't sync).
+  WaitForHistoryDBThread(index);
+}
+
+void ExpireHistoryBefore(int index, base::Time end_time) {
+  history::HistoryService* history_service = GetHistoryServiceFromClient(index);
+  base::CancelableTaskTracker task_tracker;
+  history_service->ExpireHistoryBeforeForTesting(end_time, base::DoNothing(),
+                                                 &task_tracker);
   WaitForHistoryDBThread(index);
 }
 
@@ -460,6 +474,24 @@ bool CheckSyncHasURLMetadata(int index, const GURL& url) {
 
   std::string storage_key(sizeof(row.id()), 0);
   base::WriteBigEndian<history::URLID>(&storage_key[0], row.id());
+
+  syncer::EntityMetadataMap metadata_map(batch.TakeAllMetadata());
+  for (const auto& kv : metadata_map) {
+    if (kv.first == storage_key)
+      return true;
+  }
+  return false;
+}
+
+bool CheckSyncHasMetadataForURLID(int index, history::URLID url_id) {
+  history::URLRow row;
+  history::HistoryService* service = GetHistoryServiceFromClient(index);
+
+  syncer::MetadataBatch batch;
+  GetMetadataBatchFromHistoryService(service, &batch);
+
+  std::string storage_key(sizeof(url_id), 0);
+  base::WriteBigEndian<history::URLID>(&storage_key[0], url_id);
 
   syncer::EntityMetadataMap metadata_map(batch.TakeAllMetadata());
   for (const auto& kv : metadata_map) {

@@ -11,7 +11,11 @@
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMKeyValueAnimation.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/image/canvas_image_source.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/resources/grit/ui_resources.h"
@@ -30,6 +34,31 @@ NSString* gTooltip = nil;
 NSString* const kFadeOutValueKeyPath = @"fadeOutValue";
 
 const SkColor kDefaultIconColor = SkColorSetARGB(0xA0, 0x00, 0x00, 0x00);
+
+class HighlightImage : public gfx::CanvasImageSource {
+ public:
+  explicit HighlightImage(const int image_size, SkColor color)
+      : CanvasImageSource(gfx::Size(image_size, image_size),
+                          /*is_opaque =*/true),
+        color_(color) {}
+  ~HighlightImage() override {}
+
+ private:
+  void Draw(gfx::Canvas* canvas) override {
+    cc::PaintFlags flags;
+    flags.setAntiAlias(true);
+    flags.setStyle(cc::PaintFlags::kFill_Style);
+    flags.setColor(color_);
+    canvas->DrawCircle(
+        gfx::RectF(size().width(), size().height()).CenterPoint(),
+        kTabCloseButtonSize / 2, flags);
+  }
+
+  SkColor color_;
+
+  DISALLOW_COPY_AND_ASSIGN(HighlightImage);
+};
+
 }  // namespace
 
 @interface HoverCloseButton ()
@@ -41,7 +70,7 @@ const SkColor kDefaultIconColor = SkColorSetARGB(0xA0, 0x00, 0x00, 0x00);
 - (void)setFadeOutValue:(CGFloat)value;
 
 // Gets the image for the given hover state.
-- (NSImage*)imageForHoverState:(HoverState)hoverState;
+- (NSImage*)imageForHoverState:(CloseButtonHoverState)hoverState;
 
 @end
 
@@ -152,32 +181,38 @@ const SkColor kDefaultIconColor = SkColorSetARGB(0xA0, 0x00, 0x00, 0x00);
   [self setNeedsDisplay];
 }
 
-- (NSImage*)imageForHoverState:(HoverState)hoverState {
-  const gfx::VectorIcon* vectorIcon = nullptr;
+- (NSImage*)imageForHoverState:(CloseButtonHoverState)hoverState {
   SkColor vectorIconColor = gfx::kPlaceholderColor;
 
   switch (hoverState) {
     case kHoverStateNone:
-      vectorIcon = &kTabCloseNormalIcon;
-      vectorIconColor = iconColor_;
       break;
     case kHoverStateMouseOver:
       // For mouse over, the icon color is the fill color of the circle.
-      vectorIcon = &kTabCloseHoveredPressedIcon;
       vectorIconColor = SkColorSetARGB(0xFF, 0xDB, 0x44, 0x37);
       break;
     case kHoverStateMouseDown:
       // For mouse pressed, the icon color is the fill color of the circle.
-      vectorIcon = &kTabCloseHoveredPressedIcon;
       vectorIconColor = SkColorSetARGB(0xFF, 0xA8, 0x35, 0x2A);
       break;
   }
 
-  return NSImageFromImageSkia(
-      gfx::CreateVectorIcon(*vectorIcon, kTabCloseButtonSize, vectorIconColor));
+  const gfx::ImageSkia iconImage = gfx::CreateVectorIcon(
+      kTabCloseNormalIcon, kTabCloseButtonSize,
+      hoverState != kHoverStateNone ? SK_ColorWHITE : iconColor_);
+
+  if (hoverState != kHoverStateNone) {
+    const gfx::ImageSkia highlight =
+        gfx::CanvasImageSource::MakeImageSkia<HighlightImage>(
+            kTabCloseButtonSize, vectorIconColor);
+    return NSImageFromImageSkia(
+        gfx::ImageSkiaOperations::CreateSuperimposedImage(highlight,
+                                                          iconImage));
+  }
+  return NSImageFromImageSkia(iconImage);
 }
 
-- (void)setHoverState:(HoverState)state {
+- (void)setHoverState:(CloseButtonHoverState)state {
   if (state != self.hoverState) {
     previousState_ = self.hoverState;
     [super setHoverState:state];
@@ -241,7 +276,7 @@ const SkColor kDefaultIconColor = SkColorSetARGB(0xA0, 0x00, 0x00, 0x00);
 
 @implementation WebUIHoverCloseButton
 
-- (NSImage*)imageForHoverState:(HoverState)hoverState {
+- (NSImage*)imageForHoverState:(CloseButtonHoverState)hoverState {
   int imageID = IDR_CLOSE_DIALOG;
   switch (hoverState) {
     case kHoverStateNone:

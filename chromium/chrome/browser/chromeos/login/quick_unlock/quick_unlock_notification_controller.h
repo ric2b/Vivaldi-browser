@@ -9,8 +9,8 @@
 #include "base/time/time.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notification_delegate.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_delegate.h"
 #include "url/gurl.h"
 
 class Profile;
@@ -66,7 +66,8 @@ class QuickUnlockNotificationController
 
   // NotificationDelegate:
   void Close(bool by_user) override;
-  void Click() override;
+  void Click(const base::Optional<int>& button_index,
+             const base::Optional<base::string16>& reply) override;
 
   std::unique_ptr<message_center::Notification> CreateNotification();
   void SetNotificationPreferenceWasShown();

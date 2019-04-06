@@ -46,11 +46,15 @@ class API_AVAILABLE(ios(11.0)) WKHTTPSystemCookieStore
 
  private:
   // Run |callback| on |cookies| after sorting them  as per RFC6265.
-  void RunSystemCookieCallbackForCookies(
+  static void RunSystemCookieCallbackForCookies(
       net::SystemCookieStore::SystemCookieCallbackForCookies callback,
+      base::WeakPtr<net::CookieCreationTimeManager> weak_time_manager,
       NSArray<NSHTTPCookie*>* cookies);
 
-  WKHTTPCookieStore* cookie_store_;
+  // cookie_store_ must be deleted in the UI thread, So by making it weak
+  // WKHTTPSystemCookieStore will not retain the WKHTTPCookieStore instance, and
+  // it will be deleted with the owning WKWebSiteDataStore.
+  __weak WKHTTPCookieStore* cookie_store_;
 
   DISALLOW_COPY_AND_ASSIGN(WKHTTPSystemCookieStore);
 };

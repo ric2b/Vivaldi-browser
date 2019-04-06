@@ -11,14 +11,15 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/net/referrer.h"
+#include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_tab_strip_tracker.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/usb/usb_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/url_formatter/elide_url.h"
 #include "components/vector_icons/vector_icons.h"
@@ -34,9 +35,8 @@
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/message_center/message_center.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notification_delegate.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_delegate.h"
 #include "url/gurl.h"
 
 namespace {
@@ -83,7 +83,9 @@ GURL GetActiveTabURL() {
 }
 
 void OpenURL(const GURL& url) {
-  GetBrowser()->OpenURL(content::OpenURLParams(
+  chrome::ScopedTabbedBrowserDisplayer browser_displayer(
+      ProfileManager::GetLastUsedProfileAllowedByPolicy());
+  browser_displayer.browser()->OpenURL(content::OpenURLParams(
       url, content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false /* is_renderer_initialized */));
 }
@@ -109,18 +111,19 @@ class WebUsbNotificationDelegate : public TabStripModelObserver,
       // If the disposition is not already set, go ahead and set it.
       if (disposition_ == WEBUSB_NOTIFICATION_CLOSED)
         disposition_ = WEBUSB_NOTIFICATION_CLOSED_MANUAL_NAVIGATION;
-      message_center::MessageCenter::Get()->RemoveNotification(
-          notification_id_, false /* by_user */);
+      SystemNotificationHelper::GetInstance()->Close(notification_id_);
     }
   }
 
-  void Click() override {
+  void Click(const base::Optional<int>& button_index,
+             const base::Optional<base::string16>& reply) override {
     disposition_ = WEBUSB_NOTIFICATION_CLOSED_CLICKED;
 
     // If the URL is already open, activate that tab.
     content::WebContents* tab_to_activate = nullptr;
     Browser* browser = nullptr;
-    for (TabContentsIterator it; !it.done(); it.Next()) {
+    auto& all_tabs = AllTabContentses();
+    for (auto it = all_tabs.begin(), end = all_tabs.end(); it != end; ++it) {
       if (it->GetVisibleURL() == landing_page_ &&
           (!tab_to_activate ||
            it->GetLastActiveTime() > tab_to_activate->GetLastActiveTime())) {
@@ -198,33 +201,26 @@ void WebUsbDetector::OnDeviceAdded(scoped_refptr<device::UsbDevice> device) {
   std::string notification_id = device->guid();
 
   message_center::RichNotificationData rich_notification_data;
-  std::unique_ptr<message_center::Notification> notification(
-      new message_center::Notification(
-          message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
-          l10n_util::GetStringFUTF16(
-              IDS_WEBUSB_DEVICE_DETECTED_NOTIFICATION_TITLE, product_name),
-          l10n_util::GetStringFUTF16(
-              IDS_WEBUSB_DEVICE_DETECTED_NOTIFICATION,
-              url_formatter::FormatUrlForSecurityDisplay(
-                  landing_page,
-                  url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC)),
-          gfx::Image(gfx::CreateVectorIcon(vector_icons::kUsbIcon, 64,
-                                           gfx::kChromeIconGrey)),
-          base::string16(), GURL(),
-          message_center::NotifierId(
-              message_center::NotifierId::SYSTEM_COMPONENT, kNotifierWebUsb),
-          rich_notification_data,
-          new WebUsbNotificationDelegate(landing_page, notification_id)));
-
-  notification->SetSystemPriority();
-  message_center::MessageCenter::Get()->AddNotification(
-      std::move(notification));
+  message_center::Notification notification(
+      message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
+      l10n_util::GetStringFUTF16(IDS_WEBUSB_DEVICE_DETECTED_NOTIFICATION_TITLE,
+                                 product_name),
+      l10n_util::GetStringFUTF16(
+          IDS_WEBUSB_DEVICE_DETECTED_NOTIFICATION,
+          url_formatter::FormatUrlForSecurityDisplay(
+              landing_page, url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC)),
+      gfx::Image(gfx::CreateVectorIcon(vector_icons::kUsbIcon, 64,
+                                       gfx::kChromeIconGrey)),
+      base::string16(), GURL(),
+      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
+                                 kNotifierWebUsb),
+      rich_notification_data,
+      base::MakeRefCounted<WebUsbNotificationDelegate>(landing_page,
+                                                       notification_id));
+  notification.SetSystemPriority();
+  SystemNotificationHelper::GetInstance()->Display(notification);
 }
 
 void WebUsbDetector::OnDeviceRemoved(scoped_refptr<device::UsbDevice> device) {
-  std::string notification_id = device->guid();
-  message_center::MessageCenter* message_center =
-      message_center::MessageCenter::Get();
-  if (message_center->FindVisibleNotificationById(notification_id))
-    message_center->RemoveNotification(notification_id, false /* by_user */);
+  SystemNotificationHelper::GetInstance()->Close(device->guid());
 }

@@ -35,12 +35,11 @@
 #include "net/base/proxy_delegate.h"
 #include "net/dns/host_resolver.h"
 #include "net/http/http_network_session.h"
-#include "net/net_features.h"
-#include "net/proxy/proxy_config_service.h"
-#include "net/proxy/proxy_service.h"
-#include "net/quic/core/quic_packets.h"
-#include "net/socket/next_proto.h"
+#include "net/net_buildflags.h"
+#include "net/proxy_resolution/proxy_config_service.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/ssl/ssl_config_service.h"
+#include "net/third_party/quic/core/quic_packets.h"
 #include "net/url_request/url_request_job_factory.h"
 
 namespace net {
@@ -81,15 +80,20 @@ struct ReportingPolicy;
 // Builder may be used to create only a single URLRequestContext.
 class NET_EXPORT URLRequestContextBuilder {
  public:
+  // Creates a LayeredDelegate that wraps |inner_network_delegate|.
+  using CreateLayeredNetworkDelegate =
+      base::OnceCallback<std::unique_ptr<NetworkDelegate>(
+          std::unique_ptr<NetworkDelegate> inner_network_delegate)>;
+
   using CreateInterceptingJobFactory =
-      base::OnceCallback<std::unique_ptr<net::URLRequestJobFactory>(
-          std::unique_ptr<net::URLRequestJobFactory> inner_job_factory)>;
+      base::OnceCallback<std::unique_ptr<URLRequestJobFactory>(
+          std::unique_ptr<URLRequestJobFactory> inner_job_factory)>;
 
   // Creates an HttpNetworkTransactionFactory given an HttpNetworkSession. Does
   // not take ownership of the session.
   using CreateHttpTransactionFactoryCallback =
-      base::OnceCallback<std::unique_ptr<net::HttpTransactionFactory>(
-          net::HttpNetworkSession* session)>;
+      base::OnceCallback<std::unique_ptr<HttpTransactionFactory>(
+          HttpNetworkSession* session)>;
 
   struct NET_EXPORT HttpCacheParams {
     enum Type {
@@ -144,36 +148,37 @@ class NET_EXPORT URLRequestContextBuilder {
       HttpNetworkSession::Context* session_context);
 
   // These functions are mutually exclusive.  The ProxyConfigService, if
-  // set, will be used to construct a ProxyService.
+  // set, will be used to construct a ProxyResolutionService.
   void set_proxy_config_service(
       std::unique_ptr<ProxyConfigService> proxy_config_service) {
     proxy_config_service_ = std::move(proxy_config_service);
   }
 
   // Sets whether quick PAC checks are enabled. Defaults to true. Ignored if
-  // a ProxyService is set directly.
+  // a ProxyResolutionService is set directly.
   void set_pac_quick_check_enabled(bool pac_quick_check_enabled) {
     pac_quick_check_enabled_ = pac_quick_check_enabled;
   }
 
   // Sets policy for sanitizing URLs before passing them to a PAC. Defaults to
-  // ProxyService::SanitizeUrlPolicy::SAFE. Ignored if
-  // a ProxyService is set directly.
+  // ProxyResolutionService::SanitizeUrlPolicy::SAFE. Ignored if
+  // a ProxyResolutionService is set directly.
   void set_pac_sanitize_url_policy(
-      net::ProxyService::SanitizeUrlPolicy pac_sanitize_url_policy) {
+      ProxyResolutionService::SanitizeUrlPolicy pac_sanitize_url_policy) {
     pac_sanitize_url_policy_ = pac_sanitize_url_policy;
   }
 
   // Sets the proxy service. If one is not provided, by default, uses system
   // libraries to evaluate PAC scripts, if available (And if not, skips PAC
-  // resolution). Subclasses may override CreateProxyService for different
-  // default behavior.
-  void set_proxy_service(std::unique_ptr<ProxyService> proxy_service) {
-    proxy_service_ = std::move(proxy_service);
+  // resolution). Subclasses may override CreateProxyResolutionService for
+  // different default behavior.
+  void set_proxy_resolution_service(
+      std::unique_ptr<ProxyResolutionService> proxy_resolution_service) {
+    proxy_resolution_service_ = std::move(proxy_resolution_service);
   }
 
   void set_ssl_config_service(
-      scoped_refptr<net::SSLConfigService> ssl_config_service) {
+      std::unique_ptr<SSLConfigService> ssl_config_service) {
     ssl_config_service_ = std::move(ssl_config_service);
   }
 
@@ -182,15 +187,13 @@ class NET_EXPORT URLRequestContextBuilder {
   // have the headers already set.
   void set_accept_language(const std::string& accept_language);
   void set_user_agent(const std::string& user_agent);
-  // Makes the created URLRequestContext use a shared HttpUserAgentSettings
-  // object. Not compatible with set_accept_language() / set_user_agent(). The
-  // consumer must ensure the HttpUserAgentSettings outlives the
-  // URLRequestContext returned by the builder.
+
+  // Makes the created URLRequestContext use a particular HttpUserAgentSettings
+  // object. Not compatible with set_accept_language() / set_user_agent().
   //
-  // TODO(mmenke): Take ownership of the object instead. See:
-  // https://crbug.com/743251
-  void set_shared_http_user_agent_settings(
-      HttpUserAgentSettings* shared_http_user_agent_settings);
+  // The object will be live until the URLRequestContext is destroyed.
+  void set_http_user_agent_settings(
+      std::unique_ptr<HttpUserAgentSettings> http_user_agent_settings);
 
   // Control support for data:// requests. By default it's disabled.
   void set_data_enabled(bool enable) {
@@ -239,6 +242,12 @@ class NET_EXPORT URLRequestContextBuilder {
   void set_network_delegate(std::unique_ptr<NetworkDelegate> delegate) {
     network_delegate_ = std::move(delegate);
   }
+
+  // Sets an optional callback that creates a NetworkDelegate wrapping either
+  // the default NetworkDelegate, or the one set by the above method.
+  // TODO(mmenke): Remove this once the network service ships.
+  void SetCreateLayeredNetworkDelegateCallback(
+      CreateLayeredNetworkDelegate create_layered_network_delegate_callback);
 
   // Sets the ProxyDelegate.
   void set_proxy_delegate(std::unique_ptr<ProxyDelegate> proxy_delegate);
@@ -295,8 +304,7 @@ class NET_EXPORT URLRequestContextBuilder {
   void SetCertVerifier(std::unique_ptr<CertVerifier> cert_verifier);
 
 #if BUILDFLAG(ENABLE_REPORTING)
-  void set_reporting_policy(
-      std::unique_ptr<net::ReportingPolicy> reporting_policy);
+  void set_reporting_policy(std::unique_ptr<ReportingPolicy> reporting_policy);
 
   void set_network_error_logging_enabled(bool network_error_logging_enabled) {
     network_error_logging_enabled_ = network_error_logging_enabled;
@@ -345,10 +353,11 @@ class NET_EXPORT URLRequestContextBuilder {
   std::unique_ptr<URLRequestContext> Build();
 
  protected:
-  // Lets subclasses override ProxyService creation, using a ProxyService that
-  // uses the URLRequestContext itself to get PAC scripts. When this method is
-  // invoked, the URLRequestContext is not yet ready to service requests.
-  virtual std::unique_ptr<ProxyService> CreateProxyService(
+  // Lets subclasses override ProxyResolutionService creation, using a
+  // ProxyResolutionService that uses the URLRequestContext itself to get PAC
+  // scripts. When this method is invoked, the URLRequestContext is not yet
+  // ready to service requests.
+  virtual std::unique_ptr<ProxyResolutionService> CreateProxyResolutionService(
       std::unique_ptr<ProxyConfigService> proxy_config_service,
       URLRequestContext* url_request_context,
       HostResolver* host_resolver,
@@ -362,7 +371,7 @@ class NET_EXPORT URLRequestContextBuilder {
 
   std::string accept_language_;
   std::string user_agent_;
-  HttpUserAgentSettings* shared_http_user_agent_settings_;
+  std::unique_ptr<HttpUserAgentSettings> http_user_agent_settings_;
 
   // Include support for data:// requests.
   bool data_enabled_;
@@ -384,14 +393,15 @@ class NET_EXPORT URLRequestContextBuilder {
   base::FilePath transport_security_persister_path_;
   NetLog* net_log_;
   std::unique_ptr<HostResolver> host_resolver_;
-  net::HostResolver* shared_host_resolver_;
+  HostResolver* shared_host_resolver_;
   std::unique_ptr<ChannelIDService> channel_id_service_;
   std::unique_ptr<ProxyConfigService> proxy_config_service_;
   bool pac_quick_check_enabled_;
-  ProxyService::SanitizeUrlPolicy pac_sanitize_url_policy_;
-  std::unique_ptr<ProxyService> proxy_service_;
-  scoped_refptr<net::SSLConfigService> ssl_config_service_;
+  ProxyResolutionService::SanitizeUrlPolicy pac_sanitize_url_policy_;
+  std::unique_ptr<ProxyResolutionService> proxy_resolution_service_;
+  std::unique_ptr<SSLConfigService> ssl_config_service_;
   std::unique_ptr<NetworkDelegate> network_delegate_;
+  CreateLayeredNetworkDelegate create_layered_network_delegate_callback_;
   std::unique_ptr<ProxyDelegate> proxy_delegate_;
   ProxyDelegate* shared_proxy_delegate_;
   std::unique_ptr<CookieStore> cookie_store_;
@@ -401,7 +411,7 @@ class NET_EXPORT URLRequestContextBuilder {
   std::unique_ptr<CTVerifier> ct_verifier_;
   std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer_;
 #if BUILDFLAG(ENABLE_REPORTING)
-  std::unique_ptr<net::ReportingPolicy> reporting_policy_;
+  std::unique_ptr<ReportingPolicy> reporting_policy_;
   bool network_error_logging_enabled_;
 #endif  // BUILDFLAG(ENABLE_REPORTING)
   std::vector<std::unique_ptr<URLRequestInterceptor>> url_request_interceptors_;

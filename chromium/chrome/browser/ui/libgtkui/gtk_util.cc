@@ -56,23 +56,17 @@ void CommonInitFromCommandLine(const base::CommandLine& command_line,
   }
 }
 
-using GtkSetState = void (*)(GtkWidgetPath*, gint, GtkStateFlags);
-PROTECTED_MEMORY_SECTION base::ProtectedMemory<GtkSetState>
-    _gtk_widget_path_iter_set_state;
-
-using GtkSetObjectName = void (*)(GtkWidgetPath*, gint, const char*);
-PROTECTED_MEMORY_SECTION base::ProtectedMemory<GtkSetObjectName>
-    _gtk_widget_path_iter_set_object_name;
-
 }  // namespace
 
 namespace libgtkui {
 
-// TODO(erg): ThemeService has a whole interface just for reading default
-// constants. Figure out what to do with that more long term; for now, just
-// copy the constants themselves here.
+// TODO(thomasanderson): ThemeService has a whole interface just for reading
+// default constants. Figure out what to do with that more long term; for now,
+// just copy the constants themselves here.
 const color_utils::HSL kDefaultTintFrameIncognito = {-1, 0.2f, 0.35f};
 const color_utils::HSL kDefaultTintFrameIncognitoInactive = {-1, 0.3f, 0.6f};
+const color_utils::HSL kDefaultTintBackgroundTab = {-1, -1, 0.42975};
+const color_utils::HSL kDefaultTintBackgroundTabIncognito = {-1, -1, 0.34375};
 
 // Theme colors returned by GetSystemColor().
 const SkColor kInvalidColorIdColor = SkColorSetRGB(255, 0, 128);
@@ -246,6 +240,14 @@ float GetDeviceScaleFactor() {
   views::LinuxUI* linux_ui = views::LinuxUI::instance();
   return linux_ui ? linux_ui->GetDeviceScaleFactor() : 1;
 }
+
+using GtkSetState = void (*)(GtkWidgetPath*, gint, GtkStateFlags);
+PROTECTED_MEMORY_SECTION base::ProtectedMemory<GtkSetState>
+    _gtk_widget_path_iter_set_state;
+
+using GtkSetObjectName = void (*)(GtkWidgetPath*, gint, const char*);
+PROTECTED_MEMORY_SECTION base::ProtectedMemory<GtkSetObjectName>
+    _gtk_widget_path_iter_set_object_name;
 
 }  // namespace
 

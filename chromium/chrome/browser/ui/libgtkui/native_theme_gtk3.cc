@@ -68,6 +68,7 @@ SkBitmap GetWidgetBitmap(const gfx::Size& size,
   }
   if (render_frame)
     gtk_render_frame(context, cr, 0, 0, size.width(), size.height());
+  bitmap.setImmutable();
   return bitmap;
 }
 
@@ -76,9 +77,9 @@ void PaintWidget(cc::PaintCanvas* canvas,
                  GtkStyleContext* context,
                  BackgroundRenderMode bg_mode,
                  bool render_frame) {
-  canvas->drawBitmap(
-      GetWidgetBitmap(rect.size(), context, bg_mode, render_frame), rect.x(),
-      rect.y());
+  canvas->drawImage(cc::PaintImage::CreateFromBitmap(GetWidgetBitmap(
+                        rect.size(), context, bg_mode, render_frame)),
+                    rect.x(), rect.y());
 }
 
 SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
@@ -121,7 +122,7 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
       return GetFgColor("GtkMenu#menu GtkMenuItem#menuitem:hover GtkLabel");
     case ui::NativeTheme::kColorId_DisabledMenuItemForegroundColor:
       return GetFgColor("GtkMenu#menu GtkMenuItem#menuitem:disabled GtkLabel");
-    case ui::NativeTheme::kColorId_MenuItemSubtitleColor:
+    case ui::NativeTheme::kColorId_MenuItemMinorTextColor:
       if (GtkVersionCheck(3, 20)) {
         return GetFgColor("GtkMenu#menu GtkMenuItem#menuitem #accelerator");
       }
@@ -133,6 +134,9 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
             "GtkMenu#menu GtkSeparator#separator.horizontal");
       }
       return GetFgColor("GtkMenu#menu GtkMenuItem#menuitem.separator");
+    case ui::NativeTheme::kColorId_TouchableMenuItemLabelColor:
+    case ui::NativeTheme::kColorId_ActionableSubmenuVerticalSeparatorColor:
+      return kInvalidColorIdColor;
 
     // Label
     case ui::NativeTheme::kColorId_LabelEnabledColor:
@@ -153,7 +157,7 @@ SkColor SkColorFromColorId(ui::NativeTheme::ColorId color_id) {
     case ui::NativeTheme::kColorId_LinkPressed:
       if (GtkVersionCheck(3, 12))
         return GetFgColor("GtkLabel.link:link:hover:active");
-    // fallthrough
+      FALLTHROUGH;
     case ui::NativeTheme::kColorId_LinkEnabled: {
       if (GtkVersionCheck(3, 12)) {
         return GetFgColor("GtkLabel.link:link");
@@ -662,9 +666,11 @@ void NativeThemeGtk3::PaintFrameTopArea(
   if (frame_top_area.incognito) {
     bitmap = SkBitmapOperations::CreateHSLShiftedBitmap(
         bitmap, kDefaultTintFrameIncognito);
+    bitmap.setImmutable();
   }
 
-  canvas->drawBitmap(bitmap, rect.x(), rect.y());
+  canvas->drawImage(cc::PaintImage::CreateFromBitmap(std::move(bitmap)),
+                    rect.x(), rect.y());
 }
 
 }  // namespace libgtkui

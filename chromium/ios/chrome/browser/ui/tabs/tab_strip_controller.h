@@ -7,11 +7,11 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/bubble/bubble_view_anchor_point_provider.h"
 #import "ios/chrome/browser/ui/tabs/requirements/tab_strip_constants.h"
 
 @protocol ApplicationCommands;
 @protocol BrowserCommands;
+@protocol PopupMenuLongPressDelegate;
 @class TabModel;
 @protocol TabStripPresentation;
 
@@ -19,13 +19,15 @@
 // display in sync with the TabModel.  This controller is only instantiated on
 // tablet.  The tab strip view itself is a subclass of UIScrollView, which
 // manages scroll offsets and scroll animations.
-@interface TabStripController : NSObject<BubbleViewAnchorPointProvider>
+@interface TabStripController : NSObject
 
 @property(nonatomic, assign) BOOL highlightsSelectedTab;
 @property(nonatomic, readonly, retain) UIView* view;
 
 @property(nonatomic, readonly, weak) id<BrowserCommands, ApplicationCommands>
     dispatcher;
+// Delegate for the long press gesture recognizer triggering popup menu.
+@property(nonatomic, weak) id<PopupMenuLongPressDelegate> longPressDelegate;
 
 // The duration to wait before starting tab strip animations. Used to
 // synchronize animations.
@@ -42,6 +44,9 @@
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
+
+// Hides or shows the tab strip.
+- (void)hideTabStrip:(BOOL)hidden;
 
 @end
 

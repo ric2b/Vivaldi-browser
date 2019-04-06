@@ -1,4 +1,6 @@
-static_library("apis") {
+import("//build/config/jumbo.gni")
+
+jumbo_static_library("apis") {
   public_deps = [
     "//chrome/common:mojo_bindings",
   ]
@@ -9,9 +11,9 @@ static_library("apis") {
     "//chrome/app:command_ids",
     "//chrome/app/theme:theme_resources",
     "//chrome/browser/extensions:extensions",
-    "//chrome/common/extensions/api:api_registration",
     "//components/bookmarks/browser:browser",
     "//components/favicon/core:core",
+    "//components/language/core/browser",
     "//components/search_engines",
     "//components/version_info",
     "//components/zoom:zoom",
@@ -21,7 +23,7 @@ static_library("apis") {
     "//extensions/browser:browser",
     "//skia:skia",
     "//third_party/cacheinvalidation",
-    "//third_party/WebKit/public:blink_headers",
+    "//third_party/blink/public:blink_headers",
     "//vivaldi/app/resources",
     "//vivaldi/extensions/schema:api",
     "//vivaldi/extensions/schema:api_registration",
@@ -52,6 +54,10 @@ static_library("apis") {
     "history/history_private_api.h",
     "import_data/import_data_api.cc",
     "import_data/import_data_api.h",
+    "infobars/infobars_api.cc",
+    "infobars/infobars_api.h",
+    "mail/mail_private_api.cc",
+    "mail/mail_private_api.h",
     "notes/notes_api.cc",
     "notes/notes_api.h",
     "prefs/prefs_api.cc",
@@ -77,6 +83,7 @@ static_library("apis") {
     "vivaldi_utilities/vivaldi_utilities_api_mac.mm",
     "vivaldi_utilities/vivaldi_utilities_api_win.cc",
     "vivaldi_utilities/vivaldi_utilities_api.h",
+    "vivaldi_utilities/vivaldi_utilities_custom_bindings.js",
     "window/window_private_api.cc",
     "window/window_private_api.h",
     "zoom/zoom_api.cc",

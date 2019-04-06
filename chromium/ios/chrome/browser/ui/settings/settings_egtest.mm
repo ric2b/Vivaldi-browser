@@ -9,7 +9,6 @@
 #include <memory>
 
 #include "base/bind.h"
-#import "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/browsing_data/core/pref_names.h"
@@ -30,13 +29,12 @@
 #import "ios/chrome/test/app/chrome_test_util.h"
 #include "ios/chrome/test/app/navigation_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
-#include "ios/chrome/test/app/web_view_interaction_test_util.h"
+#import "ios/chrome/test/app/web_view_interaction_test_util.h"
 #include "ios/chrome/test/earl_grey/accessibility_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#import "ios/testing/wait_util.h"
 #import "ios/web/public/test/http_server/http_server.h"
 #include "ios/web/public/test/http_server/http_server_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
@@ -60,8 +58,8 @@ using chrome_test_util::ClearCacheButton;
 using chrome_test_util::ClearCookiesButton;
 using chrome_test_util::ClearSavedPasswordsButton;
 using chrome_test_util::ContentSettingsButton;
-using chrome_test_util::NavigationBarDoneButton;
 using chrome_test_util::SettingsCollectionView;
+using chrome_test_util::SettingsDoneButton;
 using chrome_test_util::SettingsMenuBackButton;
 using chrome_test_util::SettingsMenuPrivacyButton;
 using chrome_test_util::VoiceSearchButton;
@@ -86,10 +84,6 @@ enum MetricsServiceType {
 // Matcher for the clear browsing data button on the clear browsing data panel.
 id<GREYMatcher> ClearBrowsingDataButton() {
   return ButtonWithAccessibilityLabelId(IDS_IOS_CLEAR_BUTTON);
-}
-// Matcher for the clear browsing data action sheet item.
-id<GREYMatcher> ConfirmClearBrowsingDataButton() {
-  return ButtonWithAccessibilityLabelId(IDS_IOS_CONFIRM_CLEAR_BUTTON);
 }
 // Matcher for the Send Usage Data cell on the Privacy screen.
 id<GREYMatcher> SendUsageDataButton() {
@@ -160,7 +154,7 @@ void SetCertificate() {
   scoped_refptr<net::URLRequestContextGetter> getter =
       browserState->GetRequestContext();
   web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE, base::BindBlockArc(^{
+      web::WebThread::IO, FROM_HERE, base::BindOnce(^{
         net::ChannelIDService* channel_id_service =
             getter->GetURLRequestContext()->channel_id_service();
         net::ChannelIDStore* channel_id_store =
@@ -195,7 +189,7 @@ bool IsCertificateCleared() {
   scoped_refptr<net::URLRequestContextGetter> getter =
       browserState->GetRequestContext();
   web::WebThread::PostTask(
-      web::WebThread::IO, FROM_HERE, base::BindBlockArc(^{
+      web::WebThread::IO, FROM_HERE, base::BindOnce(^{
         net::ChannelIDService* channel_id_service =
             getter->GetURLRequestContext()->channel_id_service();
         std::unique_ptr<crypto::ECPrivateKey> dummy_key;
@@ -231,11 +225,11 @@ bool IsCertificateCleared() {
 
   // Check if the Settings menu is displayed. If so, close it.
   error = nil;
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       assertWithMatcher:grey_notNil()
                   error:&error];
   if (!error) {
-    [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+    [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
         performAction:grey_tap()];
   }
 }
@@ -244,7 +238,7 @@ bool IsCertificateCleared() {
 - (void)closeSubSettingsMenu {
   [[EarlGrey selectElementWithMatcher:SettingsMenuBackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
 
@@ -253,7 +247,8 @@ bool IsCertificateCleared() {
 // scheduled for removal.
 - (void)clearBrowsingData {
   [ChromeEarlGreyUI tapClearBrowsingDataMenuButton:ClearBrowsingDataButton()];
-  [[EarlGrey selectElementWithMatcher:ConfirmClearBrowsingDataButton()]
+  [[EarlGrey selectElementWithMatcher:chrome_test_util::
+                                          ConfirmClearBrowsingDataButton()]
       performAction:grey_tap()];
 
   // Before returning, make sure that the top of the Clear Browsing Data
@@ -278,7 +273,7 @@ bool IsCertificateCleared() {
       performAction:grey_tap()];
 
   [self clearBrowsingData];
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
 
@@ -313,7 +308,7 @@ bool IsCertificateCleared() {
   [[EarlGrey selectElementWithMatcher:ClearSavedPasswordsButton()]
       performAction:grey_tap()];
 
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
 
@@ -613,7 +608,7 @@ bool IsCertificateCleared() {
   [[EarlGrey selectElementWithMatcher:SettingsCollectionView()]
       assertWithMatcher:grey_notNil()];
 
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
   GREYAssert(chrome_test_util::CloseAllIncognitoTabs(), @"Tabs did not close");
 }
@@ -622,7 +617,7 @@ bool IsCertificateCleared() {
 - (void)testAccessibilityOnSettingsPage {
   [ChromeEarlGreyUI openSettingsMenu];
   chrome_test_util::VerifyAccessibilityForCurrentScreen();
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+  [[EarlGrey selectElementWithMatcher:SettingsDoneButton()]
       performAction:grey_tap()];
 }
 

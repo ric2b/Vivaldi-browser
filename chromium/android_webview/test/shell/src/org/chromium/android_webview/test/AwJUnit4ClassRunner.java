@@ -4,14 +4,13 @@
 
 package org.chromium.android_webview.test;
 
-import android.support.test.InstrumentationRegistry;
+import android.support.annotation.CallSuper;
 
 import org.junit.runner.notification.RunNotifier;
 import org.junit.runners.model.FrameworkMethod;
 import org.junit.runners.model.InitializationError;
 
 import org.chromium.android_webview.AwSwitches;
-import org.chromium.base.CollectionUtil;
 import org.chromium.base.CommandLine;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.BaseTestResult.PreTestHook;
@@ -28,7 +27,9 @@ import java.util.List;
  * By default, all tests run both in single-process mode, and with sandboxed
  * renderer. If a test doesn't yet work with sandboxed renderer, an entire
  * class, or an individual test method can be marked for single-process testing
- * only by adding @SkipCommandLineParameterization to the test
+ * only by adding @SkipCommandLineParameterization to the test.
+ *
+ * Single process tests can be skipped by adding @SkipSingleProcessTests.
  */
 public final class AwJUnit4ClassRunner extends BaseJUnit4ClassRunner {
     /**
@@ -38,11 +39,13 @@ public final class AwJUnit4ClassRunner extends BaseJUnit4ClassRunner {
      * @throws InitializationError if the test class is malformed
      */
     public AwJUnit4ClassRunner(Class<?> klass) throws InitializationError {
-        super(klass, null, defaultPreTestHooks());
+        super(klass);
     }
 
-    private static List<PreTestHook> defaultPreTestHooks() {
-        return CollectionUtil.newArrayList(Policies.getRegistrationHook());
+    @CallSuper
+    @Override
+    protected List<PreTestHook> getPreTestHooks() {
+        return addToList(super.getPreTestHooks(), Policies.getRegistrationHook());
     }
 
     @Override
@@ -52,14 +55,16 @@ public final class AwJUnit4ClassRunner extends BaseJUnit4ClassRunner {
             if (method.getAnnotation(SkipCommandLineParameterization.class) == null) {
                 result.add(new WebViewMultiProcessFrameworkMethod(method));
             }
-            result.add(method);
+            if (method.getAnnotation(SkipSingleProcessTests.class) == null) {
+                result.add(method);
+            }
         }
         return result;
     }
 
     @Override
     protected void runChild(FrameworkMethod method, RunNotifier notifier) {
-        CommandLineFlags.setUp(InstrumentationRegistry.getTargetContext(), method.getMethod());
+        CommandLineFlags.setUp(method.getMethod());
         if (method instanceof WebViewMultiProcessFrameworkMethod) {
             CommandLine.getInstance().appendSwitch(AwSwitches.WEBVIEW_SANDBOXED_RENDERER);
         }

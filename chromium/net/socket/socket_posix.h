@@ -10,9 +10,9 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_pump_for_io.h"
 #include "base/threading/thread_checker.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/net_export.h"
 #include "net/socket/socket_descriptor.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -24,7 +24,8 @@ struct SockaddrStorage;
 
 // Socket class to provide asynchronous read/write operations on top of the
 // posix socket api. It supports AF_INET, AF_INET6, and AF_UNIX addresses.
-class NET_EXPORT_PRIVATE SocketPosix : public base::MessageLoopForIO::Watcher {
+class NET_EXPORT_PRIVATE SocketPosix
+    : public base::MessagePumpForIO::FdWatcher {
  public:
   SocketPosix();
   ~SocketPosix() override;
@@ -50,14 +51,13 @@ class NET_EXPORT_PRIVATE SocketPosix : public base::MessageLoopForIO::Watcher {
 
   int Listen(int backlog);
   int Accept(std::unique_ptr<SocketPosix>* socket,
-             const CompletionCallback& callback);
+             CompletionOnceCallback callback);
 
   // Connects socket. On non-ERR_IO_PENDING error, sets errno and returns a net
   // error code. On ERR_IO_PENDING, |callback| is called with a net error code,
   // not errno, though errno is set if connect event happens with error.
   // TODO(byungchul): Need more robust way to pass system errno.
-  int Connect(const SockaddrStorage& address,
-              const CompletionCallback& callback);
+  int Connect(const SockaddrStorage& address, CompletionOnceCallback callback);
   bool IsConnected() const;
   bool IsConnectedAndIdle() const;
 
@@ -67,26 +67,24 @@ class NET_EXPORT_PRIVATE SocketPosix : public base::MessageLoopForIO::Watcher {
   // code. On ERR_IO_PENDING, |callback| is called with a net error code, not
   // errno, though errno is set if read or write events happen with error.
   // TODO(byungchul): Need more robust way to pass system errno.
-  int Read(IOBuffer* buf, int buf_len, const CompletionCallback& callback);
+  int Read(IOBuffer* buf, int buf_len, CompletionOnceCallback callback);
 
   // Reads up to |buf_len| bytes into |buf| without blocking. If read is to
   // be retried later, |callback| will be invoked when data is ready for
   // reading. This method doesn't hold on to |buf|.
   // See socket.h for more information.
-  int ReadIfReady(IOBuffer* buf,
-                  int buf_len,
-                  const CompletionCallback& callback);
+  int ReadIfReady(IOBuffer* buf, int buf_len, CompletionOnceCallback callback);
+  int CancelReadIfReady();
   int Write(IOBuffer* buf,
             int buf_len,
-            const CompletionCallback& callback,
+            CompletionOnceCallback callback,
             const NetworkTrafficAnnotationTag& traffic_annotation);
 
   // Waits for next write event. This is called by TCPSocketPosix for TCP
   // fastopen after sending first data. Returns ERR_IO_PENDING if it starts
   // waiting for write event successfully. Otherwise, returns a net error code.
   // It must not be called after Write() because Write() calls it internally.
-  int WaitForWrite(IOBuffer* buf, int buf_len,
-                   const CompletionCallback& callback);
+  int WaitForWrite(IOBuffer* buf, int buf_len, CompletionOnceCallback callback);
 
   int GetLocalAddress(SockaddrStorage* address) const;
   int GetPeerAddress(SockaddrStorage* address) const;
@@ -104,7 +102,7 @@ class NET_EXPORT_PRIVATE SocketPosix : public base::MessageLoopForIO::Watcher {
   SocketDescriptor socket_fd() const { return socket_fd_; }
 
  private:
-  // base::MessageLoopForIO::Watcher methods.
+  // base::MessagePumpForIO::FdWatcher methods.
   void OnFileCanReadWithoutBlocking(int fd) override;
   void OnFileCanWriteWithoutBlocking(int fd) override;
 
@@ -125,25 +123,25 @@ class NET_EXPORT_PRIVATE SocketPosix : public base::MessageLoopForIO::Watcher {
 
   SocketDescriptor socket_fd_;
 
-  base::MessageLoopForIO::FileDescriptorWatcher accept_socket_watcher_;
+  base::MessagePumpForIO::FdWatchController accept_socket_watcher_;
   std::unique_ptr<SocketPosix>* accept_socket_;
-  CompletionCallback accept_callback_;
+  CompletionOnceCallback accept_callback_;
 
-  base::MessageLoopForIO::FileDescriptorWatcher read_socket_watcher_;
+  base::MessagePumpForIO::FdWatchController read_socket_watcher_;
 
   // Non-null when a Read() is in progress.
   scoped_refptr<IOBuffer> read_buf_;
   int read_buf_len_;
-  CompletionCallback read_callback_;
+  CompletionOnceCallback read_callback_;
 
   // Non-null when a ReadIfReady() is in progress.
-  CompletionCallback read_if_ready_callback_;
+  CompletionOnceCallback read_if_ready_callback_;
 
-  base::MessageLoopForIO::FileDescriptorWatcher write_socket_watcher_;
+  base::MessagePumpForIO::FdWatchController write_socket_watcher_;
   scoped_refptr<IOBuffer> write_buf_;
   int write_buf_len_;
   // External callback; called when write or connect is complete.
-  CompletionCallback write_callback_;
+  CompletionOnceCallback write_callback_;
 
   // A connect operation is pending. In this case, |write_callback_| needs to be
   // called when connect is complete.

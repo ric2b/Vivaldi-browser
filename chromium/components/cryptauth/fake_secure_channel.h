@@ -5,19 +5,34 @@
 #ifndef COMPONENTS_CRYPTAUTH_FAKE_SECURE_CHANNEL_H_
 #define COMPONENTS_CRYPTAUTH_FAKE_SECURE_CHANNEL_H_
 
+#include "base/callback.h"
 #include "base/macros.h"
+#include "base/optional.h"
+#include "components/cryptauth/connection.h"
 #include "components/cryptauth/secure_channel.h"
 
 namespace cryptauth {
 
-class CryptAuthService;
-
 // A fake implementation of SecureChannel to use in tests.
 class FakeSecureChannel : public SecureChannel {
  public:
-  FakeSecureChannel(std::unique_ptr<Connection> connection,
-                    CryptAuthService* cryptauth_service);
+  FakeSecureChannel(std::unique_ptr<Connection> connection);
   ~FakeSecureChannel() override;
+
+  void set_destructor_callback(base::OnceClosure destructor_callback) {
+    destructor_callback_ = std::move(destructor_callback);
+  }
+
+  bool was_initialized() { return was_initialized_; }
+
+  void set_rssi_to_return(const base::Optional<int32_t>& rssi_to_return) {
+    rssi_to_return_ = rssi_to_return;
+  }
+
+  void set_channel_binding_data(
+      const base::Optional<std::string>& channel_binding_data) {
+    channel_binding_data_ = channel_binding_data;
+  }
 
   struct SentMessage {
     SentMessage(const std::string& feature, const std::string& payload);
@@ -29,7 +44,6 @@ class FakeSecureChannel : public SecureChannel {
   void ChangeStatus(const Status& new_status);
   void ReceiveMessage(const std::string& feature, const std::string& payload);
   void CompleteSendingMessage(int sequence_number);
-  void NotifyGattCharacteristicsNotAvailable();
 
   std::vector<Observer*> observers() { return observers_; }
 
@@ -42,11 +56,19 @@ class FakeSecureChannel : public SecureChannel {
   void Disconnect() override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
+  void GetConnectionRssi(
+      base::OnceCallback<void(base::Optional<int32_t>)> callback) override;
+  base::Optional<std::string> GetChannelBindingData() override;
 
  private:
   int next_sequence_number_ = 0;
+  bool was_initialized_ = false;
   std::vector<Observer*> observers_;
   std::vector<SentMessage> sent_messages_;
+  base::Optional<int32_t> rssi_to_return_;
+  base::Optional<std::string> channel_binding_data_;
+
+  base::OnceClosure destructor_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeSecureChannel);
 };

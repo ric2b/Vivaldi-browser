@@ -6,33 +6,6 @@ if (is_win) {
       cflags = [ "/wd4723" ]  # potential divide by 0.
     }
   }
-  foreach(_target,
-          [
-            "//chrome/test:browser_tests",
-            "//chrome/test:interactive_ui_tests",
-            "//chrome/test:sync_integration_tests",
-            "//chrome/test:unit_tests",
-            "//components:components_unittests",
-            "//content/test:content_browsertests",
-          ]) {
-    update_template_instance(_target) {
-      pool = "build_toolchain_win_huge_pool"
-    }
-  }
-  _targets = [
-            "//content/shell:content_shell",
-          ]
-  if (is_win) {
-    _targets += ["//chrome:main_dll",]
-    if (is_multi_dll_chrome) {
-      _targets += ["//chrome:chrome_child"]
-    }
-  }
-  foreach(_target, _targets) {
-    update_target(_target) {
-      pool = "build_toolchain_win_huge_pool"
-    }
-  }
 
   foreach(_target,
           [
@@ -71,5 +44,11 @@ if (is_mac) {
         "-Wl,-rpath,@executable_path/../../third_party/sparkle_lib/",
       ]
     }
+  }
+}
+
+if (is_linux) {
+  update_target("//chrome:chrome_initial") {
+    configs -= [ "//vivaldi/gn/config:disable_new_dtags" ]
   }
 }

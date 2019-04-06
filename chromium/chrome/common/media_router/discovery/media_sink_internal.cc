@@ -95,6 +95,11 @@ const CastSinkExtraData& MediaSinkInternal::cast_data() const {
   return cast_data_;
 }
 
+CastSinkExtraData& MediaSinkInternal::cast_data() {
+  DCHECK(is_cast_sink());
+  return cast_data_;
+}
+
 // static
 bool MediaSinkInternal::IsValidSinkId(const std::string& sink_id) {
   if (sink_id.empty() || !base::IsStringASCII(sink_id)) {
@@ -103,6 +108,20 @@ bool MediaSinkInternal::IsValidSinkId(const std::string& sink_id) {
   }
 
   return true;
+}
+
+// static
+std::string MediaSinkInternal::ProcessDeviceUUID(
+    const std::string& device_uuid) {
+  if (device_uuid.empty())
+    return std::string();
+
+  std::string result = device_uuid;
+  if (base::StartsWith(device_uuid, "uuid:", base::CompareCase::SENSITIVE))
+    result = device_uuid.substr(5);
+
+  base::RemoveChars(result, "-", &result);
+  return base::ToLowerASCII(result);
 }
 
 void MediaSinkInternal::InternalCopyConstructFrom(

@@ -9,10 +9,11 @@
 #include <algorithm>
 #include <limits>
 
+#include "base/auto_reset.h"
 #include "base/containers/adapters.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
+#include "cc/paint/paint_filter.h"
 #include "cc/paint/paint_op_buffer.h"
 #include "third_party/skia/include/utils/SkNoDrawCanvas.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -123,6 +124,26 @@ class DiscardableImageGenerator {
   }
 
  private:
+  class ImageGatheringProvider : public ImageProvider {
+   public:
+    ImageGatheringProvider(DiscardableImageGenerator* generator,
+                           const gfx::Rect& op_rect)
+        : generator_(generator), op_rect_(op_rect) {}
+    ~ImageGatheringProvider() override = default;
+
+    ScopedDecodedDrawImage GetDecodedDrawImage(
+        const DrawImage& draw_image) override {
+      generator_->AddImage(draw_image.paint_image(),
+                           SkRect::Make(draw_image.src_rect()), op_rect_,
+                           SkMatrix::I(), draw_image.filter_quality());
+      return ScopedDecodedDrawImage();
+    }
+
+   private:
+    DiscardableImageGenerator* generator_;
+    gfx::Rect op_rect_;
+  };
+
   // Adds discardable images from |buffer| to the set of images tracked by
   // this generator. If |buffer| is being used in a DrawOp that requires
   // rasterization of the buffer as a pre-processing step for execution of the
@@ -143,12 +164,13 @@ class DiscardableImageGenerator {
     // TODO(khushalsagar): Optimize out save/restore blocks if there are no
     // images in the draw ops between them.
     for (auto* op : PaintOpBuffer::Iterator(buffer)) {
-      if (!op->IsDrawOp()) {
+      // We need to play non-draw ops on the SkCanvas since they can affect the
+      // transform/clip state.
+      if (!op->IsDrawOp())
         op->Raster(canvas, params);
+
+      if (!PaintOp::OpHasDiscardableImages(op))
         continue;
-      } else if (!PaintOp::OpHasDiscardableImages(op)) {
-        continue;
-      }
 
       gfx::Rect op_rect;
       base::Optional<gfx::Rect> local_op_rect;
@@ -201,9 +223,10 @@ class DiscardableImageGenerator {
 
     gfx::Rect transformed_rect;
     SkRect op_rect;
-    if (!PaintOp::GetBounds(op, &op_rect)) {
+    if (!op->IsDrawOp() || !PaintOp::GetBounds(op, &op_rect)) {
       // If we can't provide a conservative bounding rect for the op, assume it
       // covers the complete current clip.
+      // TODO(khushalsagar): See if we can do something better for non-draw ops.
       transformed_rect = gfx::ToEnclosingRect(gfx::SkRectToRectF(clip_rect));
     } else {
       const PaintFlags* flags =
@@ -246,33 +269,78 @@ class DiscardableImageGenerator {
   void AddImageFromFlags(const gfx::Rect& op_rect,
                          const PaintFlags& flags,
                          const SkMatrix& ctm) {
-    if (!flags.getShader())
+    AddImageFromShader(op_rect, flags.getShader(), ctm,
+                       flags.getFilterQuality());
+    AddImageFromFilter(op_rect, flags.getImageFilter().get());
+  }
+
+  void AddImageFromShader(const gfx::Rect& op_rect,
+                          const PaintShader* shader,
+                          const SkMatrix& ctm,
+                          SkFilterQuality filter_quality) {
+    if (!shader || !shader->has_discardable_images())
       return;
 
-    if (flags.getShader()->shader_type() == PaintShader::Type::kImage) {
-      const PaintImage& paint_image = flags.getShader()->paint_image();
+    if (shader->shader_type() == PaintShader::Type::kImage) {
+      const PaintImage& paint_image = shader->paint_image();
       SkMatrix matrix = ctm;
-      matrix.postConcat(flags.getShader()->GetLocalMatrix());
+      matrix.postConcat(shader->GetLocalMatrix());
       AddImage(paint_image,
                SkRect::MakeWH(paint_image.width(), paint_image.height()),
-               op_rect, matrix, flags.getFilterQuality());
-    } else if (flags.getShader()->shader_type() ==
-                   PaintShader::Type::kPaintRecord &&
-               flags.getShader()->paint_record()->HasDiscardableImages()) {
+               op_rect, matrix, filter_quality);
+      return;
+    }
+
+    if (shader->shader_type() == PaintShader::Type::kPaintRecord) {
+      // For record backed shaders, only analyze them if they have animated
+      // images.
+      if (shader->image_analysis_state() ==
+          ImageAnalysisState::kNoAnimatedImages) {
+        return;
+      }
+
       SkRect scaled_tile_rect;
-      if (!flags.getShader()->GetRasterizationTileRect(ctm,
-                                                       &scaled_tile_rect)) {
+      if (!shader->GetRasterizationTileRect(ctm, &scaled_tile_rect)) {
         return;
       }
 
       PaintTrackingCanvas canvas(scaled_tile_rect.width(),
                                  scaled_tile_rect.height());
-      canvas.setMatrix(SkMatrix::MakeRectToRect(flags.getShader()->tile(),
-                                                scaled_tile_rect,
-                                                SkMatrix::kFill_ScaleToFit));
-      GatherDiscardableImages(flags.getShader()->paint_record().get(), &op_rect,
-                              &canvas);
+      canvas.setMatrix(SkMatrix::MakeRectToRect(
+          shader->tile(), scaled_tile_rect, SkMatrix::kFill_ScaleToFit));
+      base::AutoReset<bool> auto_reset(&only_gather_animated_images_, true);
+      size_t prev_image_set_size = image_set_.size();
+      GatherDiscardableImages(shader->paint_record().get(), &op_rect, &canvas);
+
+      // We only track animated images for PaintShaders. If we added any entry
+      // to the |image_set_|, this shader any has animated images.
+      // Note that it is thread-safe to set the |has_animated_images| bit on
+      // PaintShader here since the analysis is done on the main thread, before
+      // the PaintOpBuffer is used for rasterization.
+      DCHECK_GE(image_set_.size(), prev_image_set_size);
+      const bool has_animated_images = image_set_.size() > prev_image_set_size;
+      const_cast<PaintShader*>(shader)->set_has_animated_images(
+          has_animated_images);
     }
+  }
+
+  void AddImageFromFilter(const gfx::Rect& op_rect, const PaintFilter* filter) {
+    // Only analyze filters if they have animated images.
+    if (!filter || !filter->has_discardable_images() ||
+        filter->image_analysis_state() ==
+            ImageAnalysisState::kNoAnimatedImages) {
+      return;
+    }
+
+    base::AutoReset<bool> auto_reset(&only_gather_animated_images_, true);
+    size_t prev_image_set_size = image_set_.size();
+    ImageGatheringProvider image_provider(this, op_rect);
+    filter->SnapshotWithImages(&image_provider);
+
+    DCHECK_GE(image_set_.size(), prev_image_set_size);
+    const bool has_animated_images = image_set_.size() > prev_image_set_size;
+    const_cast<PaintFilter*>(filter)->set_has_animated_images(
+        has_animated_images);
   }
 
   void AddImage(PaintImage paint_image,
@@ -319,9 +387,17 @@ class DiscardableImageGenerator {
           paint_image.reset_animation_sequence_id());
     }
 
-    image_set_.emplace_back(
-        DrawImage(std::move(paint_image), src_irect, filter_quality, matrix),
-        image_rect);
+    // If we are iterating images in a record shader, only track them if they
+    // are animated. We defer decoding of images in record shaders to skia, but
+    // we still need to track animated images to invalidate and advance the
+    // animation in cc.
+    bool add_image =
+        !only_gather_animated_images_ || paint_image.ShouldAnimate();
+    if (add_image) {
+      image_set_.emplace_back(
+          DrawImage(std::move(paint_image), src_irect, filter_quality, matrix),
+          image_rect);
+    }
   }
 
   std::vector<std::pair<DrawImage, gfx::Rect>> image_set_;
@@ -329,6 +405,7 @@ class DiscardableImageGenerator {
   std::vector<DiscardableImageMap::AnimatedImageMetadata>
       animated_images_metadata_;
   base::flat_map<PaintImage::Id, PaintImage::DecodingMode> decoding_mode_map_;
+  bool only_gather_animated_images_ = false;
 
   // Statistics about the number of images and pixels that will require color
   // conversion if the target color space is not sRGB.

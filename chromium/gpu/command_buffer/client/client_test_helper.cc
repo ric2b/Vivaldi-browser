@@ -43,10 +43,11 @@ int32_t FakeCommandBufferServiceBase::GetNextFreeTransferBufferId() {
   return -1;
 }
 
-void FakeCommandBufferServiceBase::SetGetBufferHelper(int transfer_buffer_id) {
+void FakeCommandBufferServiceBase::SetGetBufferHelper(int transfer_buffer_id,
+                                                      int32_t token) {
   ++state_.set_get_buffer_count;
   state_.get_offset = 0;
-  state_.token = 10000;  // All token checks in the tests should pass.
+  state_.token = token;
 }
 
 scoped_refptr<gpu::Buffer>
@@ -55,10 +56,12 @@ FakeCommandBufferServiceBase::CreateTransferBufferHelper(size_t size,
   *id = GetNextFreeTransferBufferId();
   if (*id >= 0) {
     int32_t ndx = *id - kTransferBufferBaseId;
-    std::unique_ptr<base::SharedMemory> shared_memory(new base::SharedMemory());
-    shared_memory->CreateAndMapAnonymous(size);
-    transfer_buffer_buffers_[ndx] =
-        MakeBufferFromSharedMemory(std::move(shared_memory), size);
+    base::UnsafeSharedMemoryRegion shared_memory_region =
+        base::UnsafeSharedMemoryRegion::Create(size);
+    base::WritableSharedMemoryMapping shared_memory_mapping =
+        shared_memory_region.Map();
+    transfer_buffer_buffers_[ndx] = MakeBufferFromSharedMemory(
+        std::move(shared_memory_region), std::move(shared_memory_mapping));
   }
   return GetTransferBuffer(*id);
 }
@@ -131,7 +134,7 @@ CommandBuffer::State MockClientCommandBuffer::WaitForGetOffsetInRange(
 }
 
 void MockClientCommandBuffer::SetGetBuffer(int transfer_buffer_id) {
-  SetGetBufferHelper(transfer_buffer_id);
+  SetGetBufferHelper(transfer_buffer_id, token_);
 }
 
 scoped_refptr<gpu::Buffer> MockClientCommandBuffer::CreateTransferBuffer(

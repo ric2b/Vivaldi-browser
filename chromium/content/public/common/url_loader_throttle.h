@@ -5,8 +5,13 @@
 #ifndef CONTENT_PUBLIC_COMMON_URL_LOADER_THROTTLE_H_
 #define CONTENT_PUBLIC_COMMON_URL_LOADER_THROTTLE_H_
 
+#include <string>
+#include <vector>
+
+#include "base/strings/string_piece.h"
 #include "content/common/content_export.h"
 #include "content/public/common/resource_type.h"
+#include "content/public/common/transferrable_url_loader.mojom.h"
 #include "net/base/request_priority.h"
 
 class GURL;
@@ -41,8 +46,10 @@ class CONTENT_EXPORT URLLoaderThrottle {
   // synchronously.
   class CONTENT_EXPORT Delegate {
    public:
-    // Cancels the resource load with the specified error code.
-    virtual void CancelWithError(int error_code) = 0;
+    // Cancels the resource load with the specified error code and an optional,
+    // application-defined reason description.
+    virtual void CancelWithError(int error_code,
+                                 base::StringPiece custom_reason = nullptr) = 0;
 
     // Resumes the deferred resource load. It is a no-op if the resource load is
     // not deferred or has already been canceled.
@@ -54,6 +61,14 @@ class CONTENT_EXPORT URLLoaderThrottle {
     // network.
     virtual void PauseReadingBodyFromNet();
     virtual void ResumeReadingBodyFromNet();
+
+    // Replaces the URLLoader and URLLoaderClient endpoints held by the
+    // ThrottlingURLLoader instance.
+    virtual void InterceptResponse(
+        network::mojom::URLLoaderPtr new_loader,
+        network::mojom::URLLoaderClientRequest new_client_request,
+        network::mojom::URLLoaderPtr* original_loader,
+        network::mojom::URLLoaderClientRequest* original_client_request);
 
    protected:
     virtual ~Delegate();
@@ -76,7 +91,8 @@ class CONTENT_EXPORT URLLoaderThrottle {
   virtual void WillRedirectRequest(
       const net::RedirectInfo& redirect_info,
       const network::ResourceResponseHead& response_head,
-      bool* defer);
+      bool* defer,
+      std::vector<std::string>* to_be_removed_request_headers);
 
   // Called when the response headers and meta data are available.
   // TODO(776312): Migrate this URL to ResourceResponseHead.

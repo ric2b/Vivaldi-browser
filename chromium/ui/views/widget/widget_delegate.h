@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "ui/accessibility/ax_enums.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/views/view.h"
 
@@ -72,7 +72,7 @@ class VIEWS_EXPORT WidgetDelegate {
   // ui::MODAL_TYPE_NONE (not modal).
   virtual ui::ModalType GetModalType() const;
 
-  virtual ui::AXRole GetAccessibleWindowRole() const;
+  virtual ax::mojom::Role GetAccessibleWindowRole() const;
 
   // Returns the title to be read with screen readers.
   virtual base::string16 GetAccessibleWindowTitle() const;
@@ -85,10 +85,6 @@ class VIEWS_EXPORT WidgetDelegate {
 
   // Returns true if the window should show a close button in the title bar.
   virtual bool ShouldShowCloseButton() const;
-
-  // Returns true if the window should handle standard system commands, such as
-  // close, minimize, maximize.
-  virtual bool ShouldHandleSystemCommands() const;
 
   // Returns the app icon for the window. On Windows, this is the ICON_BIG used
   // in Alt-Tab list and Win7's taskbar.
@@ -105,7 +101,7 @@ class VIEWS_EXPORT WidgetDelegate {
   virtual bool ExecuteWindowsCommand(int command_id);
 
   // Execute a command in the window's controller. (vivaldi/espen).
-  virtual void HandleKeyboardCode(ui::KeyboardCode code);
+  virtual void HandleKeyboardCode(ui::KeyboardCode code) {}
 
   // Returns the window's name identifier. Used to identify this window for
   // state restoration.
@@ -191,12 +187,16 @@ class VIEWS_EXPORT WidgetDelegate {
   virtual void GetAccessiblePanes(std::vector<View*>* panes) {}
 
  protected:
-  virtual ~WidgetDelegate() {}
+  virtual ~WidgetDelegate();
 
  private:
-  View* default_contents_view_;
+  friend class Widget;
 
-  bool can_activate_;
+  View* default_contents_view_ = nullptr;
+  bool can_activate_ = true;
+
+  // Managed by Widget. Ensures |this| outlives its Widget.
+  bool can_delete_this_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(WidgetDelegate);
 };

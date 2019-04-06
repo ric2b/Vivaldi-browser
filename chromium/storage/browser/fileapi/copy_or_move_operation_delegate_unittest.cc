@@ -4,8 +4,11 @@
 
 #include <stddef.h>
 #include <stdint.h>
+
 #include <map>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/containers/queue.h"
@@ -19,6 +22,7 @@
 #include "base/stl_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/services/filesystem/public/interfaces/types.mojom.h"
 #include "storage/browser/fileapi/copy_or_move_file_validator.h"
 #include "storage/browser/fileapi/copy_or_move_operation_delegate.h"
 #include "storage/browser/fileapi/file_stream_reader.h"
@@ -46,7 +50,7 @@ using storage::FileSystemURL;
 
 namespace content {
 
-typedef storage::FileSystemOperation::FileEntryList FileEntryList;
+using FileEntryList = storage::FileSystemOperation::FileEntryList;
 
 namespace {
 
@@ -87,7 +91,7 @@ class TestValidatorFactory : public storage::CopyOrMoveFileValidatorFactory {
         const ResultCallback& result_callback) override {
       // Post the result since a real validator must do work asynchronously.
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(result_callback, result_));
+          FROM_HERE, base::BindOnce(result_callback, result_));
     }
 
     void StartPostWriteValidation(
@@ -100,7 +104,7 @@ class TestValidatorFactory : public storage::CopyOrMoveFileValidatorFactory {
       }
       // Post the result since a real validator must do work asynchronously.
       base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(result_callback, result));
+          FROM_HERE, base::BindOnce(result_callback, result));
     }
 
    private:
@@ -154,8 +158,8 @@ class ScopedThreadStopper {
     if (thread_) {
       // Give another chance for deleted streams to perform Close.
       base::RunLoop run_loop;
-      thread_->task_runner()->PostTaskAndReply(
-          FROM_HERE, base::Bind(&base::DoNothing), run_loop.QuitClosure());
+      thread_->task_runner()->PostTaskAndReply(FROM_HERE, base::DoNothing(),
+                                               run_loop.QuitClosure());
       run_loop.Run();
       thread_->Stop();
     }
@@ -216,7 +220,7 @@ class CopyOrMoveOperationTestHelper {
     backend->ResolveURL(
         FileSystemURL::CreateForTest(origin_, src_type_, base::FilePath()),
         storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT,
-        base::Bind(&ExpectOk));
+        base::BindOnce(&ExpectOk));
     backend = file_system_context_->GetFileSystemBackend(dest_type_);
     if (dest_type_ == storage::kFileSystemTypeTest) {
       TestFileSystemBackend* test_backend =
@@ -232,7 +236,7 @@ class CopyOrMoveOperationTestHelper {
     backend->ResolveURL(
         FileSystemURL::CreateForTest(origin_, dest_type_, base::FilePath()),
         storage::OPEN_FILE_SYSTEM_CREATE_IF_NONEXISTENT,
-        base::Bind(&ExpectOk));
+        base::BindOnce(&ExpectOk));
     scoped_task_environment_.RunUntilIdle();
 
     // Grant relatively big quota initially.
@@ -335,7 +339,7 @@ class CopyOrMoveOperationTestHelper {
         root.virtual_path().AppendRelativePath(url.virtual_path(), &relative);
         relative = relative.NormalizePathSeparators();
         ASSERT_TRUE(base::ContainsKey(test_case_map, relative));
-        if (entries[i].is_directory) {
+        if (entries[i].type == filesystem::mojom::FsFileType::DIRECTORY) {
           EXPECT_TRUE(test_case_map[relative]->is_directory);
           directories.push(url);
         } else {
@@ -346,10 +350,9 @@ class CopyOrMoveOperationTestHelper {
       }
     }
     EXPECT_TRUE(test_case_map.empty());
-    std::map<base::FilePath,
-        const FileSystemTestCaseRecord*>::const_iterator it;
-    for (it = test_case_map.begin(); it != test_case_map.end(); ++it) {
-      LOG(ERROR) << "Extra entry: " << it->first.LossyDisplayName();
+    for (const auto& path_record_pair : test_case_map) {
+      LOG(ERROR) << "Extra entry: "
+                 << path_record_pair.first.LossyDisplayName();
     }
   }
 
@@ -869,8 +872,8 @@ TEST(LocalFileSystemCopyOrMoveOperationTest, StreamCopyHelper_Cancel) {
   // Call Cancel() later.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&CopyOrMoveOperationDelegate::StreamCopyHelper::Cancel,
-                 base::Unretained(&helper)));
+      base::BindOnce(&CopyOrMoveOperationDelegate::StreamCopyHelper::Cancel,
+                     base::Unretained(&helper)));
 
   base::File::Error error = base::File::FILE_ERROR_FAILED;
   base::RunLoop run_loop;

@@ -14,16 +14,18 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
-#include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/no_destructor.h"
 #include "chromecast/base/init_command_line_shlib.h"
 #include "chromecast/base/serializers.h"
-#include "chromecast/chromecast_features.h"
+#include "chromecast/chromecast_buildflags.h"
 #include "jni/VolumeControl_jni.h"
+#if BUILDFLAG(ENABLE_VOLUME_TABLES_ACCESS)
 #include "jni/VolumeMap_jni.h"
+#endif
 
 namespace chromecast {
 namespace media {
@@ -66,8 +68,10 @@ float MapIntoDifferentVolumeTableDomain(AudioContentType from_type,
 
 }  // namespace
 
-base::LazyInstance<VolumeControlAndroid>::Leaky g_volume_control =
-    LAZY_INSTANCE_INITIALIZER;
+VolumeControlAndroid& GetVolumeControl() {
+  static base::NoDestructor<VolumeControlAndroid> volume_control;
+  return *volume_control;
+}
 
 VolumeControlAndroid::VolumeControlAndroid()
     : thread_("VolumeControl"),
@@ -110,6 +114,11 @@ float VolumeControlAndroid::GetVolume(AudioContentType type) {
 }
 
 void VolumeControlAndroid::SetVolume(AudioContentType type, float level) {
+  if (type == AudioContentType::kOther) {
+    NOTREACHED() << "Can't set volume for content type kOther";
+    return;
+  }
+
   level = std::max(0.0f, std::min(level, 1.0f));
   // The input level value is in the kMedia (MUSIC) volume table domain.
   float mapped_level =
@@ -126,6 +135,11 @@ bool VolumeControlAndroid::IsMuted(AudioContentType type) {
 }
 
 void VolumeControlAndroid::SetMuted(AudioContentType type, bool muted) {
+  if (type == AudioContentType::kOther) {
+    NOTREACHED() << "Can't set mute state for content type kOther";
+    return;
+  }
+
   thread_.task_runner()->PostTask(
       FROM_HERE, base::BindOnce(&VolumeControlAndroid::SetMutedOnThread,
                                 base::Unretained(this), type, muted,
@@ -133,6 +147,11 @@ void VolumeControlAndroid::SetMuted(AudioContentType type, bool muted) {
 }
 
 void VolumeControlAndroid::SetOutputLimit(AudioContentType type, float limit) {
+  if (type == AudioContentType::kOther) {
+    NOTREACHED() << "Can't set output limit for content type kOther";
+    return;
+  }
+
   // The input limit is in the kMedia (MUSIC) volume table domain.
   limit = std::max(0.0f, std::min(limit, 1.0f));
   float limit_db = VolumeToDbFSByContentType(AudioContentType::kMedia, limit);
@@ -166,8 +185,10 @@ void VolumeControlAndroid::InitializeOnThread() {
 
   for (auto type : {AudioContentType::kMedia, AudioContentType::kAlarm,
                     AudioContentType::kCommunication}) {
+#if BUILDFLAG(ENABLE_VOLUME_TABLES_ACCESS)
     Java_VolumeMap_dumpVolumeTables(base::android::AttachCurrentThread(),
                                     static_cast<int>(type));
+#endif
     volumes_[type] =
         Java_VolumeControl_getVolume(base::android::AttachCurrentThread(),
                                      j_volume_control_, static_cast<int>(type));
@@ -181,6 +202,14 @@ void VolumeControlAndroid::InitializeOnThread() {
               << " volume=" << volumes_[type] << " (" << volume_db << ")"
               << " mute=" << muted_[type];
   }
+
+  // The kOther content type should not have any type-wide volume control or
+  // mute (volume control for kOther is per-stream only). Therefore, ensure
+  // that the global volume and mute state fo kOther is initialized correctly
+  // (100% volume, and not muted).
+  SetVolumeOnThread(AudioContentType::kOther, 1.0f, false /* from_android */);
+  SetMutedOnThread(AudioContentType::kOther, false, false /* from_android */);
+
   initialize_complete_event_.Signal();
 }
 
@@ -251,12 +280,28 @@ void VolumeControlAndroid::SetMutedOnThread(AudioContentType type,
 void VolumeControlAndroid::ReportVolumeChangeOnThread(AudioContentType type,
                                                       float level) {
   DCHECK(thread_.task_runner()->BelongsToCurrentThread());
+  if (type == AudioContentType::kOther) {
+    // Volume for AudioContentType::kOther should stay at 1.0.
+    Java_VolumeControl_setVolume(base::android::AttachCurrentThread(),
+                                 j_volume_control_, static_cast<int>(type),
+                                 1.0f);
+    return;
+  }
+
   SetVolumeOnThread(type, level, true /* from android */);
 }
 
 void VolumeControlAndroid::ReportMuteChangeOnThread(AudioContentType type,
                                                     bool muted) {
   DCHECK(thread_.task_runner()->BelongsToCurrentThread());
+  if (type == AudioContentType::kOther) {
+    // Mute state for AudioContentType::kOther should always be false.
+    Java_VolumeControl_setMuted(base::android::AttachCurrentThread(),
+                                j_volume_control_, static_cast<int>(type),
+                                false);
+    return;
+  }
+
   SetMutedOnThread(type, muted, true /* from_android */);
 }
 
@@ -276,37 +321,37 @@ void VolumeControl::Finalize() {
 
 // static
 void VolumeControl::AddVolumeObserver(VolumeObserver* observer) {
-  g_volume_control.Get().AddVolumeObserver(observer);
+  GetVolumeControl().AddVolumeObserver(observer);
 }
 
 // static
 void VolumeControl::RemoveVolumeObserver(VolumeObserver* observer) {
-  g_volume_control.Get().RemoveVolumeObserver(observer);
+  GetVolumeControl().RemoveVolumeObserver(observer);
 }
 
 // static
 float VolumeControl::GetVolume(AudioContentType type) {
-  return g_volume_control.Get().GetVolume(type);
+  return GetVolumeControl().GetVolume(type);
 }
 
 // static
 void VolumeControl::SetVolume(AudioContentType type, float level) {
-  g_volume_control.Get().SetVolume(type, level);
+  GetVolumeControl().SetVolume(type, level);
 }
 
 // static
 bool VolumeControl::IsMuted(AudioContentType type) {
-  return g_volume_control.Get().IsMuted(type);
+  return GetVolumeControl().IsMuted(type);
 }
 
 // static
 void VolumeControl::SetMuted(AudioContentType type, bool muted) {
-  g_volume_control.Get().SetMuted(type, muted);
+  GetVolumeControl().SetMuted(type, muted);
 }
 
 // static
 void VolumeControl::SetOutputLimit(AudioContentType type, float limit) {
-  g_volume_control.Get().SetOutputLimit(type, limit);
+  GetVolumeControl().SetOutputLimit(type, limit);
 }
 
 // static

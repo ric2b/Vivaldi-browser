@@ -76,6 +76,7 @@ class NativeAppWindowViews : public extensions::NativeAppWindow,
   void Show() override;
   void ShowInactive() override;
   void Hide() override;
+  bool IsVisible() const override;
   void Close() override;
   void Activate() override;
   void Deactivate() override;
@@ -103,8 +104,6 @@ class NativeAppWindowViews : public extensions::NativeAppWindow,
   bool ShouldDescendIntoChildForEventHandling(
       gfx::NativeView child,
       const gfx::Point& location) override;
-  bool ExecuteWindowsCommand(int command_id) override;
-  void HandleKeyboardCode(ui::KeyboardCode code) override;
 
   // WidgetObserver implementation.
   void OnWidgetDestroying(views::Widget* widget) override;
@@ -178,13 +177,7 @@ class NativeAppWindowViews : public extensions::NativeAppWindow,
   // NOTE(pettern@vivaldi): If true, this window is hidden for the user but
   // "visible" for the underlying chromium code so that a thumbnail can be
   // generated.
-  bool thumbnail_window_;
-
-  // NOTE(jarle@vivaldi): If true, the view has been shown at least once, and
-  // it's ok to change the widget's saved window state in the Show() method.
-  // This is to ensure that the window's saved state is preserved on init.
-  // Ref.: VB-10039
-  bool shown_;
+  bool thumbnail_window_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(NativeAppWindowViews);
 };

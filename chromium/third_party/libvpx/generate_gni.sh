@@ -226,6 +226,7 @@ function print_config_basic {
 # $3 - Optional - any additional arguments to pass through.
 function gen_rtcd_header {
   echo "Generate $LIBVPX_CONFIG_DIR/$1/*_rtcd.h files."
+  format="clang-format -i -style=Chromium"
 
   rm -rf $BASE_DIR/$TEMP_DIR/libvpx.config
   if [[ "$2" == "mipsel" || "$2" == "mips64el" || "$2" == nacl ]]; then
@@ -244,7 +245,7 @@ function gen_rtcd_header {
     $BASE_DIR/$LIBVPX_SRC_DIR/vp8/common/rtcd_defs.pl \
     > $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vp8_rtcd.h
 
-  clang-format -i $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vp8_rtcd.h
+  ${format} $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vp8_rtcd.h
 
   $BASE_DIR/$LIBVPX_SRC_DIR/build/make/rtcd.pl \
     --arch=$2 \
@@ -253,7 +254,7 @@ function gen_rtcd_header {
     $BASE_DIR/$LIBVPX_SRC_DIR/vp9/common/vp9_rtcd_defs.pl \
     > $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vp9_rtcd.h
 
-  clang-format -i $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vp9_rtcd.h
+  ${format} $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vp9_rtcd.h
 
   $BASE_DIR/$LIBVPX_SRC_DIR/build/make/rtcd.pl \
     --arch=$2 \
@@ -262,7 +263,7 @@ function gen_rtcd_header {
     $BASE_DIR/$LIBVPX_SRC_DIR/vpx_scale/vpx_scale_rtcd.pl \
     > $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vpx_scale_rtcd.h
 
-  clang-format -i $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vpx_scale_rtcd.h
+  ${format} $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vpx_scale_rtcd.h
 
   $BASE_DIR/$LIBVPX_SRC_DIR/build/make/rtcd.pl \
     --arch=$2 \
@@ -271,7 +272,7 @@ function gen_rtcd_header {
     $BASE_DIR/$LIBVPX_SRC_DIR/vpx_dsp/vpx_dsp_rtcd_defs.pl \
     > $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vpx_dsp_rtcd.h
 
-  clang-format -i $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vpx_dsp_rtcd.h
+  ${format} $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vpx_dsp_rtcd.h
 
   rm -rf $BASE_DIR/$TEMP_DIR/libvpx.config
 }
@@ -422,7 +423,11 @@ if [ -z $ONLY_CONFIGS ]; then
   cp vpx_version.h $BASE_DIR/$LIBVPX_CONFIG_DIR
 
   echo "Generate X86_64 source list."
-  config=$(print_config linux/x64)
+  # Windows needs float_control_word.asm for Windows. This was previously
+  # emms_mmx.asm but a refactoring pulled out the cross platform bits. Because
+  # of this, use the win/x64 configuration as the reference. The empty asm
+  # object should not perturb the other builds.
+  config=$(print_config win/x64)
   make_clean
   make libvpx_srcs.txt target=libs $config > /dev/null
   convert_srcs_to_project_files libvpx_srcs.txt libvpx_srcs_x86_64

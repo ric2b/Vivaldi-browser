@@ -6,7 +6,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/subresource_filter/subresource_filter_browser_test_harness.h"
 #include "chrome/browser/ui/browser.h"
@@ -34,7 +33,7 @@ class SubresourceFilterWebSocketBrowserTest
 
   void SetUpOnMainThread() override {
     SubresourceFilterBrowserTest::SetUpOnMainThread();
-    websocket_test_server_ = base::MakeUnique<net::SpawnedTestServer>(
+    websocket_test_server_ = std::make_unique<net::SpawnedTestServer>(
         net::SpawnedTestServer::TYPE_WS, net::GetWebSocketTestDataDirectory());
     ASSERT_TRUE(websocket_test_server_->Start());
   }

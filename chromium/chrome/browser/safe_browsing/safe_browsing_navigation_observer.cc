@@ -35,12 +35,13 @@ NavigationEvent::NavigationEvent()
     : source_url(),
       source_main_frame_url(),
       original_request_url(),
-      source_tab_id(-1),
-      target_tab_id(-1),
+      source_tab_id(SessionID::InvalidValue()),
+      target_tab_id(SessionID::InvalidValue()),
       frame_id(-1),
       last_updated(base::Time::Now()),
       navigation_initiation(ReferrerChainEntry::UNDEFINED),
-      has_committed(false) {}
+      has_committed(false),
+      maybe_launched_by_external_application() {}
 
 NavigationEvent::NavigationEvent(NavigationEvent&& nav_event)
     : source_url(std::move(nav_event.source_url)),
@@ -52,7 +53,9 @@ NavigationEvent::NavigationEvent(NavigationEvent&& nav_event)
       frame_id(nav_event.frame_id),
       last_updated(nav_event.last_updated),
       navigation_initiation(nav_event.navigation_initiation),
-      has_committed(nav_event.has_committed) {}
+      has_committed(nav_event.has_committed),
+      maybe_launched_by_external_application(
+          nav_event.maybe_launched_by_external_application) {}
 
 NavigationEvent& NavigationEvent::operator=(NavigationEvent&& nav_event) {
   source_url = std::move(nav_event.source_url);
@@ -64,6 +67,8 @@ NavigationEvent& NavigationEvent::operator=(NavigationEvent&& nav_event) {
   last_updated = nav_event.last_updated;
   navigation_initiation = nav_event.navigation_initiation;
   has_committed = nav_event.has_committed;
+  maybe_launched_by_external_application =
+      nav_event.maybe_launched_by_external_application;
   server_redirect_urls = std::move(nav_event.server_redirect_urls);
   return *this;
 }
@@ -109,11 +114,34 @@ SafeBrowsingNavigationObserver::SafeBrowsingNavigationObserver(
 
 SafeBrowsingNavigationObserver::~SafeBrowsingNavigationObserver() {}
 
+void SafeBrowsingNavigationObserver::OnUserInteraction() {
+  last_user_gesture_timestamp_ = base::Time::Now();
+  has_user_gesture_ = true;
+  manager_->RecordUserGestureForWebContents(web_contents(),
+                                            last_user_gesture_timestamp_);
+}
+
 // Called when a navigation starts in the WebContents. |navigation_handle|
 // parameter is unique to this navigation, which will appear in the following
 // DidRedirectNavigation, and DidFinishNavigation too.
 void SafeBrowsingNavigationObserver::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
+  // Treat a browser-initiated navigation as a user interaction.
+  if (!navigation_handle->IsRendererInitiated())
+    OnUserInteraction();
+
+  // Ignores navigation caused by back/forward.
+  if (navigation_handle->GetPageTransition() &
+      ui::PAGE_TRANSITION_FORWARD_BACK) {
+    return;
+  }
+
+  // Ignores reloads
+  if (ui::PageTransitionCoreTypeIs(navigation_handle->GetPageTransition(),
+                                   ui::PAGE_TRANSITION_RELOAD)) {
+    return;
+  }
+
   std::unique_ptr<NavigationEvent> nav_event =
       std::make_unique<NavigationEvent>();
   auto it = navigation_handle_map_.find(navigation_handle);
@@ -221,6 +249,9 @@ void SafeBrowsingNavigationObserver::DidFinishNavigation(
   }
   NavigationEvent* nav_event = navigation_handle_map_[navigation_handle].get();
 
+  nav_event->maybe_launched_by_external_application =
+      PageTransitionCoreTypeIs(navigation_handle->GetPageTransition(),
+                               ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
   nav_event->has_committed = navigation_handle->HasCommitted();
   nav_event->target_tab_id =
       SessionTabHelper::IdForTab(navigation_handle->GetWebContents());
@@ -233,10 +264,7 @@ void SafeBrowsingNavigationObserver::DidFinishNavigation(
 
 void SafeBrowsingNavigationObserver::DidGetUserInteraction(
     const blink::WebInputEvent::Type type) {
-  last_user_gesture_timestamp_ = base::Time::Now();
-  has_user_gesture_ = true;
-  manager_->RecordUserGestureForWebContents(web_contents(),
-                                            last_user_gesture_timestamp_);
+  OnUserInteraction();
 }
 
 void SafeBrowsingNavigationObserver::WebContentsDestroyed() {
@@ -256,7 +284,7 @@ void SafeBrowsingNavigationObserver::DidOpenRequestedURL(
     bool renderer_initiated) {
   manager_->RecordNewWebContents(
       web_contents(), source_render_frame_host->GetProcess()->GetID(),
-      source_render_frame_host->GetRoutingID(), url, new_contents,
+      source_render_frame_host->GetRoutingID(), url, transition, new_contents,
       renderer_initiated);
 }
 
@@ -264,13 +292,13 @@ void SafeBrowsingNavigationObserver::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_type,
-    std::string resource_identifier) {
+    const std::string& resource_identifier) {
   // For all the content settings that can be changed via page info UI, we
   // assume there is a user gesture associated with the content setting change.
   if (web_contents() &&
       primary_pattern.Matches(web_contents()->GetLastCommittedURL()) &&
       PageInfoUI::ContentSettingsTypeInPageInfo(content_type)) {
-    DidGetUserInteraction(blink::WebInputEvent::kMouseDown);
+    OnUserInteraction();
   }
 }
 

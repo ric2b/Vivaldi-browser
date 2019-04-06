@@ -20,7 +20,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_chromium_strings.h"
 #include "components/strings/grit/components_strings.h"
-#include "ppapi/features/features.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "url/gurl.h"
@@ -47,7 +47,7 @@ const int kInvalidResourceID = -1;
 // The icon size is actually 16, but the vector icons being used generally all
 // have additional internal padding. Account for this difference by asking for
 // the vectors in 18x18dip sizes.
-constexpr int kIconSize = 18;
+constexpr int kVectorIconSize = 18;
 #endif
 
 // The resource IDs for the strings that are displayed on the permissions
@@ -112,7 +112,7 @@ const PermissionsUIInfo kPermissionsUIInfo[] = {
     {CONTENT_SETTINGS_TYPE_COOKIES, 0},
     {CONTENT_SETTINGS_TYPE_IMAGES, IDS_PAGE_INFO_TYPE_IMAGES},
     {CONTENT_SETTINGS_TYPE_JAVASCRIPT, IDS_PAGE_INFO_TYPE_JAVASCRIPT},
-    {CONTENT_SETTINGS_TYPE_POPUPS, IDS_PAGE_INFO_TYPE_POPUPS},
+    {CONTENT_SETTINGS_TYPE_POPUPS, IDS_PAGE_INFO_TYPE_POPUPS_REDIRECTS},
 #if BUILDFLAG(ENABLE_PLUGINS)
     {CONTENT_SETTINGS_TYPE_PLUGINS, IDS_PAGE_INFO_TYPE_FLASH},
 #endif
@@ -128,6 +128,8 @@ const PermissionsUIInfo kPermissionsUIInfo[] = {
     {CONTENT_SETTINGS_TYPE_ADS, IDS_PAGE_INFO_TYPE_ADS},
     {CONTENT_SETTINGS_TYPE_SOUND, IDS_PAGE_INFO_TYPE_SOUND},
     {CONTENT_SETTINGS_TYPE_CLIPBOARD_READ, IDS_PAGE_INFO_TYPE_CLIPBOARD},
+    {CONTENT_SETTINGS_TYPE_SENSORS, IDS_PAGE_INFO_TYPE_SENSORS},
+    {CONTENT_SETTINGS_TYPE_USB_GUARD, IDS_PAGE_INFO_TYPE_USB},
 };
 
 std::unique_ptr<PageInfoUI::SecurityDescription> CreateSecurityDescription(
@@ -196,11 +198,11 @@ PageInfoUI::IdentityInfo::IdentityInfo()
 PageInfoUI::IdentityInfo::~IdentityInfo() {}
 
 std::unique_ptr<PageInfoUI::SecurityDescription>
-PageInfoUI::IdentityInfo::GetSecurityDescription() const {
+PageInfoUI::GetSecurityDescription(const IdentityInfo& identity_info) const {
   std::unique_ptr<PageInfoUI::SecurityDescription> security_description(
       new PageInfoUI::SecurityDescription());
 
-  switch (identity_status) {
+  switch (identity_info.identity_status) {
     case PageInfo::SITE_IDENTITY_STATUS_INTERNAL_PAGE:
 #if defined(OS_ANDROID)
       // We provide identical summary and detail strings for Android, which
@@ -208,15 +210,17 @@ PageInfoUI::IdentityInfo::GetSecurityDescription() const {
       return CreateSecurityDescription(SecuritySummaryColor::GREEN,
                                        IDS_PAGE_INFO_INTERNAL_PAGE,
                                        IDS_PAGE_INFO_INTERNAL_PAGE);
-#endif
+#else
       // Internal pages on desktop have their own UI implementations which
       // should never call this function.
       NOTREACHED();
+      FALLTHROUGH;
+#endif
     case PageInfo::SITE_IDENTITY_STATUS_CERT:
     case PageInfo::SITE_IDENTITY_STATUS_EV_CERT:
     case PageInfo::SITE_IDENTITY_STATUS_CERT_REVOCATION_UNKNOWN:
     case PageInfo::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT:
-      switch (connection_status) {
+      switch (identity_info.connection_status) {
         case PageInfo::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE:
           return CreateSecurityDescription(SecuritySummaryColor::RED,
                                            IDS_PAGE_INFO_NOT_SECURE_SUMMARY,
@@ -246,17 +250,15 @@ PageInfoUI::IdentityInfo::GetSecurityDescription() const {
       return CreateSecurityDescription(SecuritySummaryColor::RED,
                                        IDS_PAGE_INFO_UNWANTED_SOFTWARE_SUMMARY,
                                        IDS_PAGE_INFO_UNWANTED_SOFTWARE_DETAILS);
-    case PageInfo::SITE_IDENTITY_STATUS_PASSWORD_REUSE:
+    case PageInfo::SITE_IDENTITY_STATUS_SIGN_IN_PASSWORD_REUSE:
 #if defined(SAFE_BROWSING_DB_LOCAL)
-      return safe_browsing::PasswordProtectionService::ShouldShowSofterWarning()
-                 ? CreateSecurityDescription(
-                       SecuritySummaryColor::RED,
-                       IDS_PAGE_INFO_CHANGE_PASSWORD_SUMMARY_SOFTER,
-                       IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS)
-                 : CreateSecurityDescription(
-                       SecuritySummaryColor::RED,
-                       IDS_PAGE_INFO_CHANGE_PASSWORD_SUMMARY,
-                       IDS_PAGE_INFO_CHANGE_PASSWORD_DETAILS);
+      return CreateSecurityDescriptionForPasswordReuse(
+          /*is_enterprise_password=*/false);
+#endif
+    case PageInfo::SITE_IDENTITY_STATUS_ENTERPRISE_PASSWORD_REUSE:
+#if defined(SAFE_BROWSING_DB_LOCAL)
+      return CreateSecurityDescriptionForPasswordReuse(
+          /*is_enterprise_password=*/true);
 #endif
     case PageInfo::SITE_IDENTITY_STATUS_DEPRECATED_SIGNATURE_ALGORITHM:
     case PageInfo::SITE_IDENTITY_STATUS_UNKNOWN:
@@ -296,7 +298,7 @@ base::string16 PageInfoUI::PermissionActionToUIString(
         button_text_ids = kPermissionButtonTextIDDefaultSetting;
         break;
       }
-    // Fallthrough.
+      FALLTHROUGH;
     case content_settings::SETTING_SOURCE_POLICY:
     case content_settings::SETTING_SOURCE_EXTENSION:
       button_text_ids = kPermissionButtonTextIDUserManaged;
@@ -338,7 +340,6 @@ base::string16 PageInfoUI::PermissionDecisionReasonToUIString(
                                                              url, url);
     switch (permission_result.source) {
       case PermissionStatusSource::MULTIPLE_DISMISSALS:
-      case PermissionStatusSource::SAFE_BROWSING_BLACKLIST:
         message_id = IDS_PAGE_INFO_PERMISSION_AUTOMATICALLY_BLOCKED;
         break;
       default:
@@ -355,7 +356,7 @@ base::string16 PageInfoUI::PermissionDecisionReasonToUIString(
 }
 
 // static
-SkColor PageInfoUI::GetPermissionDecisionTextColor() {
+SkColor PageInfoUI::GetSecondaryTextColor() {
   return SK_ColorGRAY;
 }
 
@@ -478,6 +479,12 @@ const gfx::ImageSkia PageInfoUI::GetPermissionIcon(const PermissionInfo& info,
     case CONTENT_SETTINGS_TYPE_CLIPBOARD_READ:
       icon = &kPageInfoContentPasteIcon;
       break;
+    case CONTENT_SETTINGS_TYPE_SENSORS:
+      icon = &kSensorsIcon;
+      break;
+    case CONTENT_SETTINGS_TYPE_USB_GUARD:
+      icon = &vector_icons::kUsbIcon;
+      break;
     default:
       // All other |ContentSettingsType|s do not have icons on desktop or are
       // not shown in the Page Info bubble.
@@ -490,12 +497,12 @@ const gfx::ImageSkia PageInfoUI::GetPermissionIcon(const PermissionInfo& info,
                                : info.setting;
   if (setting == CONTENT_SETTING_BLOCK) {
     return gfx::CreateVectorIconWithBadge(
-        *icon, kIconSize,
+        *icon, kVectorIconSize,
         color_utils::DeriveDefaultIconColor(related_text_color),
         kBlockedBadgeIcon);
   }
   return gfx::CreateVectorIcon(
-      *icon, kIconSize,
+      *icon, kVectorIconSize,
       color_utils::DeriveDefaultIconColor(related_text_color));
 }
 
@@ -509,12 +516,12 @@ const gfx::ImageSkia PageInfoUI::GetChosenObjectIcon(
   const gfx::VectorIcon* icon = &vector_icons::kUsbIcon;
   if (deleted) {
     return gfx::CreateVectorIconWithBadge(
-        *icon, kIconSize,
+        *icon, kVectorIconSize,
         color_utils::DeriveDefaultIconColor(related_text_color),
         kBlockedBadgeIcon);
   }
   return gfx::CreateVectorIcon(
-      *icon, kIconSize,
+      *icon, kVectorIconSize,
       color_utils::DeriveDefaultIconColor(related_text_color));
 }
 
@@ -522,7 +529,7 @@ const gfx::ImageSkia PageInfoUI::GetChosenObjectIcon(
 const gfx::ImageSkia PageInfoUI::GetCertificateIcon(
     const SkColor related_text_color) {
   return gfx::CreateVectorIcon(
-      kCertificateIcon, kIconSize,
+      kCertificateIcon, kVectorIconSize,
       color_utils::DeriveDefaultIconColor(related_text_color));
 }
 
@@ -530,7 +537,7 @@ const gfx::ImageSkia PageInfoUI::GetCertificateIcon(
 const gfx::ImageSkia PageInfoUI::GetSiteSettingsIcon(
     const SkColor related_text_color) {
   return gfx::CreateVectorIcon(
-      kSettingsIcon, kIconSize,
+      kSettingsIcon, kVectorIconSize,
       color_utils::DeriveDefaultIconColor(related_text_color));
 }
 #endif

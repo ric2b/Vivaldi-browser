@@ -6,15 +6,62 @@
 #define GPU_VULKAN_VULKAN_IMPLEMENTATION_H_
 
 #include <vulkan/vulkan.h>
+#include <memory>
 
+#include "base/macros.h"
 #include "gpu/vulkan/vulkan_export.h"
+#include "ui/gfx/native_widget_types.h"
+
+namespace gfx {
+class GpuFence;
+}
+
 namespace gpu {
 
-VULKAN_EXPORT bool InitializeVulkan();
-VULKAN_EXPORT bool VulkanSupported();
+class VulkanDeviceQueue;
+class VulkanSurface;
 
-VkInstance GetVulkanInstance();
+// This object provides factory functions for creating vulkan objects that use
+// platform-specific extensions (e.g. for creation of VkSurfaceKHR objects).
+class VULKAN_EXPORT VulkanImplementation {
+ public:
+  VulkanImplementation();
+
+  virtual ~VulkanImplementation();
+
+  virtual bool InitializeVulkanInstance() = 0;
+
+  virtual VkInstance GetVulkanInstance() = 0;
+
+  virtual std::unique_ptr<VulkanSurface> CreateViewSurface(
+      gfx::AcceleratedWidget window) = 0;
+
+  virtual bool GetPhysicalDevicePresentationSupport(
+      VkPhysicalDevice device,
+      const std::vector<VkQueueFamilyProperties>& queue_family_properties,
+      uint32_t queue_family_index) = 0;
+
+  virtual std::vector<const char*> GetRequiredDeviceExtensions() = 0;
+
+  // Creates a VkFence that is exportable to a gfx::GpuFence.
+  virtual VkFence CreateVkFenceForGpuFence(VkDevice vk_device) = 0;
+
+  // Exports a VkFence to a gfx::GpuFence.
+  //
+  // The fence should have been created via CreateVkFenceForGpuFence().
+  virtual std::unique_ptr<gfx::GpuFence> ExportVkFenceToGpuFence(
+      VkDevice vk_device,
+      VkFence vk_fence) = 0;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(VulkanImplementation);
+};
+
+VULKAN_EXPORT
+std::unique_ptr<VulkanDeviceQueue> CreateVulkanDeviceQueue(
+    VulkanImplementation* vulkan_implementation,
+    uint32_t option);
 
 }  // namespace gpu
 
-#endif  // GPU_VULKAN_VULKAN_WSI_API_IMPLEMENTATION_H_
+#endif  // GPU_VULKAN_VULKAN_IMPLEMENTATION_H_

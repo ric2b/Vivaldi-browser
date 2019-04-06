@@ -1,11 +1,31 @@
 include_rules = [
-  # TODO(mash): Remove. http://crbug.com/678705
- "+ash",
  "+chrome/browser/ui/views",
  "+components/constrained_window",
  "+mash/common",
- "+mash/quick_launch/public",
  "+services/ui/public/cpp",
  "+components/user_manager",
  "+third_party/libaddressinput",
 ]
+
+specific_include_rules = {
+  "chrome_views_delegate_chromeos\.cc": [
+    # TODO(mash): Fix. https://crbug.com/631545
+    "+ash/accelerators/accelerator_controller.h",
+    # TODO(mash): Fix. https://crbug.com/826456
+    "+ash/shell.h",
+    "+ash/wm/window_state.h",
+  ],
+  # mash-ok
+  "screen_capture_notification_ui_views\.cc": [
+    "+ash/shell.h",
+  ],
+  # mash-ok
+  "status_bubble_views\.cc": [
+    "+ash/shell.h",
+    "+ash/wm/window_state.h",
+  ],
+  ".*test.*": [
+   "!ash",
+   "+ash/public",
+  ],
+}

@@ -8,8 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
-#include "chrome/browser/search/one_google_bar/one_google_bar_fetcher.h"
+#include "chrome/browser/search/one_google_bar/one_google_bar_loader.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 
 class OneGoogleBarService::SigninObserver
@@ -39,9 +38,9 @@ class OneGoogleBarService::SigninObserver
 
 OneGoogleBarService::OneGoogleBarService(
     GaiaCookieManagerService* cookie_service,
-    std::unique_ptr<OneGoogleBarFetcher> fetcher)
-    : fetcher_(std::move(fetcher)),
-      signin_observer_(base::MakeUnique<SigninObserver>(
+    std::unique_ptr<OneGoogleBarLoader> loader)
+    : loader_(std::move(loader)),
+      signin_observer_(std::make_unique<SigninObserver>(
           cookie_service,
           base::Bind(&OneGoogleBarService::SigninStatusChanged,
                      base::Unretained(this)))) {}
@@ -54,11 +53,12 @@ void OneGoogleBarService::Shutdown() {
   }
 
   signin_observer_.reset();
+  DCHECK(!observers_.might_have_observers());
 }
 
 void OneGoogleBarService::Refresh() {
-  fetcher_->Fetch(base::BindOnce(&OneGoogleBarService::OneGoogleBarDataFetched,
-                                 base::Unretained(this)));
+  loader_->Load(base::BindOnce(&OneGoogleBarService::OneGoogleBarDataLoaded,
+                               base::Unretained(this)));
 }
 
 void OneGoogleBarService::AddObserver(OneGoogleBarServiceObserver* observer) {
@@ -78,12 +78,12 @@ void OneGoogleBarService::SigninStatusChanged() {
   }
 }
 
-void OneGoogleBarService::OneGoogleBarDataFetched(
-    OneGoogleBarFetcher::Status status,
+void OneGoogleBarService::OneGoogleBarDataLoaded(
+    OneGoogleBarLoader::Status status,
     const base::Optional<OneGoogleBarData>& data) {
   // In case of transient errors, keep our cached data (if any), but still
-  // notify observers of the finished fetch (attempt).
-  if (status != OneGoogleBarFetcher::Status::TRANSIENT_ERROR) {
+  // notify observers of the finished load (attempt).
+  if (status != OneGoogleBarLoader::Status::TRANSIENT_ERROR) {
     one_google_bar_data_ = data;
   }
   NotifyObservers();

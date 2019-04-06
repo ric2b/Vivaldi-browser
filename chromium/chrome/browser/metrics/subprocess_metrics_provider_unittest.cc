@@ -7,7 +7,6 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_flattener.h"
 #include "base/metrics/histogram_snapshot_manager.h"
@@ -46,9 +45,6 @@ class SubprocessMetricsProviderTest : public testing::Test {
  protected:
   SubprocessMetricsProviderTest()
       : thread_bundle_(content::TestBrowserThreadBundle::DEFAULT) {
-    // Get this first so it isn't created inside a persistent allocator.
-    base::PersistentHistogramAllocator::GetCreateHistogramResultHistogram();
-
     // MergeHistogramDeltas needs to be called beause it uses a histogram
     // macro which caches a pointer to a histogram. If not done before setting
     // a persistent global allocator, then it would point into memory that
@@ -72,8 +68,8 @@ class SubprocessMetricsProviderTest : public testing::Test {
   std::unique_ptr<base::PersistentHistogramAllocator> CreateDuplicateAllocator(
       base::PersistentHistogramAllocator* allocator) {
     // Just wrap around the data segment in-use by the passed allocator.
-    return base::MakeUnique<base::PersistentHistogramAllocator>(
-        base::MakeUnique<base::PersistentMemoryAllocator>(
+    return std::make_unique<base::PersistentHistogramAllocator>(
+        std::make_unique<base::PersistentMemoryAllocator>(
             const_cast<void*>(allocator->data()), allocator->length(), 0, 0,
             std::string(), false));
   }
@@ -117,7 +113,8 @@ class SubprocessMetricsProviderTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(SubprocessMetricsProviderTest);
 };
 
-TEST_F(SubprocessMetricsProviderTest, SnapshotMetrics) {
+// Temporarily disabled until someone can troubleshoot http://crbug.com/863262
+TEST_F(SubprocessMetricsProviderTest, DISABLED_SnapshotMetrics) {
   base::HistogramBase* foo = base::Histogram::FactoryGet("foo", 1, 100, 10, 0);
   base::HistogramBase* bar = base::Histogram::FactoryGet("bar", 1, 100, 10, 0);
   base::HistogramBase* baz = base::Histogram::FactoryGet("baz", 1, 100, 10, 0);

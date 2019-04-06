@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/containers/circular_deque.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -51,7 +52,9 @@ class POLICY_EXPORT RemoteCommandsService
   }
 
   // Set an alternative clock for testing.
-  void SetClockForTesting(std::unique_ptr<base::TickClock> clock);
+  void SetClockForTesting(const base::TickClock* clock);
+
+  virtual void SetOnCommandAckedCallback(base::OnceClosure callback);
 
  private:
   // Helper function to enqueue a command which we get from server.
@@ -95,6 +98,10 @@ class POLICY_EXPORT RemoteCommandsService
   RemoteCommandsQueue queue_;
   std::unique_ptr<RemoteCommandsFactory> factory_;
   CloudPolicyClient* const client_;
+
+  // Callback which gets called after the last command got ACK'd to the server
+  // as executed.
+  base::OnceClosure on_command_acked_callback_;
 
   base::WeakPtrFactory<RemoteCommandsService> weak_factory_;
 

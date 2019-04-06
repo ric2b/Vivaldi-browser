@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "extensions/renderer/bindings/api_event_listeners.h"
@@ -149,6 +148,13 @@ gin::ObjectTemplateBuilder DeclarativeEvent::GetObjectTemplateBuilder(
       .SetMethod("addRules", &DeclarativeEvent::AddRules)
       .SetMethod("removeRules", &DeclarativeEvent::RemoveRules)
       .SetMethod("getRules", &DeclarativeEvent::GetRules);
+}
+
+const char* DeclarativeEvent::GetTypeName() {
+  // NOTE(devlin): Currently, our documentation does not differentiate between
+  // "normal" events and declarative events. Use "Event" here so that developers
+  // don't think there's separate documentation to look for.
+  return "Event";
 }
 
 void DeclarativeEvent::AddRules(gin::Arguments* arguments) {

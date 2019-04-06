@@ -16,7 +16,7 @@
 #include "components/payments/core/journey_logger.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
+#include "third_party/blink/public/platform/modules/payments/payment_request.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -65,7 +65,7 @@ class PaymentRequest : public mojom::PaymentRequest,
             std::vector<mojom::PaymentMethodDataPtr> method_data,
             mojom::PaymentDetailsPtr details,
             mojom::PaymentOptionsPtr options) override;
-  void Show() override;
+  void Show(bool is_user_gesture) override;
   void UpdateWith(mojom::PaymentDetailsPtr details) override;
   void NoUpdatedPaymentDetails() override;
   void Abort() override;
@@ -101,10 +101,20 @@ class PaymentRequest : public mojom::PaymentRequest,
   // Hide this Payment Request if it's already showing.
   void HideIfNecessary();
 
+  bool IsIncognito() const;
+
+  // Returns true if this payment request supports skipping the Payment Sheet.
+  // Typically, this means only one payment method is supported, it's a URL
+  // based method, and no other info is requested from the user.
+  bool SatisfiesSkipUIConstraints() const;
+
   content::WebContents* web_contents() { return web_contents_; }
 
   PaymentRequestSpec* spec() { return spec_.get(); }
   PaymentRequestState* state() { return state_.get(); }
+
+  PaymentRequestSpec* spec() const { return spec_.get(); }
+  PaymentRequestState* state() const { return state_.get(); }
 
  private:
   // Only records the abort reason if it's the first completion for this Payment
@@ -154,6 +164,9 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   // Whether a completion was already recorded for this Payment Request.
   bool has_recorded_completion_ = false;
+
+  // Whether PaymentRequest.show() was invoked with a user gesture.
+  bool is_show_user_gesture_ = false;
 
   base::WeakPtrFactory<PaymentRequest> weak_ptr_factory_;
 

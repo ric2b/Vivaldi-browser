@@ -5,7 +5,7 @@
 import("//build/config/jumbo.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/grit/repack.gni")
-import("//ui/base/ui_features.gni")
+import("//ui/webui/webui_features.gni")
 
 group("resources") {
   public_deps = [
@@ -191,7 +191,7 @@ repack("repack_ui_test_pak_100_percent") {
   ]
 
   if (!is_ios) {
-    deps += [ "//third_party/WebKit/public:resources_grit" ]
+    deps += [ "//third_party/blink/public:resources_grit" ]
   }
 
   if (!is_mac) {
@@ -208,15 +208,15 @@ repack("repack_ui_test_pak_100_percent") {
   if (toolkit_views) {
     deps += [ "//ui/views/resources" ]
     sources += [
-      "$root_gen_dir/blink/public/resources/blink_resources.pak",
+      "$root_gen_dir/third_party/blink/public/resources/blink_resources.pak",
       "$root_gen_dir/ui/views/resources/views_resources_100_percent.pak",
     ]
   }
 
   if (use_aura && toolkit_views) {
-    deps += [ "//ui/app_list/resources" ]
+    deps += [ "//ash/app_list/resources" ]
     sources += [
-      "$root_gen_dir/ui/app_list/resources/app_list_resources_100_percent.pak",
+      "$root_gen_dir/ash/app_list/resources/app_list_resources_100_percent.pak",
     ]
   }
 }

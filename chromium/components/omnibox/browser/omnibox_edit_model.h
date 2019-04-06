@@ -50,12 +50,13 @@ enum class KeywordModeEntryMethod {
 
 class OmniboxEditModel {
  public:
-  // Did the Omnibox focus originate via the user clicking on the Omnibox or on
-  // the Fakebox?
+  // Did the Omnibox focus originate via the user clicking on the Omnibox, on
+  // the Fakebox or the Search button?
   enum FocusSource {
     INVALID = 0,
     OMNIBOX = 1,
-    FAKEBOX = 2
+    FAKEBOX = 2,
+    SEARCH_BUTTON = 3
   };
 
   struct State {
@@ -79,6 +80,11 @@ class OmniboxEditModel {
     FocusSource focus_source;
     const AutocompleteInput autocomplete_input;
   };
+
+  // This is a mirror of content::kMaxURLDisplayChars because ios cannot depend
+  // on content. If clipboard contains more than kMaxPasteAndGoTextLength
+  // characters, then the paste & go option will be disabled.
+  static const size_t kMaxPasteAndGoTextLength = 32 * 1024;
 
   OmniboxEditModel(OmniboxView* view,
                    OmniboxEditController* controller,
@@ -110,9 +116,9 @@ class OmniboxEditModel {
   // the internal state appropriately.
   const State GetStateForTabSwitch();
 
-  // Resets the tab state, updates permanent_text_ to |url|, then restores local
-  // state from |state|. |state| may be NULL if there is no saved state.
-  void RestoreState(const base::string16& url, const State* state);
+  // Resets the tab state, then restores local state from |state|. |state| may
+  // be nullptr if there is no saved state.
+  void RestoreState(const State* state);
 
   // Returns the match for the current text. If the user has not edited the text
   // this is the match corresponding to the permanent text. Returns the
@@ -130,19 +136,14 @@ class OmniboxEditModel {
   // URL/navigation, as opposed to a search.
   bool CurrentTextIsURL() const;
 
-  // Returns the match type for the current edit contents.
-  AutocompleteMatch::Type CurrentTextType() const;
-
   // Invoked to adjust the text before writting to the clipboard for a copy
   // (e.g. by adding 'http' to the front). |sel_min| gives the minimum position
   // of the selection e.g. min(selection_start, selection_end). |text| is the
-  // currently selected text. If |is_all_selected| is true all the text in the
-  // edit is selected. If the url should be copied to the clipboard |write_url|
-  // is set to true and |url| set to the url to write.
+  // currently selected text. If the url should be copied to the clipboard
+  // |write_url| is set to true and |url_from_text| set to the url to write.
   void AdjustTextForCopy(int sel_min,
-                         bool is_all_selected,
                          base::string16* text,
-                         GURL* url,
+                         GURL* url_from_text,
                          bool* write_url);
 
   bool user_input_in_progress() const { return user_input_in_progress_; }
@@ -151,16 +152,23 @@ class OmniboxEditModel {
   // that state has changed.
   void SetInputInProgress(bool in_progress);
 
-  // Sets permanent_text_ to |text|. Returns true if the permanent text changed
-  // and the change should be immediately user-visible, because either the user
-  // is not editing or the edit does not have focus.
-  bool SetPermanentText(const base::string16& text);
+  // Calls SetInputInProgress, via SetInputInProgressNoNotify and
+  // NotifyObserversInputInProgress, calling the latter after
+  // StartAutocomplete, so that the result is only updated once.
+  void UpdateInput(bool has_selected_text,
+                   bool prevent_inline_autocomplete);
+
+  // Resets the permanent display URLs to those provided by the controller.
+  // Returns true if the display URLs have changed and the change should be
+  // immediately user-visible, because either the user is not editing or the
+  // edit does not have focus.
+  bool ResetDisplayUrls();
 
   // Returns the URL corresponding to the permanent text.
   GURL PermanentURL() const;
 
-  // Returns the raw permanent text.
-  const base::string16& PermanentText() { return permanent_text_; }
+  // Returns the permanent URL text for the current page and Omnibox state.
+  base::string16 GetCurrentPermanentUrlText() const;
 
   // Sets the user_text_ to |text|.  Only the View should call this.
   void SetUserText(const base::string16& text);
@@ -187,9 +195,8 @@ class OmniboxEditModel {
   // Navigates to the destination last supplied to CanPasteAndGo.
   void PasteAndGo(const base::string16& text);
 
-  // Returns true if this is a paste-and-search rather than paste-and-go (or
-  // nothing).
-  bool IsPasteAndSearch(const base::string16& text) const;
+  // Returns true if |text| classifies as a Search rather than a URL.
+  bool ClassifiesAsSearch(const base::string16& text) const;
 
   // Asks the browser to load the popup's currently selected item, using the
   // supplied disposition.  This may close the popup. If |for_drop| is true,
@@ -203,7 +210,7 @@ class OmniboxEditModel {
   // OpenMatch() needs to know the original text that drove this action.  If
   // |pasted_text| is non-empty, this is a Paste-And-Go/Search action, and
   // that's the relevant input text.  Otherwise, the relevant input text is
-  // either the user text or the permanent text, depending on if user input is
+  // either the user text or the display URL, depending on if user input is
   // in progress.
   //
   // |match| is passed by value for two reasons:
@@ -223,8 +230,15 @@ class OmniboxEditModel {
 
   OmniboxFocusState focus_state() const { return focus_state_; }
   bool has_focus() const { return focus_state_ != OMNIBOX_FOCUS_NONE; }
+
+  // This is the same as when the Omnibox is visibly focused.
   bool is_caret_visible() const {
     return focus_state_ == OMNIBOX_FOCUS_VISIBLE;
+  }
+
+  FocusSource focus_source() const { return focus_source_; }
+  void set_focus_source(FocusSource focus_source) {
+    focus_source_ = focus_source;
   }
 
   // Accessors for keyword-related state (see comments on keyword_ and
@@ -338,6 +352,9 @@ class OmniboxEditModel {
   // Called when the current match has changed in the OmniboxController.
   void OnCurrentMatchChanged();
 
+  // Used for testing purposes only.
+  base::string16 GetUserTextForTesting() const { return user_text_; }
+
   // Name of the histogram tracking cut or copy omnibox commands.
   static const char kCutOrCopyAllTextHistogram[];
 
@@ -429,9 +446,16 @@ class OmniboxEditModel {
 
   // Sets |match| and |alternate_nav_url| based on classifying |text|.
   // |alternate_nav_url| may be NULL.
-  void ClassifyStringForPasteAndGo(const base::string16& text,
-                                   AutocompleteMatch* match,
-                                   GURL* alternate_nav_url) const;
+  void ClassifyString(const base::string16& text,
+                      AutocompleteMatch* match,
+                      GURL* alternate_nav_url) const;
+
+  // Sets the state of user_input_in_progress_. Returns whether said state
+  // changed, so that the caller can evoke NotifyObserversInputInProgress().
+  bool SetInputInProgressNoNotify(bool in_progress);
+
+  // Notifies the observers that the state has changed.
+  void NotifyObserversInputInProgress(bool in_progress);
 
   // If focus_state_ does not match |state|, we update it and notify the
   // InstantController about the change (passing along the |reason| for the
@@ -452,12 +476,19 @@ class OmniboxEditModel {
   OmniboxFocusState focus_state_;
 
   // Used to keep track whether the input currently in progress originated by
-  // focusing in the Omnibox or in the Fakebox. This will be INVALID if no input
-  // is in progress or the Omnibox is not focused.
+  // focusing in the Omnibox, Fakebox or Search button. This will be INVALID if
+  // no input is in progress or the Omnibox is not focused.
   FocusSource focus_source_;
 
-  // The URL of the currently displayed page.
-  base::string16 permanent_text_;
+  // The text representing the current URL for steady state display. This may
+  // be a simplified version of the current URL with destructive elisions
+  // applied - and should not be considered suitable for editing.
+  base::string16 display_only_url_;
+
+  // The initial text representing the current URL suitable for editing.
+  // This should fully represent the current URL without any meaning-changing
+  // elisions applied - and is suitable for user editing.
+  base::string16 url_for_editing_;
 
   // This flag is true when the user has modified the contents of the edit, but
   // not yet accepted them.  We use this to determine when we need to save
@@ -517,13 +548,13 @@ class OmniboxEditModel {
   // autocomplete popup until, say, "google.com" appears in the edit box, then
   // the user_text_ is still "goog", and "google.com" is "temporary text".
   // When the user hits <esc>, the edit box reverts to "goog".  Hit <esc> again
-  // and the popup is closed and "goog" is replaced by the permanent_text_,
-  // which is the URL of the current page.
+  // and the popup is closed and "goog" is replaced by the permanent display
+  // URL, which is the URL of the current page.
   //
   // original_url_ is only valid when there is temporary text, and is used as
   // the unique identifier of the originally selected item.  Thus, if the user
   // arrows to a different item with the same text, we can still distinguish
-  // them and not revert all the way to the permanent_text_.
+  // them and not revert all the way to the permanent display URL.
   bool has_temporary_text_;
   GURL original_url_;
 

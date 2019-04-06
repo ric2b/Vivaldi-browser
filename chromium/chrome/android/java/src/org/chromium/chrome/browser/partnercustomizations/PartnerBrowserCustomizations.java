@@ -9,9 +9,10 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.ProviderInfo;
 import android.database.Cursor;
 import android.net.Uri;
-import android.os.AsyncTask;
+import android.support.annotation.Nullable;
 import android.text.TextUtils;
 
+import org.chromium.base.AsyncTask;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -28,8 +29,6 @@ import org.chromium.chrome.browser.util.UrlUtilities;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import javax.annotation.Nullable;
 
 /**
  * Reads and caches partner browser customizations information if it exists.
@@ -136,7 +135,7 @@ public class PartnerBrowserCustomizations {
      *         this method reads is not initialized until the asynchronous initialization of this
      *         class has been completed.
      */
-    static boolean isHomepageProviderAvailableAndEnabled() {
+    public static boolean isHomepageProviderAvailableAndEnabled() {
         return !TextUtils.isEmpty(getHomePageUrl());
     }
 

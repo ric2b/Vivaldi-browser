@@ -95,18 +95,6 @@ ChromeProcessList GetRunningChromeProcesses(base::ProcessId browser_pid) {
   return result;
 }
 
-#if !defined(OS_MACOSX)
-
-size_t ChromeTestProcessMetrics::GetPagefileUsage() {
-  return process_metrics_->GetPagefileUsage();
-}
-
-size_t ChromeTestProcessMetrics::GetWorkingSetSize() {
-  return process_metrics_->GetWorkingSetSize();
-}
-
-#endif  // !defined(OS_MACOSX)
-
 ChromeTestProcessMetrics::~ChromeTestProcessMetrics() {}
 
 ChromeTestProcessMetrics::ChromeTestProcessMetrics(
@@ -118,14 +106,6 @@ ChromeTestProcessMetrics::ChromeTestProcessMetrics(
   process_metrics_ = base::ProcessMetrics::CreateProcessMetrics(process);
 #endif
   process_handle_ = process;
-}
-
-size_t ChromeTestProcessMetrics::GetPeakPagefileUsage() {
-  return process_metrics_->GetPeakPagefileUsage();
-}
-
-size_t ChromeTestProcessMetrics::GetPeakWorkingSetSize() {
-  return process_metrics_->GetPeakWorkingSetSize();
 }
 
 bool ChromeTestProcessMetrics::GetIOCounters(base::IoCounters* io_counters) {

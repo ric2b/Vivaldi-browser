@@ -8,13 +8,14 @@
 #include <memory>
 #include <vector>
 
-#include "ash/ash_view_ids.h"
 #include "ash/media_controller.h"
+#include "ash/public/cpp/ash_view_ids.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/system/tray/system_tray_controller.h"
+#include "ash/system/model/enterprise_domain_model.h"
+#include "ash/system/model/system_tray_model.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/user/rounded_image_view.h"
@@ -66,7 +67,7 @@ views::View* CreateUserAvatarView(int user_index) {
         gfx::CreateVectorIcon(kSystemMenuGuestIcon, kMenuIconColor);
     image_view->SetImage(icon, icon.size());
   } else {
-    image_view->SetImage(user_session->user_info->avatar,
+    image_view->SetImage(user_session->user_info->avatar->image,
                          gfx::Size(kTrayItemSize, kTrayItemSize));
   }
 
@@ -125,8 +126,10 @@ PublicAccountUserDetails::PublicAccountUserDetails() : learn_more_(nullptr) {
   base::RemoveChars(display_name, kDisplayNameMark, &display_name);
   display_name = kDisplayNameMark[0] + display_name + kDisplayNameMark[0];
   // Retrieve the domain managing the device and wrap it with markers.
-  base::string16 domain = base::UTF8ToUTF16(
-      Shell::Get()->system_tray_controller()->enterprise_display_domain());
+  base::string16 domain = base::UTF8ToUTF16(Shell::Get()
+                                                ->system_tray_model()
+                                                ->enterprise_domain()
+                                                ->enterprise_display_domain());
   base::RemoveChars(domain, kDisplayNameMark, &domain);
   base::i18n::WrapStringWithLTRFormatting(&domain);
   // Retrieve the label text, inserting the display name and domain.
@@ -219,14 +222,14 @@ void PublicAccountUserDetails::OnPaint(gfx::Canvas* canvas) {
 
 void PublicAccountUserDetails::GetAccessibleNodeData(
     ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_STATIC_TEXT;
+  node_data->role = ax::mojom::Role::kStaticText;
   node_data->SetName(text_);
 }
 
 void PublicAccountUserDetails::LinkClicked(views::Link* source,
                                            int event_flags) {
   DCHECK_EQ(source, learn_more_);
-  Shell::Get()->system_tray_controller()->ShowPublicAccountInfo();
+  Shell::Get()->system_tray_model()->client_ptr()->ShowPublicAccountInfo();
 }
 
 void PublicAccountUserDetails::DeterminePreferredSize() {
@@ -309,7 +312,7 @@ void UserCardView::SetSuppressCaptureIcon(bool suppressed) {
 }
 
 void UserCardView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_STATIC_TEXT;
+  node_data->role = ax::mojom::Role::kStaticText;
   std::vector<base::string16> labels;
 
   // Construct the name by concatenating descendants' names.
@@ -321,8 +324,8 @@ void UserCardView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
     if (view != this) {
       ui::AXNodeData descendant_data;
       view->GetAccessibleNodeData(&descendant_data);
-      base::string16 label =
-          descendant_data.GetString16Attribute(ui::AX_ATTR_NAME);
+      base::string16 label = descendant_data.GetString16Attribute(
+          ax::mojom::StringAttribute::kName);
       // If we find a non-empty name, use that and don't descend further into
       // the tree.
       if (!label.empty()) {

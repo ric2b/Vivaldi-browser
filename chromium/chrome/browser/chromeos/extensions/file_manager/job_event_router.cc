@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/extensions/file_manager/job_event_router.h"
 
 #include <cmath>
+#include <memory>
 
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
@@ -17,16 +18,6 @@ namespace file_manager_private = extensions::api::file_manager_private;
 
 namespace file_manager {
 
-namespace {
-
-// Utility function to check if |job_info| is a file uploading job.
-bool IsUploadJob(const drive::JobType& type) {
-  return (type == drive::TYPE_UPLOAD_NEW_FILE ||
-          type == drive::TYPE_UPLOAD_EXISTING_FILE);
-}
-
-}  // namespace
-
 JobEventRouter::JobEventRouter(const base::TimeDelta& event_delay)
     : event_delay_(event_delay),
       num_completed_bytes_(0),
@@ -34,15 +25,14 @@ JobEventRouter::JobEventRouter(const base::TimeDelta& event_delay)
       weak_factory_(this) {
 }
 
-JobEventRouter::~JobEventRouter() {
-}
+JobEventRouter::~JobEventRouter() = default;
 
 void JobEventRouter::OnJobAdded(const drive::JobInfo& job_info) {
   OnJobUpdated(job_info);
 }
 
 void JobEventRouter::OnJobUpdated(const drive::JobInfo& job_info) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!drive::IsActiveFileTransferJobInfo(job_info))
     return;
 
@@ -57,7 +47,7 @@ void JobEventRouter::OnJobUpdated(const drive::JobInfo& job_info) {
 
 void JobEventRouter::OnJobDone(const drive::JobInfo& job_info,
                                drive::FileError error) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!drive::IsActiveFileTransferJobInfo(job_info))
     return;
 
@@ -97,7 +87,7 @@ void JobEventRouter::ScheduleDriveFileTransferEvent(
     bool immediate) {
   const bool no_pending_task = !pending_job_info_;
 
-  pending_job_info_.reset(new drive::JobInfo(job_info));
+  pending_job_info_ = std::make_unique<drive::JobInfo>(job_info);
   pending_state_ = state;
 
   if (immediate) {
@@ -140,15 +130,13 @@ void JobEventRouter::DispatchFileTransfersUpdateEventToExtension(
       ConvertDrivePathToFileSystemUrl(job_info.file_path, extension_id);
   status.file_url = url.spec();
   status.transfer_state = state;
-  status.transfer_type = IsUploadJob(job_info.job_type)
-                             ? file_manager_private::TRANSFER_TYPE_UPLOAD
-                             : file_manager_private::TRANSFER_TYPE_DOWNLOAD;
   // JavaScript does not have 64-bit integers. Instead we use double, which
   // is in IEEE 754 formant and accurate up to 52-bits in JS, and in practice
   // in C++. Larger values are rounded.
   status.num_total_jobs = num_total_jobs;
   status.processed = num_completed_bytes;
   status.total = num_total_bytes;
+  status.hide_when_zero_jobs = false;
 
   DispatchEventToExtension(
       extension_id,

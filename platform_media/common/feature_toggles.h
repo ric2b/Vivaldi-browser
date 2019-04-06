@@ -7,10 +7,6 @@
 #ifndef PLATFORM_MEDIA_COMMON_FEATURE_TOGGLES_H_
 #define PLATFORM_MEDIA_COMMON_FEATURE_TOGGLES_H_
 
-//#if defined(OS_WIN)
-//#define PLATFORM_MEDIA_HWA
-//#endif
-
-//#define PLATFORM_MEDIA_MP3
+// Place to put temporary defines for turning on or off features
 
 #endif  // PLATFORM_MEDIA_COMMON_FEATURE_TOGGLES_H_

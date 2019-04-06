@@ -14,6 +14,9 @@
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/common/api/extension_options_internal.h"
 
+// Vivaldi constants
+#include "extensions/api/guest_view/vivaldi_web_view_constants.h"
+
 namespace extensions {
 namespace guest_view_events {
 

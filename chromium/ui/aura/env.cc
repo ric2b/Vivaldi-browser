@@ -6,7 +6,6 @@
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_local.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/aura/client/aura_constants.h"
@@ -14,19 +13,21 @@
 #include "ui/aura/env_observer.h"
 #include "ui/aura/input_state_lookup.h"
 #include "ui/aura/local/window_port_local.h"
+#include "ui/aura/mouse_location_manager.h"
 #include "ui/aura/mus/mus_types.h"
 #include "ui/aura/mus/os_exchange_data_provider_mus.h"
 #include "ui/aura/mus/system_input_injector_mus.h"
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/mus/window_tree_client.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_event_dispatcher_observer.h"
 #include "ui/aura/window_port_for_shutdown.h"
 #include "ui/events/event_target_iterator.h"
 #include "ui/events/platform/platform_event_source.h"
 
 #if defined(USE_OZONE)
-#include "ui/ozone/public/client_native_pixmap_factory_ozone.h"
 #include "ui/ozone/public/ozone_platform.h"
+#include "ui/ozone/public/ozone_switches.h"
 #endif
 
 namespace aura {
@@ -48,10 +49,6 @@ Env::~Env() {
   if (is_override_input_injector_factory_)
     ui::SetSystemInputInjectorFactory(nullptr);
 
-#if defined(USE_OZONE)
-  gfx::ClientNativePixmapFactory::ResetInstance();
-#endif
-
   for (EnvObserver& observer : observers_)
     observer.OnWillDestroyEnv();
 
@@ -68,9 +65,20 @@ Env::~Env() {
 std::unique_ptr<Env> Env::CreateInstance(Mode mode) {
   DCHECK(!lazy_tls_ptr.Pointer()->Get());
   std::unique_ptr<Env> env(new Env(mode));
-  env->Init();
+  env->Init(nullptr);
   return env;
 }
+
+#if defined(USE_OZONE)
+// static
+std::unique_ptr<Env> Env::CreateInstanceToHostViz(
+    service_manager::Connector* connector) {
+  DCHECK(!lazy_tls_ptr.Pointer()->Get());
+  std::unique_ptr<Env> env(new Env(Mode::LOCAL));
+  env->Init(connector);
+  return env;
+}
+#endif
 
 // static
 Env* Env::GetInstance() {
@@ -119,6 +127,16 @@ void Env::RemoveObserver(EnvObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
+void Env::AddWindowEventDispatcherObserver(
+    WindowEventDispatcherObserver* observer) {
+  window_event_dispatcher_observers_.AddObserver(observer);
+}
+
+void Env::RemoveWindowEventDispatcherObserver(
+    WindowEventDispatcherObserver* observer) {
+  window_event_dispatcher_observers_.RemoveObserver(observer);
+}
+
 bool Env::IsMouseButtonDown() const {
   return input_state_lookup_.get() ? input_state_lookup_->IsMouseButtonDown() :
       mouse_button_flags_ != 0;
@@ -136,6 +154,22 @@ const gfx::Point& Env::last_mouse_location() const {
   if (window_tree_client_)
     last_mouse_location_ = window_tree_client_->GetCursorScreenPoint();
   return last_mouse_location_;
+}
+
+void Env::SetLastMouseLocation(const gfx::Point& last_mouse_location) {
+  last_mouse_location_ = last_mouse_location;
+  if (mouse_location_manager_)
+    mouse_location_manager_->SetMouseLocation(last_mouse_location);
+}
+
+void Env::CreateMouseLocationManager() {
+  if (!mouse_location_manager_)
+    mouse_location_manager_ = std::make_unique<MouseLocationManager>();
+}
+
+mojo::ScopedSharedBufferHandle Env::GetLastMouseLocationMemory() {
+  DCHECK(mouse_location_manager_);
+  return mouse_location_manager_->GetMouseLocationMemory();
 }
 
 void Env::SetWindowTreeClient(WindowTreeClient* window_tree_client) {
@@ -156,6 +190,9 @@ void Env::ScheduleEmbed(
 ////////////////////////////////////////////////////////////////////////////////
 // Env, private:
 
+// static
+bool Env::initial_throttle_input_on_resize_ = true;
+
 Env::Env(Mode mode)
     : mode_(mode),
       env_controller_(new EnvInputStateController),
@@ -163,23 +200,16 @@ Env::Env(Mode mode)
       is_touch_down_(false),
       get_last_mouse_location_from_mus_(mode_ == Mode::MUS),
       input_state_lookup_(InputStateLookup::Create()),
-#if defined(USE_OZONE)
-      native_pixmap_factory_(ui::CreateClientNativePixmapFactoryOzone()),
-#endif
       context_factory_(nullptr),
       context_factory_private_(nullptr) {
   DCHECK(lazy_tls_ptr.Pointer()->Get() == NULL);
   lazy_tls_ptr.Pointer()->Set(this);
 }
 
-void Env::Init() {
+void Env::Init(service_manager::Connector* connector) {
   if (mode_ == Mode::MUS) {
     EnableMusOSExchangeDataProvider();
     EnableMusOverrideInputInjector();
-#if defined(USE_OZONE)
-    // Required by all Aura-using clients of services/ui
-    gfx::ClientNativePixmapFactory::SetInstance(native_pixmap_factory_.get());
-#endif
     return;
   }
 
@@ -193,8 +223,17 @@ void Env::Init() {
   // instead of checking flags here.
   params.single_process = command_line->HasSwitch("single-process") ||
                           command_line->HasSwitch("in-process-gpu");
+  params.using_mojo = command_line->HasSwitch(switches::kEnableDrmMojo);
+
+  if (connector) {
+    // Supplying a connector implies this process is hosting Viz.
+    params.connector = connector;
+    // Hosting viz is currently single-process only.
+    params.single_process = true;
+    params.using_mojo = true;
+  }
+
   ui::OzonePlatform::InitializeForUI(params);
-  gfx::ClientNativePixmapFactory::SetInstance(native_pixmap_factory_.get());
 #endif
   if (!ui::PlatformEventSource::GetInstance())
     event_source_ = ui::PlatformEventSource::CreateDefault();
@@ -264,7 +303,8 @@ std::unique_ptr<ui::OSExchangeData::Provider> Env::BuildProvider() {
 }
 
 std::unique_ptr<ui::SystemInputInjector> Env::CreateSystemInputInjector() {
-  return std::make_unique<SystemInputInjectorMus>(window_tree_client_);
+  return std::make_unique<SystemInputInjectorMus>(
+      window_tree_client_ ? window_tree_client_->connector() : nullptr);
 }
 
 }  // namespace aura

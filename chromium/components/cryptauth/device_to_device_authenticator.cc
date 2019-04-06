@@ -4,18 +4,19 @@
 
 #include "components/cryptauth/device_to_device_authenticator.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chromeos/components/proximity_auth/logging/logging.h"
 #include "components/cryptauth/authenticator.h"
 #include "components/cryptauth/connection.h"
 #include "components/cryptauth/device_to_device_secure_context.h"
 #include "components/cryptauth/secure_context.h"
 #include "components/cryptauth/secure_message_delegate.h"
 #include "components/cryptauth/wire_message.h"
-#include "components/proximity_auth/logging/logging.h"
 
 namespace cryptauth {
 
@@ -68,7 +69,7 @@ DeviceToDeviceAuthenticator::DeviceToDeviceAuthenticator(
     : connection_(connection),
       account_id_(account_id),
       secure_message_delegate_(std::move(secure_message_delegate)),
-      helper_(base::MakeUnique<DeviceToDeviceInitiatorHelper>()),
+      helper_(std::make_unique<DeviceToDeviceInitiatorHelper>()),
       state_(State::NOT_STARTED),
       weak_ptr_factory_(this) {
   DCHECK(connection_);
@@ -115,14 +116,14 @@ void DeviceToDeviceAuthenticator::OnKeyPairGenerated(
   // Create the [Initiator Hello] message to send to the remote device.
   state_ = State::SENDING_HELLO;
   helper_->CreateHelloMessage(
-      public_key, connection_->remote_device().persistent_symmetric_key,
+      public_key, connection_->remote_device().persistent_symmetric_key(),
       secure_message_delegate_.get(),
       base::Bind(&DeviceToDeviceAuthenticator::OnHelloMessageCreated,
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
-std::unique_ptr<base::Timer> DeviceToDeviceAuthenticator::CreateTimer() {
-  return base::MakeUnique<base::OneShotTimer>();
+std::unique_ptr<base::OneShotTimer> DeviceToDeviceAuthenticator::CreateTimer() {
+  return std::make_unique<base::OneShotTimer>();
 }
 
 void DeviceToDeviceAuthenticator::OnHelloMessageCreated(
@@ -145,7 +146,7 @@ void DeviceToDeviceAuthenticator::OnHelloMessageCreated(
   // Send the [Initiator Hello] message to the remote device.
   state_ = State::SENT_HELLO;
   hello_message_ = message;
-  connection_->SendMessage(base::MakeUnique<WireMessage>(
+  connection_->SendMessage(std::make_unique<WireMessage>(
       hello_message_, std::string(Authenticator::kAuthenticationFeature)));
 }
 
@@ -169,7 +170,7 @@ void DeviceToDeviceAuthenticator::OnResponderAuthValidated(
 
   // Create the [Initiator Auth] message to send to the remote device.
   helper_->CreateInitiatorAuthMessage(
-      session_keys_, connection_->remote_device().persistent_symmetric_key,
+      session_keys_, connection_->remote_device().persistent_symmetric_key(),
       responder_auth_message_, secure_message_delegate_.get(),
       base::Bind(&DeviceToDeviceAuthenticator::OnInitiatorAuthCreated,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -184,7 +185,7 @@ void DeviceToDeviceAuthenticator::OnInitiatorAuthCreated(
   }
 
   state_ = State::SENT_INITIATOR_AUTH;
-  connection_->SendMessage(base::MakeUnique<WireMessage>(
+  connection_->SendMessage(std::make_unique<WireMessage>(
       message, std::string(Authenticator::kAuthenticationFeature)));
 }
 
@@ -213,7 +214,7 @@ void DeviceToDeviceAuthenticator::Succeed() {
   connection_->RemoveObserver(this);
   callback_.Run(
       Result::SUCCESS,
-      base::MakeUnique<DeviceToDeviceSecureContext>(
+      std::make_unique<DeviceToDeviceSecureContext>(
           std::move(secure_message_delegate_), session_keys_,
           responder_auth_message_, SecureContext::PROTOCOL_VERSION_THREE_ONE));
 }
@@ -223,7 +224,7 @@ void DeviceToDeviceAuthenticator::OnConnectionStatusChanged(
     Connection::Status old_status,
     Connection::Status new_status) {
   // We do not expect the connection to drop during authentication.
-  if (new_status == Connection::DISCONNECTED) {
+  if (new_status == Connection::Status::DISCONNECTED) {
     Fail("Disconnected while authentication is in progress",
          Result::DISCONNECTED);
   }
@@ -242,10 +243,10 @@ void DeviceToDeviceAuthenticator::OnMessageReceived(
 
     // Attempt to validate the [Responder Auth] message received from the remote
     // device.
-    std::string responder_public_key = connection.remote_device().public_key;
+    std::string responder_public_key = connection.remote_device().public_key();
     helper_->ValidateResponderAuthMessage(
         responder_auth_message_, responder_public_key,
-        connection_->remote_device().persistent_symmetric_key,
+        connection_->remote_device().persistent_symmetric_key(),
         local_session_private_key_, hello_message_,
         secure_message_delegate_.get(),
         base::Bind(&DeviceToDeviceAuthenticator::OnResponderAuthValidated,

@@ -8,65 +8,6 @@ from telemetry.value import scalar
 from telemetry.web_perf.metrics import timeline_based_metric
 
 
-class LoadTimesTimelineMetric(timeline_based_metric.TimelineBasedMetric):
-
-  def __init__(self):
-    super(LoadTimesTimelineMetric, self).__init__()
-    self.report_main_thread_only = True
-
-  def AddResults(self, model, renderer_thread, interaction_records, results):
-    assert model
-    assert len(interaction_records) == 1, (
-        "LoadTimesTimelineMetric cannot compute metrics for more than 1 time "
-        "range.")
-    interaction_record = interaction_records[0]
-    if self.report_main_thread_only:
-      thread_filter = "CrRendererMain"
-    else:
-      thread_filter = None
-
-    events_by_name = collections.defaultdict(list)
-    renderer_process = renderer_thread.parent
-
-    for thread in renderer_process.threads.itervalues():
-
-      if thread_filter and not thread.name in thread_filter:
-        continue
-
-      thread_name = thread.name.replace("/", "_")
-      for e in thread.IterAllSlicesInRange(interaction_record.start,
-                                           interaction_record.end):
-        events_by_name[e.name].append(e)
-
-      for event_name, event_group in events_by_name.iteritems():
-        times = [event.self_time for event in event_group]
-        total = sum(times)
-        biggest_jank = max(times)
-
-        # Results objects cannot contain the '.' character, so remove that
-        # here.
-        sanitized_event_name = event_name.replace(".", "_")
-
-        full_name = thread_name + "|" + sanitized_event_name
-        results.AddValue(scalar.ScalarValue(
-            results.current_page, full_name, "ms", total))
-        results.AddValue(scalar.ScalarValue(
-            results.current_page, full_name + "_max", "ms", biggest_jank))
-        results.AddValue(scalar.ScalarValue(
-            results.current_page, full_name + "_avg", "ms", total / len(times)))
-
-    for counter_name, counter in renderer_process.counters.iteritems():
-      total = sum(counter.totals)
-
-      # Results objects cannot contain the '.' character, so remove that here.
-      sanitized_counter_name = counter_name.replace(".", "_")
-
-      results.AddValue(scalar.ScalarValue(
-          results.current_page, sanitized_counter_name, "count", total))
-      results.AddValue(scalar.ScalarValue(
-          results.current_page, sanitized_counter_name + "_avg", "count",
-          total / float(len(counter.totals))))
-
 # We want to generate a consistent picture of our thread usage, despite
 # having several process configurations (in-proc-gpu/single-proc).
 # Since we can't isolate renderer threads in single-process mode, we
@@ -75,7 +16,7 @@ class LoadTimesTimelineMetric(timeline_based_metric.TimelineBasedMetric):
 TimelineThreadCategories = {
     "Chrome_InProcGpuThread": "GPU",
     "CrGpuMain": "GPU",
-    "AsyncTransferThread": "GPU_transfer",
+    "VizCompositorThread": "display_compositor",
     "CrBrowserMain": "browser",
     "Browser Compositor": "browser",
     "CrRendererMain": "renderer_main",
@@ -91,7 +32,8 @@ _MatchBySubString = ["IOThread", "CompositorTileWorker"]
 
 AllThreads = TimelineThreadCategories.values()
 NoThreads = []
-FastPathThreads = ["GPU", "renderer_compositor", "browser", "IO"]
+FastPathThreads = [
+  "GPU", "display_compositor", "renderer_compositor", "browser", "IO"]
 
 ReportMainThreadOnly = ["renderer_main"]
 ReportSilkDetails = ["renderer_main"]
@@ -100,7 +42,8 @@ ReportSilkDetails = ["renderer_main"]
 # could change. We should formalize these traces to keep this robust.
 OverheadTraceCategory = "trace_event_overhead"
 OverheadTraceName = "overhead"
-FrameTraceName = "LayerTreeHostImpl::DrawLayers"
+FrameTraceName = "Graphics.Pipeline"
+FrameTraceStepName = "GenerateCompositorFrame"
 FrameTraceThreadName = "renderer_compositor"
 
 IntervalNames = ["frame", "second"]
@@ -258,10 +201,10 @@ class ResultsForThread(object):
         ThreadCpuTimeUnits(interval_name),
         ThreadCpuTimeValue(idle_time_per_interval, interval_name)))
 
-  def CountTracesWithName(self, substring):
+  def CountTracesWithNameAndArg(self, trace_name, step):
     count = 0
     for event in self.all_slices:
-      if substring in event.name:
+      if trace_name in event.name and event.args and event.args["step"] == step:
         count += 1
     return count
 
@@ -297,7 +240,8 @@ class ThreadTimesTimelineMetric(timeline_based_metric.TimelineBasedMetric):
 
     # Calculate the interaction's number of frames.
     frame_rate_thread = thread_category_results[FrameTraceThreadName]
-    num_frames = frame_rate_thread.CountTracesWithName(FrameTraceName)
+    num_frames = frame_rate_thread.CountTracesWithNameAndArg(FrameTraceName,
+        FrameTraceStepName)
 
     # Calculate the interaction's duration.
     all_threads = thread_category_results["total_all"]

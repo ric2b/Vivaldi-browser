@@ -11,7 +11,6 @@
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
@@ -19,7 +18,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chrome/browser/apps/app_load_service.h"
+#include "chrome/browser/apps/platform_apps/app_load_service.h"
 #include "chrome/browser/background/background_contents_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -56,10 +55,10 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
-#include "ui/message_center/notification.h"
-#include "ui/message_center/notification_delegate.h"
-#include "ui/message_center/notification_types.h"
-#include "ui/message_center/notifier_id.h"
+#include "ui/message_center/public/cpp/notification.h"
+#include "ui/message_center/public/cpp/notification_delegate.h"
+#include "ui/message_center/public/cpp/notification_types.h"
+#include "ui/message_center/public/cpp/notifier_id.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/user_flow.h"
@@ -74,7 +73,7 @@ using extensions::UnloadedExtensionReason;
 
 namespace {
 
-const char kNotificationPrefix[] = "app.background.crashed.";
+const char kCrashedNotificationPrefix[] = "app.background.crashed.";
 const char kNotifierId[] = "app.background.crashed";
 bool g_disable_close_balloon_for_testing = false;
 
@@ -83,7 +82,8 @@ void CloseBalloon(const std::string& extension_id, Profile* profile) {
     return;
 
   NotificationDisplayService::GetForProfile(profile)->Close(
-      NotificationHandler::Type::TRANSIENT, kNotificationPrefix + extension_id);
+      NotificationHandler::Type::TRANSIENT,
+      kCrashedNotificationPrefix + extension_id);
 }
 
 // Delegate for the app/extension crash notification balloon. Restarts the
@@ -98,7 +98,8 @@ class CrashNotificationDelegate : public message_center::NotificationDelegate {
         extension_id_(extension->id()) {
   }
 
-  void Click() override {
+  void Click(const base::Optional<int>& button_index,
+             const base::Optional<base::string16>& reply) override {
     // http://crbug.com/247790 involves a crash notification balloon being
     // clicked while the extension isn't in the TERMINATED state. In that case,
     // any of the "reload" methods called below can unload the extension, which
@@ -155,14 +156,13 @@ void NotificationImageReady(const std::string extension_name,
   // Origin URL must be different from the crashed extension to avoid the
   // conflict. NotificationSystemObserver will cancel all notifications from
   // the same origin when OnExtensionUnloaded() is called.
-  std::string id = kNotificationPrefix + extension_id;
+  std::string id = kCrashedNotificationPrefix + extension_id;
   message_center::Notification notification(
       message_center::NOTIFICATION_TYPE_SIMPLE, id, base::string16(), message,
       notification_icon, base::string16(), GURL("chrome://extension-crash"),
       message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
                                  kNotifierId),
       {}, delegate);
-  notification.set_clickable(true);
 
   NotificationDisplayService::GetForProfile(profile)->Display(
       NotificationHandler::Type::TRANSIENT, notification);
@@ -278,7 +278,7 @@ void BackgroundContentsService::
 std::string
 BackgroundContentsService::GetNotificationDelegateIdForExtensionForTesting(
     const std::string& extension_id) {
-  return kNotificationPrefix + extension_id;
+  return kCrashedNotificationPrefix + extension_id;
 }
 
 // static
@@ -373,7 +373,7 @@ void BackgroundContentsService::Observe(
           content::Details<BackgroundContents>(details).ptr();
       Profile* profile = content::Source<Profile>(source).ptr();
       const std::string& appid = GetParentApplicationId(bgcontents);
-      ExtensionService* extension_service =
+      extensions::ExtensionService* extension_service =
           extensions::ExtensionSystem::Get(profile)->extension_service();
       // extension_service can be nullptr when running tests.
       if (extension_service) {
@@ -440,7 +440,7 @@ void BackgroundContentsService::OnExtensionLoaded(
     // app, then blow away registered urls in the pref.
     ShutdownAssociatedBackgroundContents(extension->id());
 
-    ExtensionService* service =
+    extensions::ExtensionService* service =
         extensions::ExtensionSystem::Get(browser_context)->extension_service();
     if (service && service->is_ready()) {
       // Now load the manifest-specified background page. If service isn't
@@ -562,8 +562,8 @@ void BackgroundContentsService::LoadBackgroundContentsFromPrefs(
       prefs_->GetDictionary(prefs::kRegisteredBackgroundContents);
   if (!contents)
     return;
-  ExtensionService* extensions_service =
-          extensions::ExtensionSystem::Get(profile)->extension_service();
+  extensions::ExtensionService* extensions_service =
+      extensions::ExtensionSystem::Get(profile)->extension_service();
   DCHECK(extensions_service);
   for (base::DictionaryValue::Iterator it(*contents);
        !it.IsAtEnd(); it.Advance()) {
@@ -637,7 +637,7 @@ void BackgroundContentsService::LoadBackgroundContentsFromDictionary(
     Profile* profile,
     const std::string& extension_id,
     const base::DictionaryValue* contents) {
-  ExtensionService* extensions_service =
+  extensions::ExtensionService* extensions_service =
       extensions::ExtensionSystem::Get(profile)->extension_service();
   DCHECK(extensions_service);
 
@@ -737,7 +737,7 @@ void BackgroundContentsService::RegisterBackgroundContents(
     return;
 
   // No entry for this application yet, so add one.
-  auto dict = base::MakeUnique<base::DictionaryValue>();
+  auto dict = std::make_unique<base::DictionaryValue>();
   dict->SetString(kUrlKey, background_contents->GetURL().spec());
   dict->SetString(kFrameNameKey, contents_map_[appid].frame_name);
   pref->SetWithoutPathExpansion(appid, std::move(dict));
@@ -815,15 +815,14 @@ const std::string& BackgroundContentsService::GetParentApplicationId(
 }
 
 void BackgroundContentsService::AddWebContents(
-    WebContents* new_contents,
+    std::unique_ptr<WebContents> new_contents,
     WindowOpenDisposition disposition,
     const gfx::Rect& initial_rect,
-    bool user_gesture,
     bool* was_blocked) {
   Browser* browser = chrome::FindLastActiveWithProfile(
       Profile::FromBrowserContext(new_contents->GetBrowserContext()));
   if (browser) {
-    chrome::AddWebContents(browser, nullptr, new_contents, disposition,
-                           initial_rect, user_gesture);
+    chrome::AddWebContents(browser, nullptr, std::move(new_contents),
+                           disposition, initial_rect);
   }
 }

@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
@@ -16,12 +17,7 @@
 #include "chrome/common/extensions/api/windows.h"
 
 class Browser;  // TODO(stevenjb) eliminate this dependency.
-class GURL;
 class Profile;
-
-namespace base {
-class DictionaryValue;
-}
 
 namespace ui {
 class BaseWindow;
@@ -31,7 +27,7 @@ namespace extensions {
 class Extension;
 
 // This API needs to be implemented by any window that might be accessed
-// through chrome.windows or chrome.tabs (e.g. browser windows and panels).
+// through various extension APIs for modifying or finding the window.
 // Subclasses must add/remove themselves from the WindowControllerList
 // upon construction/destruction.
 class WindowController {
@@ -70,37 +66,25 @@ class WindowController {
   virtual int GetWindowId() const = 0;
 
   // Return the type name for the window.
+  // TODO(devlin): Remove this in favor of the method on ExtensionTabUtil.
   virtual std::string GetWindowTypeText() const = 0;
-
-  // Populates a dictionary for the Window object. Override this to set
-  // implementation specific properties (call the base implementation first to
-  // set common properties).
-  virtual std::unique_ptr<base::DictionaryValue> CreateWindowValue() const;
-
-  // Populates a dictionary for the Window object, including a list of tabs.
-  virtual std::unique_ptr<base::DictionaryValue> CreateWindowValueWithTabs(
-      const extensions::Extension* extension) const = 0;
-
-  virtual std::unique_ptr<api::tabs::Tab> CreateTabObject(
-      const extensions::Extension* extension,
-      int tab_index) const = 0;
 
   // Returns false if the window is in a state where closing the window is not
   // permitted and sets |reason| if not NULL.
   virtual bool CanClose(Reason* reason) const = 0;
 
-  // Set the window's fullscreen state. |extension_url| provides the url
-  // associated with the extension (used by FullscreenController).
-  virtual void SetFullscreenMode(bool is_fullscreen,
-                                 const GURL& extension_url) const = 0;
-
   // Returns a Browser if available. Defaults to returning NULL.
   // TODO(stevenjb): Temporary workaround. Eliminate this.
   virtual Browser* GetBrowser() const;
 
-  // Extension/window visibility and ownership is window-specific, subclasses
-  // need to define this behavior.
-  virtual bool IsVisibleToExtension(const Extension* extension) const = 0;
+  // Returns true if the window is visible to the tabs API, when used by the
+  // given |extension|.
+  // |allow_dev_tools_windows| indicates whether dev tools windows should be
+  // treated as visible.
+  // TODO(devlin): Remove include_dev_tools_windows.
+  virtual bool IsVisibleToTabsAPIForExtension(
+      const Extension* extension,
+      bool include_dev_tools_windows) const = 0;
 
   // Returns true if the window type of the controller matches the |filter|.
   bool MatchesFilter(TypeFilter filter) const;

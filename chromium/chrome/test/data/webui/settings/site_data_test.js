@@ -26,10 +26,10 @@ suite('SiteDataTest', function() {
             .then(() => {
               Polymer.dom.flush();
               const button =
-                  siteData.$$('.site-item').querySelector('.icon-delete-gray');
+                  siteData.$$('site-data-entry').$$('.icon-delete-gray');
               assertTrue(!!button);
-              assertEquals(button.is, 'paper-icon-button-light');
-              MockInteractions.tap(button);
+              assertEquals('PAPER-ICON-BUTTON-LIGHT', button.tagName);
+              button.querySelector('button').click();
               return testBrowserProxy.whenCalled('removeItem');
             })
             .then(function(path) {

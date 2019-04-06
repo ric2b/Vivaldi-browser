@@ -13,11 +13,11 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/renderer/prerender/prerender_helper.h"
 #include "content/public/renderer/render_frame.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/common/extensions/extension_constants.h"
@@ -25,7 +25,11 @@
 #include "extensions/renderer/guest_view/mime_handler_view/mime_handler_view_container.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
-ChromePrintRenderFrameHelperDelegate::~ChromePrintRenderFrameHelperDelegate() {}
+ChromePrintRenderFrameHelperDelegate::ChromePrintRenderFrameHelperDelegate() =
+    default;
+
+ChromePrintRenderFrameHelperDelegate::~ChromePrintRenderFrameHelperDelegate() =
+    default;
 
 bool ChromePrintRenderFrameHelperDelegate::CancelPrerender(
     content::RenderFrame* render_frame) {

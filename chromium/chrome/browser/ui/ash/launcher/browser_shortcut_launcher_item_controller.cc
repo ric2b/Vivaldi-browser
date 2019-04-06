@@ -10,9 +10,7 @@
 
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/window_properties.h"
-#include "ash/resources/grit/ash_resources.h"
-#include "ash/shelf/shelf_context_menu_model.h"
-#include "base/memory/ptr_util.h"
+#include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
@@ -26,9 +24,10 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/theme_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
@@ -245,11 +244,13 @@ ash::MenuItemList BrowserShortcutLauncherItemController::GetAppMenuItems(
   return items;
 }
 
-std::unique_ptr<ui::MenuModel>
-BrowserShortcutLauncherItemController::GetContextMenu(int64_t display_id) {
+void BrowserShortcutLauncherItemController::GetContextMenu(
+    int64_t display_id,
+    GetMenuModelCallback callback) {
   ChromeLauncherController* controller = ChromeLauncherController::instance();
   const ash::ShelfItem* item = controller->GetItem(shelf_id());
-  return LauncherContextMenu::Create(controller, item, display_id);
+  context_menu_ = LauncherContextMenu::Create(controller, item, display_id);
+  context_menu_->GetMenuModel(std::move(callback));
 }
 
 void BrowserShortcutLauncherItemController::ExecuteCommand(
@@ -352,8 +353,14 @@ bool BrowserShortcutLauncherItemController::IsBrowserRepresentedInBrowserList(
   if (!browser || !multi_user_util::IsProfileFromActiveUser(browser->profile()))
     return false;
 
-  // V1 App popup windows may have their own item.
   if (browser->is_app() && browser->is_type_popup()) {
+    // Crostini Terminals always have their own item.
+    // TODO(rjwright): We shouldn't need to special-case Crostini here.
+    // https://crbug.com/846546
+    if (CrostiniAppIdFromAppName(browser->app_name()))
+      return false;
+
+    // V1 App popup windows may have their own item.
     ash::ShelfID id(
         web_app::GetExtensionIdFromApplicationName(browser->app_name()));
     if (ChromeLauncherController::instance()->GetItem(id) != nullptr)

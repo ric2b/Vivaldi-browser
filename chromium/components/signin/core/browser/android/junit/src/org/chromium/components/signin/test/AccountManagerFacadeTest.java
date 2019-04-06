@@ -22,20 +22,25 @@ import org.junit.runner.RunWith;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
-import org.chromium.base.ContextUtils;
+import org.chromium.base.Callback;
+import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.asynctask.CustomShadowAsyncTask;
 import org.chromium.components.signin.AccountManagerDelegateException;
 import org.chromium.components.signin.AccountManagerFacade;
+import org.chromium.components.signin.ChildAccountStatus;
 import org.chromium.components.signin.ProfileDataSource;
 import org.chromium.components.signin.test.util.AccountHolder;
 import org.chromium.components.signin.test.util.FakeAccountManagerDelegate;
-import org.chromium.testing.local.CustomShadowAsyncTask;
 import org.chromium.testing.local.CustomShadowUserManager;
-import org.chromium.testing.local.LocalRobolectricTestRunner;
+
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Test class for {@link AccountManagerFacade}.
  */
-@RunWith(LocalRobolectricTestRunner.class)
+@RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE,
         shadows = {CustomShadowAsyncTask.class, CustomShadowUserManager.class})
 public class AccountManagerFacadeTest {
@@ -49,7 +54,6 @@ public class AccountManagerFacadeTest {
     @Before
     public void setUp() throws Exception {
         Context context = RuntimeEnvironment.application;
-        ContextUtils.initApplicationContextForTests(context);
         UserManager userManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
         mShadowUserManager = (CustomShadowUserManager) shadowOf(userManager);
 
@@ -216,9 +220,30 @@ public class AccountManagerFacadeTest {
         Assert.assertArrayEquals(new Account[] {account}, mFacade.getGoogleAccounts());
     }
 
-    private Account addTestAccount(String accountName) {
+    @Test
+    @SmallTest
+    public void testCheckChildAccount() throws AccountManagerDelegateException {
+        Account testAccount = addTestAccount("test@gmail.com");
+        Account ucaAccount =
+                addTestAccount("uca@gmail.com", AccountManagerFacade.FEATURE_IS_CHILD_ACCOUNT_KEY);
+        Account usmAccount =
+                addTestAccount("usm@gmail.com", AccountManagerFacade.FEATURE_IS_USM_ACCOUNT_KEY);
+        Account bothAccount = addTestAccount("uca_usm@gmail.com",
+                AccountManagerFacade.FEATURE_IS_CHILD_ACCOUNT_KEY,
+                AccountManagerFacade.FEATURE_IS_USM_ACCOUNT_KEY);
+
+        assertChildAccountStatus(testAccount, ChildAccountStatus.NOT_CHILD);
+        assertChildAccountStatus(ucaAccount, ChildAccountStatus.REGULAR_CHILD);
+        assertChildAccountStatus(usmAccount, ChildAccountStatus.USM_CHILD);
+        assertChildAccountStatus(bothAccount, ChildAccountStatus.REGULAR_CHILD);
+    }
+
+    private Account addTestAccount(String accountName, String... features) {
         Account account = AccountManagerFacade.createAccountFromName(accountName);
-        AccountHolder holder = AccountHolder.builder(account).alwaysAccept(true).build();
+        AccountHolder holder = AccountHolder.builder(account)
+                                       .alwaysAccept(true)
+                                       .featureSet(new HashSet<>(Arrays.asList(features)))
+                                       .build();
         mDelegate.addAccountHolderExplicitly(holder);
         Assert.assertFalse(AccountManagerFacade.get().isUpdatePending());
         return account;
@@ -226,5 +251,18 @@ public class AccountManagerFacadeTest {
 
     private void removeTestAccount(Account account) {
         mDelegate.removeAccountHolderExplicitly(AccountHolder.builder(account).build());
+    }
+
+    private void assertChildAccountStatus(
+            Account account, @ChildAccountStatus.Status Integer status) {
+        final AtomicInteger callCount = new AtomicInteger();
+        AccountManagerFacade.get().checkChildAccountStatus(account, new Callback<Integer>() {
+            @Override
+            public void onResult(@ChildAccountStatus.Status Integer result) {
+                callCount.incrementAndGet();
+                Assert.assertEquals(result, status);
+            }
+        });
+        Assert.assertEquals(1, callCount.get());
     }
 }

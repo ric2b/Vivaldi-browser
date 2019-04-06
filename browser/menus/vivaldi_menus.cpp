@@ -18,11 +18,12 @@
 #include "chrome/browser/ui/views/renderer_context_menu/render_view_context_menu_views.h"
 #include "chrome/common/pref_names.h"
 #include "components/search_engines/template_url.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "net/base/escape.h"
-#include "third_party/WebKit/public/web/WebContextMenuData.h"
+#include "third_party/blink/public/web/web_context_menu_data.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -32,6 +33,12 @@ using blink::WebContextMenuData;
 using extensions::WebViewGuest;
 
 namespace vivaldi {
+
+// Keep a copy of selected text. Chrome code in render_view_context_menu.cc will
+// for some code paths remove whitespaces (newlines) in the ContextMenuParams
+// object when setting up the menu (see search menu). We need the unmodified
+// string in some cases.
+static base::string16 s_selection_text;
 
 base::string16 GetModifierStringFromEventFlags(int event_flags) {
   base::string16 modifiers;
@@ -63,11 +70,11 @@ void SendSimpleAction(WebContents* web_contents,
   WebViewGuest* guestView = WebViewGuest::FromWebContents(web_contents);
   DCHECK(guestView);
   base::ListValue* args = new base::ListValue;
-  args->Append(base::MakeUnique<base::Value>(command));
-  args->Append(base::MakeUnique<base::Value>(text));
-  args->Append(base::MakeUnique<base::Value>(url));
+  args->Append(std::make_unique<base::Value>(command));
+  args->Append(std::make_unique<base::Value>(text));
+  args->Append(std::make_unique<base::Value>(url));
   base::string16 modifiers = GetModifierStringFromEventFlags(event_flags);
-  args->Append(base::MakeUnique<base::Value>(modifiers));
+  args->Append(std::make_unique<base::Value>(modifiers));
   guestView->SimpleAction(*args);
 }
 
@@ -86,6 +93,11 @@ bool IsVivaldiWebPanel(WebContents* web_contents) {
 bool IsVivaldiCommandId(int id) {
   return (id >= IDC_VIVALDI_MENU_ENUMS_START &&
           id < IDC_VIVALDI_MENU_ENUMS_END);
+}
+
+void VivaldiInitMenu(WebContents* web_contents,
+                     const ContextMenuParams& params) {
+  s_selection_text = params.selection_text;
 }
 
 const GURL& GetDocumentURL(const ContextMenuParams& params) {
@@ -367,8 +379,16 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
                   ui::PAGE_TRANSITION_LINK);
       break;
     case IDC_CONTENT_CONTEXT_RELOADIMAGE:
-      source_web_contents->GetRenderViewHost()->LoadImageAt(params.x, params.y);
+    {
+      // params.x and params.y position the context menu and are always in root
+      // root coordinates. Convert to content coordinates.
+      gfx::PointF p = source_web_contents->GetRenderViewHost()->GetWidget()->
+          GetView()->TransformRootPointToViewCoordSpace(gfx::PointF(
+              params.x, params.y));
+      source_web_contents->GetRenderViewHost()->LoadImageAt(
+          static_cast<int>(p.x()), static_cast<int>(p.y()));
       break;
+    }
     case IDC_VIV_OPEN_IMAGE_CURRENT_TAB:
       openurl.Run(params.src_url, GetDocumentURL(params),
                   WindowOpenDisposition::CURRENT_TAB, ui::PAGE_TRANSITION_LINK);
@@ -404,9 +424,9 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
           target = base::ASCIIToUTF16("search");
         base::string16 modifiers = GetModifierStringFromEventFlags(event_flags);
         base::ListValue* args = new base::ListValue;
-        args->Append(base::MakeUnique<base::Value>(text));
-        args->Append(base::MakeUnique<base::Value>(target));
-        args->Append(base::MakeUnique<base::Value>(modifiers));
+        args->Append(std::make_unique<base::Value>(text));
+        args->Append(std::make_unique<base::Value>(target));
+        args->Append(std::make_unique<base::Value>(modifiers));
         extensions::WebViewGuest* current_webviewguest =
             vivaldi::ui_tools::GetActiveWebViewGuest();
         if (current_webviewguest) {
@@ -420,9 +440,9 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
       WebViewGuest* vivGuestView =
           WebViewGuest::FromWebContents(source_web_contents);
       base::ListValue* args = new base::ListValue;
-      args->Append(base::MakeUnique<base::Value>(keyword));
+      args->Append(std::make_unique<base::Value>(keyword));
       args->Append(
-          base::MakeUnique<base::Value>(params.vivaldi_keyword_url.spec()));
+          std::make_unique<base::Value>(params.vivaldi_keyword_url.spec()));
 
       vivGuestView->CreateSearch(*args);
     } break;
@@ -430,7 +450,7 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
     case IDC_VIV_COPY_TO_NOTE:
       if (IsVivaldiRunning()) {
         SendSimpleAction(source_web_contents, event_flags, "copyToNote",
-                         params.selection_text, params.page_url.spec());
+                         s_selection_text, params.page_url.spec());
       }
       break;
 

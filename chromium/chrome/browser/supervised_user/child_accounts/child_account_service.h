@@ -13,7 +13,6 @@
 #include "base/callback_list.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observer.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/supervised_user/child_accounts/family_info_fetcher.h"
@@ -21,7 +20,6 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
-#include "components/sync/driver/sync_service_observer.h"
 #include "net/base/backoff_entry.h"
 
 namespace user_prefs {
@@ -36,7 +34,6 @@ class Profile;
 class ChildAccountService : public KeyedService,
                             public FamilyInfoFetcher::Consumer,
                             public AccountTrackerService::Observer,
-                            public syncer::SyncServiceObserver,
                             public SupervisedUserService::Delegate,
                             public GaiaCookieManagerService::Observer {
  public:
@@ -57,7 +54,7 @@ class ChildAccountService : public KeyedService,
   // KeyedService:
   void Shutdown() override;
 
-  void AddChildStatusReceivedCallback(const base::Closure& callback);
+  void AddChildStatusReceivedCallback(base::OnceClosure callback);
 
   // Returns whether or not the user is authenticated on Google web properties
   // based on the state of the cookie jar. Returns AuthState::PENDING if
@@ -91,9 +88,6 @@ class ChildAccountService : public KeyedService,
       const std::vector<FamilyInfoFetcher::FamilyMember>& members) override;
   void OnFailure(FamilyInfoFetcher::ErrorCode error) override;
 
-  // syncer::SyncServiceObserver implementation.
-  void OnStateChanged(syncer::SyncService* sync) override;
-
   // GaiaCookieManagerService::Observer implementation.
   void OnGaiaAccountsInCookieUpdated(
       const std::vector<gaia::ListedAccount>& accounts,
@@ -122,15 +116,12 @@ class ChildAccountService : public KeyedService,
   base::OneShotTimer family_fetch_timer_;
   net::BackoffEntry family_fetch_backoff_;
 
-  ScopedObserver<syncer::SyncService, syncer::SyncServiceObserver>
-      sync_service_observer_;
-
   GaiaCookieManagerService* gaia_cookie_manager_;
 
   base::CallbackList<void()> google_auth_state_observers_;
 
   // Callbacks to run when the user status becomes known.
-  std::vector<base::Closure> status_received_callback_list_;
+  std::vector<base::OnceClosure> status_received_callback_list_;
 
   base::WeakPtrFactory<ChildAccountService> weak_ptr_factory_;
 

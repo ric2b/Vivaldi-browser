@@ -45,7 +45,8 @@ class MEDIA_EXPORT MimeUtil {
     THEORA,
     DOLBY_VISION,
     AV1,
-    LAST_CODEC = AV1
+    MPEG_H_AUDIO,
+    LAST_CODEC = MPEG_H_AUDIO
   };
 
   // Platform configuration structure.  Controls which codecs are supported at
@@ -85,8 +86,6 @@ class MEDIA_EXPORT MimeUtil {
   SupportsType IsSupportedMediaFormat(const std::string& mime_type,
                                       const std::vector<std::string>& codecs,
                                       bool is_encrypted) const;
-
-  void RemoveProprietaryMediaTypesAndCodecs();
 
   // Checks android platform specific codec restrictions. Returns true if
   // |codec| is supported when contained in |mime_type_lower_case|.

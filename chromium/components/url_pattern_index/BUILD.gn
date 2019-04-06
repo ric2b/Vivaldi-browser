@@ -5,15 +5,11 @@
 static_library("url_pattern_index") {
   sources = [
     "closed_hash_map.h",
-    "copying_file_stream.cc",
-    "copying_file_stream.h",
     "fuzzy_pattern_matching.cc",
     "fuzzy_pattern_matching.h",
     "ngram_extractor.h",
     "string_splitter.h",
     "uint64_hasher.h",
-    "unindexed_ruleset.cc",
-    "unindexed_ruleset.h",
     "url_pattern.cc",
     "url_pattern.h",
     "url_pattern_index.cc",
@@ -48,6 +44,17 @@ static_library("test_support") {
   ]
 }
 
+static_library("util") {
+  sources = [
+    "url_rule_util.cc",
+    "url_rule_util.h",
+  ]
+  deps = [
+    ":url_pattern_index",
+    "//base",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
   sources = [
@@ -55,13 +62,14 @@ source_set("unit_tests") {
     "fuzzy_pattern_matching_unittest.cc",
     "ngram_extractor_unittest.cc",
     "string_splitter_unittest.cc",
-    "unindexed_ruleset_unittest.cc",
     "url_pattern_index_unittest.cc",
     "url_pattern_unittest.cc",
+    "url_rule_util_unittest.cc",
   ]
   deps = [
     ":test_support",
     ":url_pattern_index",
+    ":util",
     "//base",
     "//testing/gtest",
     "//third_party/protobuf:protobuf_lite",

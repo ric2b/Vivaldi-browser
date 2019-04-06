@@ -8,7 +8,10 @@ Polymer({
   properties: {
     disabled: {type: Boolean, value: false, reflectToAttribute: true},
 
-    inverse: Boolean,
+    inverse: {
+      type: Boolean,
+      observer: 'onInverseChanged_',
+    },
 
     border: Boolean,
 
@@ -28,7 +31,11 @@ Polymer({
   onClick_: function(e) {
     if (this.disabled)
       e.stopPropagation();
-  }
+  },
+
+  onInverseChanged_: function() {
+    this.$.textButton.classList.toggle('action-button', this.inverse);
+  },
 });
 
 Polymer({
@@ -91,5 +98,9 @@ Polymer({
 
   updateIconVisibility_: function() {
     this.$.icon.hidden = (this.icon1x === undefined || this.icon1x.length == 0);
+  },
+
+  click: function() {
+    this.$.button.click();
   },
 });

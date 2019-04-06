@@ -14,11 +14,8 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gl/dc_renderer_layer_params.h"
 
-namespace cc {
-class DisplayResourceProvider;
-}
-
 namespace viz {
+class DisplayResourceProvider;
 
 class VIZ_SERVICE_EXPORT DCLayerOverlaySharedState
     : public base::RefCounted<DCLayerOverlaySharedState> {
@@ -71,6 +68,7 @@ class VIZ_SERVICE_EXPORT DCLayerOverlay {
   gfx::ColorSpace color_space;
 
   bool require_overlay = false;
+  bool is_protected_video = false;
 };
 
 typedef std::vector<DCLayerOverlay> DCLayerOverlayList;
@@ -96,7 +94,7 @@ class DCLayerOverlayProcessor {
   DCLayerOverlayProcessor();
   ~DCLayerOverlayProcessor();
 
-  void Process(cc::DisplayResourceProvider* resource_provider,
+  void Process(DisplayResourceProvider* resource_provider,
                const gfx::RectF& display_rect,
                RenderPassList* render_passes,
                gfx::Rect* overlay_damage_rect,
@@ -104,11 +102,11 @@ class DCLayerOverlayProcessor {
                DCLayerOverlayList* ca_layer_overlays);
   void ClearOverlayState() {
     previous_frame_underlay_rect_ = gfx::Rect();
-    previous_occlusion_bounding_box_ = gfx::Rect();
+    previous_frame_underlay_occlusion_ = gfx::Rect();
   }
 
  private:
-  DCLayerResult FromDrawQuad(cc::DisplayResourceProvider* resource_provider,
+  DCLayerResult FromDrawQuad(DisplayResourceProvider* resource_provider,
                              const gfx::RectF& display_rect,
                              QuadList::ConstIterator quad_list_begin,
                              QuadList::ConstIterator quad,
@@ -117,7 +115,7 @@ class DCLayerOverlayProcessor {
   QuadList::Iterator ProcessRenderPassDrawQuad(RenderPass* render_pass,
                                                gfx::Rect* damage_rect,
                                                QuadList::Iterator it);
-  void ProcessRenderPass(cc::DisplayResourceProvider* resource_provider,
+  void ProcessRenderPass(DisplayResourceProvider* resource_provider,
                          const gfx::RectF& display_rect,
                          RenderPass* render_pass,
                          bool is_root,
@@ -138,23 +136,21 @@ class DCLayerOverlayProcessor {
                           bool is_root,
                           gfx::Rect* damage_rect,
                           gfx::Rect* this_frame_underlay_rect,
+                          gfx::Rect* this_frame_underlay_occlusion,
                           DCLayerOverlay* dc_layer);
 
   gfx::Rect previous_frame_underlay_rect_;
-  gfx::Rect previous_occlusion_bounding_box_;
+  gfx::Rect previous_frame_underlay_occlusion_;
   gfx::RectF previous_display_rect_;
   bool processed_overlay_in_frame_ = false;
 
-  // Store information about punch-through rectangles for non-root
-  // RenderPasses. These rectangles are used to clear the corresponding areas
-  // in parent renderpasses.
-  struct PunchThroughRect {
-    gfx::Rect rect;
-    gfx::Transform transform_to_target;
-    float opacity;
-  };
+  // Store information about clipped punch-through rects in target space for
+  // non-root render passes. These rects are used to clear the corresponding
+  // areas in parent render passes.
+  base::flat_map<RenderPassId, std::vector<gfx::Rect>>
+      pass_punch_through_rects_;
 
-  base::flat_map<RenderPassId, std::vector<PunchThroughRect>> pass_info_;
+  DISALLOW_COPY_AND_ASSIGN(DCLayerOverlayProcessor);
 };
 
 }  // namespace viz

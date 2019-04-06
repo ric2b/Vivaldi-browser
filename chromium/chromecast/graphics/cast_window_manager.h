@@ -16,6 +16,8 @@ class Event;
 
 namespace chromecast {
 
+class CastGestureHandler;
+
 // Chromecast's window-manager interface.
 // This declares the interface to add top-level windows to the Chromecast
 // platform window.  It is owned by the UI thread, and generally one instance
@@ -31,11 +33,11 @@ class CastWindowManager {
     SOFT_KEYBOARD,
     VOLUME,
     MEDIA_INFO,
-    TOP = MEDIA_INFO
+    SETTINGS,
+    BOOT_ANIMATION_OVERLAY,
+    CORNERS_OVERLAY,
+    TOP = CORNERS_OVERLAY
   };
-
-  // Creates the platform-specific CastWindowManager.
-  static std::unique_ptr<CastWindowManager> Create(bool enable_input);
 
   virtual ~CastWindowManager() {}
 
@@ -57,6 +59,15 @@ class CastWindowManager {
 
   // Inject a UI event into the Cast window.
   virtual void InjectEvent(ui::Event* event) = 0;
+
+  // Register a new handler for system gesture events.
+  virtual void AddGestureHandler(CastGestureHandler* handler) = 0;
+
+  // Remove the registration of a system gesture events handler.
+  virtual void RemoveGestureHandler(CastGestureHandler* handler) = 0;
+
+  // Enable/Disable color inversion.
+  virtual void SetColorInversion(bool enable) = 0;
 };
 
 }  // namespace chromecast

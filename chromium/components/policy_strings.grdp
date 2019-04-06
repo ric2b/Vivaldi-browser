@@ -86,7 +86,7 @@
   <message name="IDS_POLICY_VALIDATION_BAD_DEVICE_ID" desc="Message indicating the policy device id is empty or different from the one expected.">
     Returned policy device id is empty or doesn't match current device id
   </message>
-  <message name="IDS_POLICY_VALIDATION_BAD_USERNAME" desc="Message indicating policy validation failed due to bad username/domain.">
+  <message name="IDS_POLICY_VALIDATION_BAD_USER" desc="Message indicating policy validation failed due to bad user/domain id.">
     Wrong policy subject
   </message>
   <message name="IDS_POLICY_VALIDATION_POLICY_PARSE_ERROR" desc="Message indicating a parse error in policy.">
@@ -158,6 +158,9 @@
   <message name="IDS_POLICY_SCHEMA_VALIDATION_ERROR" desc="The text displayed in the status column when the policy value doesn't conform to the policy schema.">
     Schema validation error at "<ph name="ERROR_PATH">$1<ex>AC.Delays.ScreenOff</ex></ph>": <ph name="ERROR">$2<ex>Value is out of range.</ex></ph>
   </message>
+  <message name="IDS_POLICY_INVALID_JSON_ERROR" desc="The text displayed in the status column when the policy value should be a valid JSON string, but it cannot be parsed as JSON.">
+    Error while parsing JSON value: <ph name="ERROR">$1<ex>Line 2, Column 3: Map keys must be quoted.</ex></ph>
+  </message>
   <message name="IDS_POLICY_INVALID_SEARCH_URL_ERROR" desc="The text displayed in the status column when a the URL given for DefaultSearchProviderSearchURL is invalid.">
     Invalid search URL.
   </message>
@@ -166,6 +169,9 @@
   </message>
   <message name="IDS_POLICY_INVALID_UPDATE_URL_ERROR" desc="The text displayed in the status column when the update URL for given extension is invalid.">
     Invalid update URL for extension with ID "<ph name="EXTENSION_ID">$1<ex>abcdefghijklmnopabcdefghijklmnop</ex></ph>".
+  </message>
+  <message name="IDS_POLICY_OFF_CWS_URL_ERROR" desc="The text displayed in the status column when the update URL points to a location other than the Chrome Webstore and the machine is not enterprise managed.">
+  This computer is not detected as enterprise managed so policy can only automatically install extensions hosted on the Chrome Webstore. The Chrome Webstore update URL is "<ph name="CWS_UPDATE_URL">$1<ex>https://clients2.google.com/service/update2/crx</ex></ph>".
   </message>
   <message name="IDS_POLICY_PROXY_MODE_DISABLED_ERROR" desc="The text displayed in the status column when use of a proxy is disabled but a proxy configuration is given.">
     Use of a proxy is disabled but an explicit proxy configuration is specified.
@@ -225,8 +231,22 @@
   </message>
 
   <!-- chrome://policy-tool -->
+  <message name="IDS_POLICY_TOOL_CANCEL_RENAME" desc="Button to cancel the dialog that appears in rename session.">
+    Cancel
+  </message>
+  <message name="IDS_POLICY_TOOL_CONFIRM_RENAME" desc="Button that confirm a rename session.">
+    Confirm
+  </message>
   <message name="IDS_POLICY_TOOL_TITLE" desc="Admin page title and the title of the section that lists policies.">
     Policy management
+  </message>
+  <message name="IDS_EXPORT_POLICIES_LINUX" desc="Button that exports the current session policy
+  in linux format.">
+    Export Linux
+  </message>
+  <message name="IDS_EXPORT_POLICIES_MAC" desc="Button that exports the current session policy
+  in mac format (.plist).">
+    Export MacOS
   </message>
   <message name="IDS_POLICY_TOOL_EDIT" desc="Label for the button to change policy value in current session.">
     Edit
@@ -237,8 +257,17 @@
   <message name="IDS_POLICY_TOOL_LOAD_SESSION" desc="Label for the button that loads specified session.">
     Load session
   </message>
+  <message name="IDS_POLICY_TOOL_REMOVE_SESSION" desc="Label for the button that removes specified session.">
+    Remove
+  </message>
+  <message name="IDS_POLICY_TOOL_RENAME_SESSION" desc="Label for the button that renames specified session.">
+    Rename
+  </message>
   <message name="IDS_POLICY_TOOL_SESSION_NAME_PLACEHOLDER" desc="Placeholder for the input field that lets the user change policy management sessions.">
     Session name
+  </message>
+  <message name="IDS_POLICY_TOOL_INVALID_TYPE" desc="The text displayed in the status column when the value type doesn't match the actual policy type.">
+    The policy type is invalid.
   </message>
   <message name="IDS_POLICY_TOOL_SAVING_DISABLED" desc="A message that is shown to the user when there is some problem that prevents saving the session to disk.">
     There was a problem accessing the session files. Saving to disk is currently disabled. Please reload the page to try again.
@@ -255,6 +284,18 @@
   <message name="IDS_POLICY_TOOL_DELETE_FAILED" desc="A message that is shown to the user when deleting the session fails because the session name that is sent from Javascript is invalid.">
     The session with this name is not valid for deletion.
   </message>
+  <message name="IDS_POLICY_TOOL_SESSION_NOT_EXIST" desc="A message that is shown to the user when
+    the selected session name does not exist.">
+    The selected session does not exist.
+  </message>
+  <message name="IDS_POLICY_TOOL_SESSION_EXIST" desc="A message that is show to the user when
+    there is another session with the same name in a renaming session.">
+    This session name already exists.
+  </message>
+  <message name="IDS_POLICY_TOOL_RENAME_FAILED" desc="A message that is shown to the user when
+    renaming the session fails because the function that rename the file failed.">
+    Failed to rename the session.
+  </message>
   <!-- chrome://policy -->
   <message name="IDS_POLICY_TITLE" desc="Page title and the title of the section that lists policies.">
     Policies
@@ -267,9 +308,6 @@
   </message>
   <message name="IDS_EXPORT_POLICIES_JSON" desc="Label for the button that exports policies in JSON format.">
     Export to JSON
-  </message>
-  <message name="IDS_POLICY_CHROME_FOR_WORK" desc="Title of the link to the chrome for work website.">
-    Using Chrome at work? Businesses can manage Chrome settings for their employees. Learn more
   </message>
   <message name="IDS_POLICY_STATUS" desc="Title of the status section.">
     Status
@@ -288,6 +326,9 @@
   </message>
   <message name="IDS_POLICY_LABEL_USERNAME" desc="Label for the username in the user policy status box.">
     User:
+  </message>
+  <message name="IDS_POLICY_LABEL_GAIA_ID" desc="Label for the user GAIA ID in the user policy status box.">
+    Gaia ID:
   </message>
   <message name="IDS_POLICY_LABEL_CLIENT_ID" desc="Label for the client IDs in the policy status boxes.">
     Client ID:

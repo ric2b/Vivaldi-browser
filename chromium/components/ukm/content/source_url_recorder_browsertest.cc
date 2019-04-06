@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/files/scoped_temp_dir.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/ukm/content/source_url_recorder.h"
@@ -14,6 +16,7 @@
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_download_manager_delegate.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 
 class SourceUrlRecorderWebContentsObserverBrowserTest
     : public content::ContentBrowserTest {
@@ -29,7 +32,7 @@ class SourceUrlRecorderWebContentsObserverBrowserTest
 
     ASSERT_TRUE(embedded_test_server()->Start());
 
-    test_ukm_recorder_ = base::MakeUnique<ukm::TestAutoSetUkmRecorder>();
+    test_ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
     ukm::InitializeSourceUrlRecorderForWebContents(shell()->web_contents());
   }
 
@@ -44,6 +47,10 @@ class SourceUrlRecorderWebContentsObserverBrowserTest
     const ukm::UkmSource* src = test_ukm_recorder_->GetSourceForSourceId(
         ukm::GetSourceIdForWebContentsDocument(shell()->web_contents()));
     return src ? src->url() : GURL();
+  }
+
+  const ukm::TestAutoSetUkmRecorder& test_ukm_recorder() const {
+    return *test_ukm_recorder_;
   }
 
  private:
@@ -76,6 +83,8 @@ class SourceUrlRecorderWebContentsObserverDownloadBrowserTest
 };
 
 IN_PROC_BROWSER_TEST_F(SourceUrlRecorderWebContentsObserverBrowserTest, Basic) {
+  using Entry = ukm::builders::DocumentCreated;
+
   GURL url = embedded_test_server()->GetURL("/title1.html");
   content::NavigationHandleObserver observer(shell()->web_contents(), url);
   content::NavigateToURL(shell(), url);
@@ -87,10 +96,21 @@ IN_PROC_BROWSER_TEST_F(SourceUrlRecorderWebContentsObserverBrowserTest, Basic) {
   EXPECT_TRUE(source->initial_url().is_empty());
 
   EXPECT_EQ(url, GetAssociatedURLForWebContentsDocument());
+
+  // Check we have created a DocumentCreated event.
+  auto ukm_entries = test_ukm_recorder().GetEntriesByName(Entry::kEntryName);
+  EXPECT_EQ(1u, ukm_entries.size());
+  EXPECT_EQ(source->id(), *test_ukm_recorder().GetEntryMetric(
+                              ukm_entries[0], Entry::kNavigationSourceIdName));
+  EXPECT_EQ(1, *test_ukm_recorder().GetEntryMetric(ukm_entries[0],
+                                                   Entry::kIsMainFrameName));
+  EXPECT_NE(source->id(), ukm_entries[0]->source_id);
 }
 
 IN_PROC_BROWSER_TEST_F(SourceUrlRecorderWebContentsObserverBrowserTest,
                        IgnoreUrlInSubframe) {
+  using Entry = ukm::builders::DocumentCreated;
+
   GURL main_url = embedded_test_server()->GetURL("/page_with_iframe.html");
   GURL subframe_url = embedded_test_server()->GetURL("/title1.html");
 
@@ -112,6 +132,21 @@ IN_PROC_BROWSER_TEST_F(SourceUrlRecorderWebContentsObserverBrowserTest,
             GetSourceForNavigationId(subframe_observer.navigation_id()));
 
   EXPECT_EQ(main_url, GetAssociatedURLForWebContentsDocument());
+
+  // Check we have created a DocumentCreated event for both frames.
+  auto ukm_entries = test_ukm_recorder().GetEntriesByName(Entry::kEntryName);
+  EXPECT_EQ(2u, ukm_entries.size());
+  EXPECT_EQ(source->id(), *test_ukm_recorder().GetEntryMetric(
+                              ukm_entries[0], Entry::kNavigationSourceIdName));
+  EXPECT_EQ(0, *test_ukm_recorder().GetEntryMetric(ukm_entries[0],
+                                                   Entry::kIsMainFrameName));
+  EXPECT_EQ(source->id(), *test_ukm_recorder().GetEntryMetric(
+                              ukm_entries[1], Entry::kNavigationSourceIdName));
+  EXPECT_EQ(1, *test_ukm_recorder().GetEntryMetric(ukm_entries[1],
+                                                   Entry::kIsMainFrameName));
+  EXPECT_NE(ukm_entries[0]->source_id, ukm_entries[1]->source_id);
+  EXPECT_NE(source->id(), ukm_entries[0]->source_id);
+  EXPECT_NE(source->id(), ukm_entries[1]->source_id);
 }
 
 IN_PROC_BROWSER_TEST_F(SourceUrlRecorderWebContentsObserverDownloadBrowserTest,

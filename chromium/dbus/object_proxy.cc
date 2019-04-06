@@ -11,7 +11,6 @@
 #include "base/bind_helpers.h"
 #include "base/debug/leak_annotations.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
@@ -49,10 +48,6 @@ constexpr char kDBusSystemObjectAddress[] = "org.freedesktop.DBus";
 
 // The NameOwnerChanged member in |kDBusSystemObjectInterface|.
 constexpr char kNameOwnerChangedMember[] = "NameOwnerChanged";
-
-// An empty function used for ObjectProxy::EmptyResponseCallback().
-void EmptyResponseCallbackBody(Response* /*response*/) {
-}
 
 }  // namespace
 
@@ -313,11 +308,6 @@ void ObjectProxy::Detach() {
   pending_calls_.clear();
 }
 
-// static
-ObjectProxy::ResponseCallback ObjectProxy::EmptyResponseCallback() {
-  return base::Bind(&EmptyResponseCallbackBody);
-}
-
 void ObjectProxy::StartAsyncMethodCall(int timeout_ms,
                                        DBusMessage* request_message,
                                        ReplyCallbackHolder callback_holder,
@@ -472,10 +462,10 @@ bool ObjectProxy::ConnectToSignalInternal(const std::string& interface_name,
       GetAbsoluteMemberName(interface_name, signal_name);
 
   // Add a match rule so the signal goes through HandleMessage().
-  const std::string match_rule =
-      base::StringPrintf("type='signal', interface='%s', path='%s'",
-                         interface_name.c_str(),
-                         object_path_.value().c_str());
+  const std::string match_rule = base::StringPrintf(
+      "type='signal', sender='%s', interface='%s', path='%s'",
+      service_name_.c_str(), interface_name.c_str(),
+      object_path_.value().c_str());
   return AddMatchRuleWithCallback(match_rule,
                                   absolute_signal_name,
                                   signal_callback);

@@ -16,7 +16,6 @@
 #include "base/debug/stack_trace.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -30,10 +29,9 @@
 #include "chrome/browser/net/chrome_extensions_network_delegate.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/task_manager/task_manager_interface.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
-#include "components/data_usage/core/data_use_aggregator.h"
 #include "components/domain_reliability/monitor.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
@@ -45,9 +43,8 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/resource_type.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "net/base/host_port_pair.h"
-#include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_options.h"
@@ -60,6 +57,7 @@
 #include "net/url_request/url_request.h"
 
 #if defined(OS_ANDROID)
+#include "base/android/path_utils.h"
 #include "chrome/browser/io_thread.h"
 #endif
 
@@ -83,53 +81,17 @@ namespace {
 
 bool g_access_to_all_files_enabled = false;
 
-const char kDNTHeader[] = "DNT";
-
 // Gets called when the extensions finish work on the URL. If the extensions
 // did not do a redirect (so |new_url| is empty) then we enforce the
 // SafeSearch parameters. Otherwise we will get called again after the
 // redirect and we enforce SafeSearch then.
-void ForceGoogleSafeSearchCallbackWrapper(
-    const net::CompletionCallback& callback,
-    net::URLRequest* request,
-    GURL* new_url,
-    int rv) {
+void ForceGoogleSafeSearchCallbackWrapper(net::CompletionOnceCallback callback,
+                                          net::URLRequest* request,
+                                          GURL* new_url,
+                                          int rv) {
   if (rv == net::OK && new_url->is_empty())
     safe_search_util::ForceGoogleSafeSearch(request, new_url);
-  callback.Run(rv);
-}
-
-void ReportInvalidReferrerSendOnUI() {
-  base::RecordAction(
-      base::UserMetricsAction("Net.URLRequest_StartJob_InvalidReferrer"));
-}
-
-void ReportInvalidReferrerSend(const GURL& target_url,
-                               const GURL& referrer_url) {
-  LOG(ERROR) << "Cancelling request to " << target_url
-             << " with invalid referrer " << referrer_url;
-  // Record information to help debug http://crbug.com/422871
-  if (!target_url.SchemeIsHTTPOrHTTPS())
-    return;
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::BindOnce(&ReportInvalidReferrerSendOnUI));
-  base::debug::DumpWithoutCrashing();
-  NOTREACHED();
-}
-
-// Record network errors that HTTP requests complete with, including OK and
-// ABORTED.
-void RecordNetworkErrorHistograms(const net::URLRequest* request,
-                                  int net_error) {
-  if (request->url().SchemeIs("http")) {
-    base::UmaHistogramSparse("Net.HttpRequestCompletionErrorCodes",
-                             std::abs(net_error));
-
-    if (request->load_flags() & net::LOAD_MAIN_FRAME_DEPRECATED) {
-      base::UmaHistogramSparse("Net.HttpRequestCompletionErrorCodes.MainFrame",
-                               std::abs(net_error));
-    }
-  }
+  std::move(callback).Run(rv);
 }
 
 bool IsAccessAllowedInternal(const base::FilePath& path,
@@ -153,7 +115,7 @@ bool IsAccessAllowedInternal(const base::FilePath& path,
   };
 
   base::FilePath temp_dir;
-  if (PathService::Get(base::DIR_TEMP, &temp_dir))
+  if (base::PathService::Get(base::DIR_TEMP, &temp_dir))
     whitelist.push_back(temp_dir);
 
   // The actual location of "/home/chronos/user/Xyz" is the Xyz directory under
@@ -170,9 +132,14 @@ bool IsAccessAllowedInternal(const base::FilePath& path,
 #elif defined(OS_ANDROID)
   // Access to files in external storage is allowed.
   base::FilePath external_storage_path;
-  PathService::Get(base::DIR_ANDROID_EXTERNAL_STORAGE, &external_storage_path);
+  base::PathService::Get(base::DIR_ANDROID_EXTERNAL_STORAGE,
+                         &external_storage_path);
   if (external_storage_path.IsParent(path))
     return true;
+
+  auto all_download_dirs = base::android::GetAllPrivateDownloadsDirectories();
+  for (const auto& dir : all_download_dirs)
+    whitelist.push_back(dir);
 
   // Whitelist of other allowed directories.
   static const base::FilePath::CharType* const kLocalAccessWhiteList[] = {
@@ -199,23 +166,16 @@ bool IsAccessAllowedInternal(const base::FilePath& path,
 }  // namespace
 
 ChromeNetworkDelegate::ChromeNetworkDelegate(
-    extensions::EventRouterForwarder* event_router,
-    BooleanPrefMember* enable_referrers)
-    : profile_(nullptr),
-      enable_referrers_(enable_referrers),
-      enable_do_not_track_(nullptr),
+    extensions::EventRouterForwarder* event_router)
+    : extensions_delegate_(
+          ChromeExtensionsNetworkDelegate::Create(event_router)),
+      profile_(nullptr),
       force_google_safe_search_(nullptr),
       force_youtube_restrict_(nullptr),
       allowed_domains_for_apps_(nullptr),
       experimental_web_platform_features_enabled_(
           base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kEnableExperimentalWebPlatformFeatures)),
-      data_use_aggregator_(nullptr),
-      is_data_usage_off_the_record_(true) {
-  DCHECK(enable_referrers);
-  extensions_delegate_.reset(
-      ChromeExtensionsNetworkDelegate::Create(event_router));
-}
+              switches::kEnableExperimentalWebPlatformFeatures)) {}
 
 ChromeNetworkDelegate::~ChromeNetworkDelegate() {}
 
@@ -234,30 +194,13 @@ void ChromeNetworkDelegate::set_cookie_settings(
   cookie_settings_ = cookie_settings;
 }
 
-void ChromeNetworkDelegate::set_data_use_aggregator(
-    data_usage::DataUseAggregator* data_use_aggregator,
-    bool is_data_usage_off_the_record) {
-  data_use_aggregator_ = data_use_aggregator;
-  is_data_usage_off_the_record_ = is_data_usage_off_the_record;
-}
-
 // static
 void ChromeNetworkDelegate::InitializePrefsOnUIThread(
-    BooleanPrefMember* enable_referrers,
-    BooleanPrefMember* enable_do_not_track,
     BooleanPrefMember* force_google_safe_search,
     IntegerPrefMember* force_youtube_restrict,
     StringPrefMember* allowed_domains_for_apps,
     PrefService* pref_service) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  enable_referrers->Init(prefs::kEnableReferrers, pref_service);
-  enable_referrers->MoveToThread(
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
-  if (enable_do_not_track) {
-    enable_do_not_track->Init(prefs::kEnableDoNotTrack, pref_service);
-    enable_do_not_track->MoveToThread(
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
-  }
   if (force_google_safe_search) {
     force_google_safe_search->Init(prefs::kForceGoogleSafeSearch, pref_service);
     force_google_safe_search->MoveToThread(
@@ -277,29 +220,22 @@ void ChromeNetworkDelegate::InitializePrefsOnUIThread(
 
 int ChromeNetworkDelegate::OnBeforeURLRequest(
     net::URLRequest* request,
-    const net::CompletionCallback& callback,
+    net::CompletionOnceCallback callback,
     GURL* new_url) {
-
   extensions_delegate_->ForwardStartRequestStatus(request);
-
-  if (!enable_referrers_->GetValue())
-    request->SetReferrer(std::string());
-  if (enable_do_not_track_ && enable_do_not_track_->GetValue())
-    request->SetExtraRequestHeaderByName(kDNTHeader, "1", true /* override */);
 
   bool force_safe_search =
       (force_google_safe_search_ && force_google_safe_search_->GetValue());
 
-  net::CompletionCallback wrapped_callback = callback;
+  net::CompletionOnceCallback wrapped_callback = std::move(callback);
   if (force_safe_search) {
-    wrapped_callback = base::Bind(&ForceGoogleSafeSearchCallbackWrapper,
-                                  callback,
-                                  base::Unretained(request),
-                                  base::Unretained(new_url));
+    wrapped_callback = base::BindOnce(
+        &ForceGoogleSafeSearchCallbackWrapper, std::move(wrapped_callback),
+        base::Unretained(request), base::Unretained(new_url));
   }
 
-  int rv = extensions_delegate_->OnBeforeURLRequest(
-      request, wrapped_callback, new_url);
+  int rv = extensions_delegate_->NotifyBeforeURLRequest(
+      request, std::move(wrapped_callback), new_url);
 
   if (force_safe_search && rv == net::OK && new_url->is_empty())
     safe_search_util::ForceGoogleSafeSearch(request, new_url);
@@ -317,7 +253,7 @@ int ChromeNetworkDelegate::OnBeforeURLRequest(
 
 int ChromeNetworkDelegate::OnBeforeStartTransaction(
     net::URLRequest* request,
-    const net::CompletionCallback& callback,
+    net::CompletionOnceCallback callback,
     net::HttpRequestHeaders* headers) {
   if (force_youtube_restrict_) {
     int value = force_youtube_restrict_->GetValue();
@@ -337,41 +273,38 @@ int ChromeNetworkDelegate::OnBeforeStartTransaction(
   if (vivaldi::IsVivaldiRunning())
     vivaldi::spoof::ForceWhatsappMode(request, headers);
 
-  return extensions_delegate_->OnBeforeStartTransaction(request, callback,
-                                                        headers);
+  return extensions_delegate_->NotifyBeforeStartTransaction(
+      request, std::move(callback), headers);
 }
 
 void ChromeNetworkDelegate::OnStartTransaction(
     net::URLRequest* request,
     const net::HttpRequestHeaders& headers) {
-  extensions_delegate_->OnStartTransaction(request, headers);
+  extensions_delegate_->NotifyStartTransaction(request, headers);
 }
 
 int ChromeNetworkDelegate::OnHeadersReceived(
     net::URLRequest* request,
-    const net::CompletionCallback& callback,
+    net::CompletionOnceCallback callback,
     const net::HttpResponseHeaders* original_response_headers,
     scoped_refptr<net::HttpResponseHeaders>* override_response_headers,
     GURL* allowed_unsafe_redirect_url) {
-  return extensions_delegate_->OnHeadersReceived(
-      request,
-      callback,
-      original_response_headers,
-      override_response_headers,
-      allowed_unsafe_redirect_url);
+  return extensions_delegate_->NotifyHeadersReceived(
+      request, std::move(callback), original_response_headers,
+      override_response_headers, allowed_unsafe_redirect_url);
 }
 
 void ChromeNetworkDelegate::OnBeforeRedirect(net::URLRequest* request,
                                              const GURL& new_location) {
   if (domain_reliability_monitor_)
     domain_reliability_monitor_->OnBeforeRedirect(request);
-  extensions_delegate_->OnBeforeRedirect(request, new_location);
+  extensions_delegate_->NotifyBeforeRedirect(request, new_location);
   variations::StripVariationHeaderIfNeeded(new_location, request);
 }
 
 void ChromeNetworkDelegate::OnResponseStarted(net::URLRequest* request,
                                               int net_error) {
-  extensions_delegate_->OnResponseStarted(request, net_error);
+  extensions_delegate_->NotifyResponseStarted(request, net_error);
 }
 
 void ChromeNetworkDelegate::OnNetworkBytesReceived(net::URLRequest* request,
@@ -381,8 +314,6 @@ void ChromeNetworkDelegate::OnNetworkBytesReceived(net::URLRequest* request,
   // not FTP or other types, so those kinds of bytes will not be reported here.
   task_manager::TaskManagerInterface::OnRawBytesRead(*request, bytes_received);
 #endif  // !defined(OS_ANDROID)
-
-  ReportDataUsageStats(request, 0 /* tx_bytes */, bytes_received);
 }
 
 void ChromeNetworkDelegate::OnNetworkBytesSent(net::URLRequest* request,
@@ -392,20 +323,12 @@ void ChromeNetworkDelegate::OnNetworkBytesSent(net::URLRequest* request,
   // not FTP or other types, so those kinds of bytes will not be reported here.
   task_manager::TaskManagerInterface::OnRawBytesSent(*request, bytes_sent);
 #endif  // !defined(OS_ANDROID)
-
-  ReportDataUsageStats(request, bytes_sent, 0 /* rx_bytes */);
 }
 
 void ChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
                                         bool started,
                                         int net_error) {
-  DCHECK_NE(net::ERR_IO_PENDING, net_error);
-
-  // TODO(amohammadkhan): Verify that there is no double recording in data use
-  // of redirected requests.
-  RecordNetworkErrorHistograms(request, net_error);
-
-  extensions_delegate_->OnCompleted(request, started, net_error);
+  extensions_delegate_->NotifyCompleted(request, started, net_error);
   if (domain_reliability_monitor_)
     domain_reliability_monitor_->OnCompleted(request, started);
   extensions_delegate_->ForwardProxyErrors(request, net_error);
@@ -413,22 +336,21 @@ void ChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
 }
 
 void ChromeNetworkDelegate::OnURLRequestDestroyed(net::URLRequest* request) {
-  extensions_delegate_->OnURLRequestDestroyed(request);
+  extensions_delegate_->NotifyURLRequestDestroyed(request);
 }
 
 void ChromeNetworkDelegate::OnPACScriptError(int line_number,
                                              const base::string16& error) {
-  extensions_delegate_->OnPACScriptError(line_number, error);
+  extensions_delegate_->NotifyPACScriptError(line_number, error);
 }
 
 net::NetworkDelegate::AuthRequiredResponse
-ChromeNetworkDelegate::OnAuthRequired(
-    net::URLRequest* request,
-    const net::AuthChallengeInfo& auth_info,
-    const AuthCallback& callback,
-    net::AuthCredentials* credentials) {
-  return extensions_delegate_->OnAuthRequired(
-      request, auth_info, callback, credentials);
+ChromeNetworkDelegate::OnAuthRequired(net::URLRequest* request,
+                                      const net::AuthChallengeInfo& auth_info,
+                                      AuthCallback callback,
+                                      net::AuthCredentials* credentials) {
+  return extensions_delegate_->NotifyAuthRequired(
+      request, auth_info, std::move(callback), credentials);
 }
 
 bool ChromeNetworkDelegate::OnCanGetCookies(
@@ -469,7 +391,7 @@ bool ChromeNetworkDelegate::OnCanSetCookie(const net::URLRequest& request,
         BrowserThread::UI, FROM_HERE,
         base::BindOnce(&TabSpecificContentSettings::CookieChanged,
                        info->GetWebContentsGetterForRequest(), request.url(),
-                       request.site_for_cookies(), cookie, *options, !allow));
+                       request.site_for_cookies(), cookie, !allow));
   }
 
   return allow;
@@ -529,33 +451,39 @@ bool ChromeNetworkDelegate::OnCancelURLRequestWithPolicyViolatingReferrerHeader(
     const net::URLRequest& request,
     const GURL& target_url,
     const GURL& referrer_url) const {
-  ReportInvalidReferrerSend(target_url, referrer_url);
+  // These errors should be handled by the NetworkDelegate wrapper created by
+  // the owning NetworkContext.
+  NOTREACHED();
   return true;
 }
 
 bool ChromeNetworkDelegate::OnCanQueueReportingReport(
     const url::Origin& origin) const {
   if (!cookie_settings_)
-    return true;
+    return false;
 
   return cookie_settings_->IsCookieAccessAllowed(origin.GetURL(),
                                                  origin.GetURL());
 }
 
-bool ChromeNetworkDelegate::OnCanSendReportingReport(
-    const url::Origin& origin) const {
-  if (!cookie_settings_)
-    return true;
+void ChromeNetworkDelegate::OnCanSendReportingReports(
+    std::set<url::Origin> origins,
+    base::OnceCallback<void(std::set<url::Origin>)> result_callback) const {
+  if (!reporting_permissions_checker_) {
+    origins.clear();
+    std::move(result_callback).Run(std::move(origins));
+    return;
+  }
 
-  return cookie_settings_->IsCookieAccessAllowed(origin.GetURL(),
-                                                 origin.GetURL());
+  reporting_permissions_checker_->FilterReportingOrigins(
+      std::move(origins), std::move(result_callback));
 }
 
 bool ChromeNetworkDelegate::OnCanSetReportingClient(
     const url::Origin& origin,
     const GURL& endpoint) const {
   if (!cookie_settings_)
-    return true;
+    return false;
 
   return cookie_settings_->IsCookieAccessAllowed(endpoint, origin.GetURL());
 }
@@ -564,21 +492,7 @@ bool ChromeNetworkDelegate::OnCanUseReportingClient(
     const url::Origin& origin,
     const GURL& endpoint) const {
   if (!cookie_settings_)
-    return true;
+    return false;
 
   return cookie_settings_->IsCookieAccessAllowed(endpoint, origin.GetURL());
-}
-
-void ChromeNetworkDelegate::ReportDataUsageStats(net::URLRequest* request,
-                                                 int64_t tx_bytes,
-                                                 int64_t rx_bytes) {
-  if (!data_use_aggregator_)
-    return;
-
-  if (is_data_usage_off_the_record_) {
-    data_use_aggregator_->ReportOffTheRecordDataUse(tx_bytes, rx_bytes);
-    return;
-  }
-
-  data_use_aggregator_->ReportDataUse(request, tx_bytes, rx_bytes);
 }

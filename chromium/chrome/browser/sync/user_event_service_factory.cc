@@ -9,12 +9,15 @@
 
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sync/model_type_store_service_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/channel_info.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/report_unrecoverable_error.h"
+#include "components/sync/model/model_type_store_service.h"
+#include "components/sync/model_impl/client_tag_based_model_type_processor.h"
 #include "components/sync/user_events/no_op_user_event_service.h"
 #include "components/sync/user_events/user_event_service_impl.h"
 #include "components/sync/user_events/user_event_sync_bridge.h"
@@ -36,7 +39,14 @@ syncer::UserEventService* UserEventServiceFactory::GetForProfile(
 UserEventServiceFactory::UserEventServiceFactory()
     : BrowserContextKeyedServiceFactory(
           "UserEventService",
-          BrowserContextDependencyManager::GetInstance()) {}
+          BrowserContextDependencyManager::GetInstance()) {
+  DependsOn(ModelTypeStoreServiceFactory::GetInstance());
+  // TODO(vitaliii): This is missing
+  // DependsOn(ProfileSyncServiceFactory::GetInstance()), which we can't
+  // simply add because ProfileSyncServiceFactory itself depends on this
+  // factory. This won't be relevant anymore once the separate consents datatype
+  // is fully launched.
+}
 
 UserEventServiceFactory::~UserEventServiceFactory() {}
 
@@ -50,15 +60,16 @@ KeyedService* UserEventServiceFactory::BuildServiceInstanceFor(
     return new syncer::NoOpUserEventService();
   }
 
-  syncer::ModelTypeStoreFactory store_factory =
-      browser_sync::ProfileSyncService::GetModelTypeStoreFactory(
-          profile->GetPath());
-  syncer::ModelTypeSyncBridge::ChangeProcessorFactory processor_factory =
-      base::BindRepeating(&syncer::ModelTypeChangeProcessor::Create,
-                          base::BindRepeating(&syncer::ReportUnrecoverableError,
-                                              chrome::GetChannel()));
+  syncer::OnceModelTypeStoreFactory store_factory =
+      ModelTypeStoreServiceFactory::GetForProfile(profile)->GetStoreFactory();
+
+  auto change_processor =
+      std::make_unique<syncer::ClientTagBasedModelTypeProcessor>(
+          syncer::USER_EVENTS,
+          base::BindRepeating(&syncer::ReportUnrecoverableError,
+                              chrome::GetChannel()));
   auto bridge = std::make_unique<syncer::UserEventSyncBridge>(
-      std::move(store_factory), std::move(processor_factory),
+      std::move(store_factory), std::move(change_processor),
       sync_service->GetGlobalIdMapper());
   return new syncer::UserEventServiceImpl(sync_service, std::move(bridge));
 }

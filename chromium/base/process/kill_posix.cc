@@ -12,12 +12,11 @@
 
 #include "base/debug/activity_tracker.h"
 #include "base/files/file_util.h"
-#include "base/files/scoped_file.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/process/process_iterator.h"
-#include "base/synchronization/waitable_event.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/platform_thread.h"
 #include "build/build_config.h"
 
@@ -136,99 +135,50 @@ bool CleanupProcesses(const FilePath::StringType& executable_name,
 
 namespace {
 
-// Return true if the given child is dead. This will also reap the process.
-// Doesn't block.
-static bool IsChildDead(pid_t child) {
-  int status;
-  const pid_t result = HANDLE_EINTR(waitpid(child, &status, WNOHANG));
-  if (result == -1) {
-    DPLOG(ERROR) << "waitpid(" << child << ")";
-    NOTREACHED();
-  } else if (result > 0) {
-    // The child has died.
-    Process(child).Exited(WIFEXITED(status) ? WEXITSTATUS(status) : -1);
-    return true;
-  }
-
-  return false;
-}
-
-// A thread class which waits for the given child to exit and reaps it.
-// If the child doesn't exit within a couple of seconds, kill it.
 class BackgroundReaper : public PlatformThread::Delegate {
  public:
-  BackgroundReaper(pid_t child, unsigned timeout)
-      : child_(child),
-        timeout_(timeout) {
-  }
+  BackgroundReaper(base::Process child_process, const TimeDelta& wait_time)
+      : child_process_(std::move(child_process)), wait_time_(wait_time) {}
 
-  // Overridden from PlatformThread::Delegate:
   void ThreadMain() override {
-    WaitForChildToDie();
+    if (!wait_time_.is_zero()) {
+      child_process_.WaitForExitWithTimeout(wait_time_, nullptr);
+      kill(child_process_.Handle(), SIGKILL);
+    }
+    child_process_.WaitForExit(nullptr);
     delete this;
   }
 
-  void WaitForChildToDie() {
-    // Wait forever case.
-    if (timeout_ == 0) {
-      pid_t r = HANDLE_EINTR(waitpid(child_, nullptr, 0));
-      if (r != child_) {
-        DPLOG(ERROR) << "While waiting for " << child_
-                     << " to terminate, we got the following result: " << r;
-      }
-      return;
-    }
-
-    // There's no good way to wait for a specific child to exit in a timed
-    // fashion. (No kqueue on Linux), so we just loop and sleep.
-
-    // Wait for 2 * timeout_ 500 milliseconds intervals.
-    for (unsigned i = 0; i < 2 * timeout_; ++i) {
-      PlatformThread::Sleep(TimeDelta::FromMilliseconds(500));
-      if (IsChildDead(child_))
-        return;
-    }
-
-    if (kill(child_, SIGKILL) == 0) {
-      // SIGKILL is uncatchable. Since the signal was delivered, we can
-      // just wait for the process to die now in a blocking manner.
-      if (HANDLE_EINTR(waitpid(child_, nullptr, 0)) < 0)
-        DPLOG(WARNING) << "waitpid";
-    } else {
-      DLOG(ERROR) << "While waiting for " << child_ << " to terminate we"
-                  << " failed to deliver a SIGKILL signal (" << errno << ").";
-    }
-  }
-
  private:
-  const pid_t child_;
-  // Number of seconds to wait, if 0 then wait forever and do not attempt to
-  // kill |child_|.
-  const unsigned timeout_;
-
+  Process child_process_;
+  const TimeDelta wait_time_;
   DISALLOW_COPY_AND_ASSIGN(BackgroundReaper);
 };
 
 }  // namespace
 
 void EnsureProcessTerminated(Process process) {
-  // If the child is already dead, then there's nothing to do.
-  if (IsChildDead(process.Pid()))
+  DCHECK(!process.is_current());
+
+  if (process.WaitForExitWithTimeout(TimeDelta(), nullptr))
     return;
 
-  const unsigned timeout = 2;  // seconds
-  BackgroundReaper* reaper = new BackgroundReaper(process.Pid(), timeout);
-  PlatformThread::CreateNonJoinable(0, reaper);
+  PlatformThread::CreateNonJoinable(
+      0, new BackgroundReaper(std::move(process), TimeDelta::FromSeconds(2)));
 }
 
-void EnsureProcessGetsReaped(ProcessId pid) {
+#if defined(OS_LINUX)
+void EnsureProcessGetsReaped(Process process) {
+  DCHECK(!process.is_current());
+
   // If the child is already dead, then there's nothing to do.
-  if (IsChildDead(pid))
+  if (process.WaitForExitWithTimeout(TimeDelta(), nullptr))
     return;
 
-  BackgroundReaper* reaper = new BackgroundReaper(pid, 0);
-  PlatformThread::CreateNonJoinable(0, reaper);
+  PlatformThread::CreateNonJoinable(
+      0, new BackgroundReaper(std::move(process), TimeDelta()));
 }
+#endif  // defined(OS_LINUX)
 
 #endif  // !defined(OS_MACOSX)
 #endif  // !defined(OS_NACL_NONSFI)

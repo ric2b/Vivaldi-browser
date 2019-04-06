@@ -6,7 +6,7 @@
 #define CONTENT_PUBLIC_BROWSER_WEB_DRAG_DEST_DELEGATE_H_
 
 #include "base/strings/string16.h"
-#include "third_party/WebKit/public/platform/WebDragOperation.h"
+#include "third_party/blink/public/platform/web_drag_operation.h"
 
 namespace ui {
 class OSExchangeData;

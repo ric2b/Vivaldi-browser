@@ -15,6 +15,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
+#include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -127,6 +128,15 @@ GURL GetReauthURL(signin_metrics::AccessPoint access_point,
 }  // namespace
 
 namespace signin {
+
+const char kSignInPromoQueryKeyAccessPoint[] = "access_point";
+const char kSignInPromoQueryKeyAutoClose[] = "auto_close";
+const char kSignInPromoQueryKeyContinue[] = "continue";
+const char kSignInPromoQueryKeyForceKeepData[] = "force_keep_data";
+const char kSignInPromoQueryKeyReason[] = "reason";
+const char kSignInPromoQueryKeySource[] = "source";
+const char kSignInPromoQueryKeyConstrained[] = "constrained";
+const char kSigninPromoLandingURLSuccessPage[] = "success.html";
 
 bool ShouldShowPromoAtStartup(Profile* profile, bool is_new_profile) {
   DCHECK(profile);
@@ -275,17 +285,12 @@ GURL GetReauthURLWithEmailForDialog(signin_metrics::AccessPoint access_point,
 }
 
 GURL GetSigninURLForDice(Profile* profile, const std::string& email) {
-  GURL url;
-  if (signin::GetAccountConsistencyMethod() ==
-      signin::AccountConsistencyMethod::kDicePrepareMigration) {
-    // Add account does not support an email hint, so the email will not be
-    // autofilled when the Dice prepare migration is enabled.
-    url = GaiaUrls::GetInstance()->add_account_url();
-  } else {
-    url = GaiaUrls::GetInstance()->signin_chrome_sync_dice();
-    if (!email.empty())
-      url = net::AppendQueryParameter(url, "email_hint", email);
-  }
+  DCHECK(signin::DiceMethodGreaterOrEqual(
+      AccountConsistencyModeManager::GetMethodForProfile(profile),
+      signin::AccountConsistencyMethod::kDicePrepareMigration));
+  GURL url = GaiaUrls::GetInstance()->signin_chrome_sync_dice();
+  if (!email.empty())
+    url = net::AppendQueryParameter(url, "email_hint", email);
   // Pass www.gooogle.com as the continue URL as otherwise Gaia navigates to
   // myaccount which may be very confusing for the user.
   return net::AppendQueryParameter(
@@ -372,17 +377,6 @@ bool IsAutoCloseEnabledInURL(const GURL& url) {
   return false;
 }
 
-bool ShouldShowAccountManagement(const GURL& url) {
-  std::string value;
-  if (net::GetValueForKeyInQuery(
-          url, kSignInPromoQueryKeyShowAccountManagement, &value)) {
-    int enabled = 0;
-    if (base::StringToInt(value, &enabled) && enabled == 1)
-      return IsAccountConsistencyMirrorEnabled();
-  }
-  return false;
-}
-
 void ForceWebBasedSigninFlowForTesting(bool force) {
   g_force_web_based_signin_flow = force;
 }
@@ -393,6 +387,7 @@ void RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kSignInPromoUserSkipped, false);
   registry->RegisterBooleanPref(prefs::kSignInPromoShowOnFirstRunAllowed, true);
   registry->RegisterBooleanPref(prefs::kSignInPromoShowNTPBubble, false);
+  registry->RegisterIntegerPref(prefs::kDiceSigninUserMenuPromoCount, 0);
 }
 
 }  // namespace signin

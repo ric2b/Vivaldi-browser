@@ -19,7 +19,6 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_task_environment.h"
 #include "crypto/scoped_nss_types.h"
 #include "crypto/scoped_test_nss_db.h"
 #include "net/base/hash_value.h"
@@ -31,8 +30,8 @@
 #include "net/cert/x509_util_nss.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/gtest_util.h"
-#include "net/test/net_test_suite.h"
 #include "net/test/test_data_directory.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "net/third_party/mozilla_security_manager/nsNSSCertificateDB.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -60,7 +59,7 @@ std::string GetSubjectCN(CERTCertificate* cert) {
 
 }  // namespace
 
-class CertDatabaseNSSTest : public testing::Test {
+class CertDatabaseNSSTest : public TestWithScopedTaskEnvironment {
  public:
   void SetUp() override {
     ASSERT_TRUE(test_nssdb_.is_open());
@@ -124,14 +123,17 @@ class CertDatabaseNSSTest : public testing::Test {
   }
 
   std::unique_ptr<NSSCertDatabase> cert_db_;
-  const CertificateList empty_cert_list_;
+  // When building with libstdc++, |empty_cert_list_| does not have a default
+  // constructor.  Initialize it explicitly so that CertDatabaseNSSTest gets a
+  // default constructor.
+  const CertificateList empty_cert_list_ = CertificateList();
   crypto::ScopedTestNSSDB test_nssdb_;
   crypto::ScopedPK11Slot public_slot_;
 };
 
 TEST_F(CertDatabaseNSSTest, ListCertsSync) {
-  // This test isn't terribly useful, though it will at least let valgrind test
-  // for leaks.
+  // This test isn't terribly useful, though it might help with memory
+  // leak tests.
   ScopedCERTCertificateList certs = cert_db_->ListCertsSync();
   // The test DB is empty, but let's assume there will always be something in
   // the other slots.
@@ -139,13 +141,13 @@ TEST_F(CertDatabaseNSSTest, ListCertsSync) {
 }
 
 TEST_F(CertDatabaseNSSTest, ListCerts) {
-  // This test isn't terribly useful, though it will at least let valgrind test
-  // for leaks.
+  // This test isn't terribly useful, though it might help with memory
+  // leak tests.
   ScopedCERTCertificateList certs;
   cert_db_->ListCerts(base::Bind(&SwapCertList, base::Unretained(&certs)));
   EXPECT_EQ(0U, certs.size());
 
-  NetTestSuite::GetScopedTaskEnvironment()->RunUntilIdle();
+  RunUntilIdle();
 
   // The test DB is empty, but let's assume there will always be something in
   // the other slots.
@@ -391,9 +393,10 @@ TEST_F(CertDatabaseNSSTest, ImportCA_NotCACert) {
 
 TEST_F(CertDatabaseNSSTest, ImportCACertHierarchy) {
   ScopedCERTCertificateList certs;
-  ASSERT_TRUE(ReadCertIntoList("dod_root_ca_2_cert.der", &certs));
-  ASSERT_TRUE(ReadCertIntoList("dod_ca_17_cert.der", &certs));
-  ASSERT_TRUE(ReadCertIntoList("www_us_army_mil_cert.der", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-D-by-D.pem", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-C-by-D.pem", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-B-by-C.pem", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-A-by-B.pem", &certs));
 
   // Import it.
   NSSCertDatabase::ImportCertFailureList failed;
@@ -405,21 +408,20 @@ TEST_F(CertDatabaseNSSTest, ImportCACertHierarchy) {
       certs, NSSCertDatabase::TRUSTED_SSL | NSSCertDatabase::TRUSTED_EMAIL,
       &failed));
 
-  ASSERT_EQ(2U, failed.size());
-  EXPECT_EQ("DOD CA-17", GetSubjectCN(failed[0].certificate.get()));
-  EXPECT_THAT(failed[0].net_error,
-              IsError(ERR_FAILED));  // The certificate expired.
-  EXPECT_EQ("www.us.army.mil", GetSubjectCN(failed[1].certificate.get()));
-  EXPECT_THAT(failed[1].net_error, IsError(ERR_IMPORT_CA_CERT_NOT_CA));
+  ASSERT_EQ(1U, failed.size());
+  EXPECT_EQ("127.0.0.1", GetSubjectCN(failed[0].certificate.get()));
+  EXPECT_THAT(failed[0].net_error, IsError(ERR_IMPORT_CA_CERT_NOT_CA));
 
   ScopedCERTCertificateList cert_list = ListCerts();
-  ASSERT_EQ(1U, cert_list.size());
-  EXPECT_EQ("DoD Root CA 2", GetSubjectCN(cert_list[0].get()));
+  ASSERT_EQ(3U, cert_list.size());
+  EXPECT_EQ("B CA - Multi-root", GetSubjectCN(cert_list[0].get()));
+  EXPECT_EQ("D Root CA - Multi-root", GetSubjectCN(cert_list[1].get()));
+  EXPECT_EQ("C CA - Multi-root", GetSubjectCN(cert_list[2].get()));
 }
 
 TEST_F(CertDatabaseNSSTest, ImportCACertHierarchyDupeRoot) {
   ScopedCERTCertificateList certs;
-  ASSERT_TRUE(ReadCertIntoList("dod_root_ca_2_cert.der", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-D-by-D.pem", &certs));
 
   // First import just the root.
   NSSCertDatabase::ImportCertFailureList failed;
@@ -430,10 +432,11 @@ TEST_F(CertDatabaseNSSTest, ImportCACertHierarchyDupeRoot) {
   EXPECT_EQ(0U, failed.size());
   ScopedCERTCertificateList cert_list = ListCerts();
   ASSERT_EQ(1U, cert_list.size());
-  EXPECT_EQ("DoD Root CA 2", GetSubjectCN(cert_list[0].get()));
+  EXPECT_EQ("D Root CA - Multi-root", GetSubjectCN(cert_list[0].get()));
 
-  ASSERT_TRUE(ReadCertIntoList("dod_ca_17_cert.der", &certs));
-  ASSERT_TRUE(ReadCertIntoList("www_us_army_mil_cert.der", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-C-by-D.pem", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-B-by-C.pem", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-A-by-B.pem", &certs));
 
   // Now import with the other certs in the list too.  Even though the root is
   // already present, we should still import the rest.
@@ -442,24 +445,24 @@ TEST_F(CertDatabaseNSSTest, ImportCACertHierarchyDupeRoot) {
       certs, NSSCertDatabase::TRUSTED_SSL | NSSCertDatabase::TRUSTED_EMAIL,
       &failed));
 
-  ASSERT_EQ(3U, failed.size());
-  EXPECT_EQ("DoD Root CA 2", GetSubjectCN(failed[0].certificate.get()));
+  ASSERT_EQ(2U, failed.size());
+  EXPECT_EQ("D Root CA - Multi-root",
+            GetSubjectCN(failed[0].certificate.get()));
   EXPECT_THAT(failed[0].net_error, IsError(ERR_IMPORT_CERT_ALREADY_EXISTS));
-  EXPECT_EQ("DOD CA-17", GetSubjectCN(failed[1].certificate.get()));
-  EXPECT_THAT(failed[1].net_error,
-              IsError(ERR_FAILED));  // The certificate expired.
-  EXPECT_EQ("www.us.army.mil", GetSubjectCN(failed[2].certificate.get()));
-  EXPECT_THAT(failed[2].net_error, IsError(ERR_IMPORT_CA_CERT_NOT_CA));
+  EXPECT_EQ("127.0.0.1", GetSubjectCN(failed[1].certificate.get()));
+  EXPECT_THAT(failed[1].net_error, IsError(ERR_IMPORT_CA_CERT_NOT_CA));
 
   cert_list = ListCerts();
-  ASSERT_EQ(1U, cert_list.size());
-  EXPECT_EQ("DoD Root CA 2", GetSubjectCN(cert_list[0].get()));
+  ASSERT_EQ(3U, cert_list.size());
+  EXPECT_EQ("B CA - Multi-root", GetSubjectCN(cert_list[0].get()));
+  EXPECT_EQ("D Root CA - Multi-root", GetSubjectCN(cert_list[1].get()));
+  EXPECT_EQ("C CA - Multi-root", GetSubjectCN(cert_list[2].get()));
 }
 
 TEST_F(CertDatabaseNSSTest, ImportCACertHierarchyUntrusted) {
   ScopedCERTCertificateList certs;
-  ASSERT_TRUE(ReadCertIntoList("dod_root_ca_2_cert.der", &certs));
-  ASSERT_TRUE(ReadCertIntoList("dod_ca_17_cert.der", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-D-by-D.pem", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-C-by-D.pem", &certs));
 
   // Import it.
   NSSCertDatabase::ImportCertFailureList failed;
@@ -467,21 +470,21 @@ TEST_F(CertDatabaseNSSTest, ImportCACertHierarchyUntrusted) {
                                       &failed));
 
   ASSERT_EQ(1U, failed.size());
-  EXPECT_EQ("DOD CA-17", GetSubjectCN(failed[0].certificate.get()));
+  EXPECT_EQ("C CA - Multi-root", GetSubjectCN(failed[0].certificate.get()));
   // TODO(mattm): should check for net error equivalent of
   // SEC_ERROR_UNTRUSTED_ISSUER
   EXPECT_THAT(failed[0].net_error, IsError(ERR_FAILED));
 
   ScopedCERTCertificateList cert_list = ListCerts();
   ASSERT_EQ(1U, cert_list.size());
-  EXPECT_EQ("DoD Root CA 2", GetSubjectCN(cert_list[0].get()));
+  EXPECT_EQ("D Root CA - Multi-root", GetSubjectCN(cert_list[0].get()));
 }
 
 TEST_F(CertDatabaseNSSTest, ImportCACertHierarchyTree) {
   ScopedCERTCertificateList certs;
-  ASSERT_TRUE(ReadCertIntoList("dod_root_ca_2_cert.der", &certs));
-  ASSERT_TRUE(ReadCertIntoList("dod_ca_13_cert.der", &certs));
-  ASSERT_TRUE(ReadCertIntoList("dod_ca_17_cert.der", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-E-by-E.pem", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-C-by-E.pem", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-F-by-E.pem", &certs));
 
   // Import it.
   NSSCertDatabase::ImportCertFailureList failed;
@@ -489,17 +492,11 @@ TEST_F(CertDatabaseNSSTest, ImportCACertHierarchyTree) {
       certs, NSSCertDatabase::TRUSTED_SSL | NSSCertDatabase::TRUSTED_EMAIL,
       &failed));
 
-  EXPECT_EQ(2U, failed.size());
-  EXPECT_EQ("DOD CA-13", GetSubjectCN(failed[0].certificate.get()));
-  EXPECT_THAT(failed[0].net_error,
-              IsError(ERR_FAILED));  // The certificate expired.
-  EXPECT_EQ("DOD CA-17", GetSubjectCN(failed[1].certificate.get()));
-  EXPECT_THAT(failed[1].net_error,
-              IsError(ERR_FAILED));  // The certificate expired.
-
   ScopedCERTCertificateList cert_list = ListCerts();
-  ASSERT_EQ(1U, cert_list.size());
-  EXPECT_EQ("DoD Root CA 2", GetSubjectCN(cert_list[0].get()));
+  ASSERT_EQ(3U, cert_list.size());
+  EXPECT_EQ("F CA - Multi-root", GetSubjectCN(cert_list[0].get()));
+  EXPECT_EQ("C CA - Multi-root", GetSubjectCN(cert_list[1].get()));
+  EXPECT_EQ("E Root CA - Multi-root", GetSubjectCN(cert_list[2].get()));
 }
 
 TEST_F(CertDatabaseNSSTest, ImportCACertNotHierarchy) {
@@ -507,23 +504,21 @@ TEST_F(CertDatabaseNSSTest, ImportCACertNotHierarchy) {
       GetTestCertsDirectory(), "root_ca_cert.pem",
       X509Certificate::FORMAT_AUTO);
   ASSERT_EQ(1U, certs.size());
-  ASSERT_TRUE(ReadCertIntoList("dod_ca_13_cert.der", &certs));
-  ASSERT_TRUE(ReadCertIntoList("dod_ca_17_cert.der", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-F-by-E.pem", &certs));
+  ASSERT_TRUE(ReadCertIntoList("multi-root-C-by-E.pem", &certs));
 
   // Import it.
   NSSCertDatabase::ImportCertFailureList failed;
-  EXPECT_TRUE(cert_db_->ImportCACerts(certs,
-                                      NSSCertDatabase::TRUSTED_SSL |
-                                          NSSCertDatabase::TRUSTED_EMAIL |
-                                          NSSCertDatabase::TRUSTED_OBJ_SIGN,
-                                      &failed));
+  EXPECT_TRUE(cert_db_->ImportCACerts(
+      certs, NSSCertDatabase::TRUSTED_SSL | NSSCertDatabase::TRUSTED_EMAIL,
+      &failed));
 
   ASSERT_EQ(2U, failed.size());
   // TODO(mattm): should check for net error equivalent of
   // SEC_ERROR_UNKNOWN_ISSUER
-  EXPECT_EQ("DOD CA-13", GetSubjectCN(failed[0].certificate.get()));
+  EXPECT_EQ("F CA - Multi-root", GetSubjectCN(failed[0].certificate.get()));
   EXPECT_THAT(failed[0].net_error, IsError(ERR_FAILED));
-  EXPECT_EQ("DOD CA-17", GetSubjectCN(failed[1].certificate.get()));
+  EXPECT_EQ("C CA - Multi-root", GetSubjectCN(failed[1].certificate.get()));
   EXPECT_THAT(failed[1].net_error, IsError(ERR_FAILED));
 
   ScopedCERTCertificateList cert_list = ListCerts();

@@ -22,7 +22,8 @@ chrome.automation.RoleType = {
   ROOT_WEB_AREA: 'rootWebArea',
   STATIC_TEXT: 'staticText',
   INLINE_TEXT_BOX: 'inlineTextBox',
-  PARAGRAPH: 'paragraph'
+  PARAGRAPH: 'paragraph',
+  TEXT_FIELD: 'textField',
 };
 
 chrome.automation.StateType = {
@@ -37,4 +38,12 @@ chrome.metricsPrivate = {
 
 chrome.commandLinePrivate = {
   hasSwitch: function() {}
+};
+
+chrome.accessibilityPrivate = {};
+
+chrome.accessibilityPrivate.SelectToSpeakState = {
+  INACTIVE: 'inactive',
+  SELECTING: 'selecting',
+  SPEAKING: 'speaking'
 };

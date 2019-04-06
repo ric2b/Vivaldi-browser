@@ -29,7 +29,6 @@ bool StructTraits<viz::mojom::CompositorFrameMetadataDataView,
 
   out->min_page_scale_factor = data.min_page_scale_factor();
   out->max_page_scale_factor = data.max_page_scale_factor();
-  out->root_overflow_x_hidden = data.root_overflow_x_hidden();
   out->root_overflow_y_hidden = data.root_overflow_y_hidden();
   out->may_contain_video = data.may_contain_video();
   out->is_resourceless_software_draw_with_scroll_or_animation =
@@ -40,12 +39,13 @@ bool StructTraits<viz::mojom::CompositorFrameMetadataDataView,
   out->bottom_controls_shown_ratio = data.bottom_controls_shown_ratio();
   out->content_source_id = data.content_source_id();
   out->frame_token = data.frame_token();
-  out->presentation_token = data.presentation_token();
+  out->send_frame_token_to_embedder = data.send_frame_token_to_embedder();
+  out->request_presentation_feedback = data.request_presentation_feedback();
   out->root_background_color = data.root_background_color();
   return data.ReadSelection(&out->selection) &&
          data.ReadLatencyInfo(&out->latency_info) &&
          data.ReadReferencedSurfaces(&out->referenced_surfaces) &&
-         data.ReadDeadlineInFrames(&out->deadline_in_frames) &&
+         data.ReadDeadline(&out->deadline) &&
          data.ReadActivationDependencies(&out->activation_dependencies) &&
          data.ReadBeginFrameAck(&out->begin_frame_ack);
 }

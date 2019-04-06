@@ -26,8 +26,7 @@ const char kImageDatabaseUMAClientName[] = "NTPSnippetImages";
 const char kSnippetDatabaseFolder[] = "snippets";
 const char kImageDatabaseFolder[] = "images";
 
-const size_t kDatabaseWriteBufferSizeBytes = 512 << 10;
-const size_t kDatabaseWriteBufferSizeBytesForLowEndDevice = 128 << 10;
+const size_t kDatabaseWriteBufferSizeBytes = 128 << 10;
 }  // namespace
 
 namespace ntp_snippets {
@@ -59,11 +58,9 @@ RemoteSuggestionsDatabase::RemoteSuggestionsDatabase(
       weak_ptr_factory_(this) {
   base::FilePath snippet_dir = database_dir.AppendASCII(kSnippetDatabaseFolder);
   leveldb_env::Options options = leveldb_proto::CreateSimpleOptions();
-  if (base::SysInfo::IsLowEndDevice()) {
-    options.write_buffer_size = kDatabaseWriteBufferSizeBytesForLowEndDevice;
-  } else {
-    options.write_buffer_size = kDatabaseWriteBufferSizeBytes;
-  }
+  options.reuse_logs = false;  // Consumes less RAM over time.
+  options.write_buffer_size = kDatabaseWriteBufferSizeBytes;
+
   database_->Init(kDatabaseUMAClientName, snippet_dir, options,
                   base::Bind(&RemoteSuggestionsDatabase::OnDatabaseInited,
                              weak_ptr_factory_.GetWeakPtr()));
@@ -91,11 +88,11 @@ void RemoteSuggestionsDatabase::SetErrorCallback(
   error_callback_ = error_callback;
 }
 
-void RemoteSuggestionsDatabase::LoadSnippets(const SnippetsCallback& callback) {
+void RemoteSuggestionsDatabase::LoadSnippets(SnippetsCallback callback) {
   if (IsInitialized()) {
-    LoadSnippetsImpl(callback);
+    LoadSnippetsImpl(std::move(callback));
   } else {
-    pending_snippets_callbacks_.emplace_back(callback);
+    pending_snippets_callbacks_.emplace_back(std::move(callback));
   }
 }
 
@@ -135,13 +132,12 @@ void RemoteSuggestionsDatabase::DeleteSnippets(
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
-void RemoteSuggestionsDatabase::LoadImage(
-    const std::string& snippet_id,
-    const SnippetImageCallback& callback) {
+void RemoteSuggestionsDatabase::LoadImage(const std::string& snippet_id,
+                                          SnippetImageCallback callback) {
   if (IsInitialized()) {
-    LoadImageImpl(snippet_id, callback);
+    LoadImageImpl(snippet_id, std::move(callback));
   } else {
-    pending_image_callbacks_.emplace_back(snippet_id, callback);
+    pending_image_callbacks_.emplace_back(snippet_id, std::move(callback));
   }
 }
 
@@ -178,10 +174,9 @@ void RemoteSuggestionsDatabase::DeleteImages(
 void RemoteSuggestionsDatabase::GarbageCollectImages(
     std::unique_ptr<std::set<std::string>> alive_snippet_ids) {
   DCHECK(image_database_initialized_);
-  image_database_->LoadKeys(
-      base::Bind(&RemoteSuggestionsDatabase::DeleteUnreferencedImages,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 base::Passed(std::move(alive_snippet_ids))));
+  image_database_->LoadKeys(base::BindOnce(
+      &RemoteSuggestionsDatabase::DeleteUnreferencedImages,
+      weak_ptr_factory_.GetWeakPtr(), std::move(alive_snippet_ids)));
 }
 
 void RemoteSuggestionsDatabase::OnDatabaseInited(bool success) {
@@ -198,7 +193,7 @@ void RemoteSuggestionsDatabase::OnDatabaseInited(bool success) {
 }
 
 void RemoteSuggestionsDatabase::OnDatabaseLoaded(
-    const SnippetsCallback& callback,
+    SnippetsCallback callback,
     bool success,
     std::unique_ptr<std::vector<SnippetProto>> entries) {
   if (!success) {
@@ -227,7 +222,7 @@ void RemoteSuggestionsDatabase::OnDatabaseLoaded(
     }
   }
 
-  callback.Run(std::move(snippets));
+  std::move(callback).Run(std::move(snippets));
 
   // If any of the snippet protos couldn't be converted to actual snippets,
   // clean them up now.
@@ -257,7 +252,7 @@ void RemoteSuggestionsDatabase::OnImageDatabaseInited(bool success) {
 }
 
 void RemoteSuggestionsDatabase::OnImageDatabaseLoaded(
-    const SnippetImageCallback& callback,
+    SnippetImageCallback callback,
     bool success,
     std::unique_ptr<SnippetImageProto> entry) {
   if (!success) {
@@ -267,12 +262,12 @@ void RemoteSuggestionsDatabase::OnImageDatabaseLoaded(
   }
 
   if (!entry) {
-    callback.Run(std::string());
+    std::move(callback).Run(std::string());
     return;
   }
 
   std::unique_ptr<std::string> data(entry->release_data());
-  callback.Run(std::move(*data));
+  std::move(callback).Run(std::move(*data));
 }
 
 void RemoteSuggestionsDatabase::OnImageDatabaseSaved(bool success) {
@@ -293,23 +288,22 @@ void RemoteSuggestionsDatabase::OnDatabaseError() {
 void RemoteSuggestionsDatabase::ProcessPendingLoads() {
   DCHECK(IsInitialized());
 
-  for (const auto& callback : pending_snippets_callbacks_) {
-    LoadSnippetsImpl(callback);
+  for (auto& callback : pending_snippets_callbacks_) {
+    LoadSnippetsImpl(std::move(callback));
   }
   pending_snippets_callbacks_.clear();
 
-  for (const auto& id_callback : pending_image_callbacks_) {
-    LoadImageImpl(id_callback.first, id_callback.second);
+  for (auto& id_callback : pending_image_callbacks_) {
+    LoadImageImpl(id_callback.first, std::move(id_callback.second));
   }
   pending_image_callbacks_.clear();
 }
 
-void RemoteSuggestionsDatabase::LoadSnippetsImpl(
-    const SnippetsCallback& callback) {
+void RemoteSuggestionsDatabase::LoadSnippetsImpl(SnippetsCallback callback) {
   DCHECK(IsInitialized());
   database_->LoadEntries(
-      base::Bind(&RemoteSuggestionsDatabase::OnDatabaseLoaded,
-                 weak_ptr_factory_.GetWeakPtr(), callback));
+      base::BindOnce(&RemoteSuggestionsDatabase::OnDatabaseLoaded,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void RemoteSuggestionsDatabase::SaveSnippetsImpl(
@@ -324,13 +318,13 @@ void RemoteSuggestionsDatabase::SaveSnippetsImpl(
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
-void RemoteSuggestionsDatabase::LoadImageImpl(
-    const std::string& snippet_id,
-    const SnippetImageCallback& callback) {
+void RemoteSuggestionsDatabase::LoadImageImpl(const std::string& snippet_id,
+                                              SnippetImageCallback callback) {
   DCHECK(IsInitialized());
   image_database_->GetEntry(
-      snippet_id, base::Bind(&RemoteSuggestionsDatabase::OnImageDatabaseLoaded,
-                             weak_ptr_factory_.GetWeakPtr(), callback));
+      snippet_id,
+      base::BindOnce(&RemoteSuggestionsDatabase::OnImageDatabaseLoaded,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void RemoteSuggestionsDatabase::DeleteUnreferencedImages(

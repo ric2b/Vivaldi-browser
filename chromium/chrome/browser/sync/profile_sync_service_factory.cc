@@ -4,16 +4,17 @@
 
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 
+#include <string>
 #include <utility>
 
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/consent_auditor/consent_auditor_factory.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/dom_distiller/dom_distiller_service_factory.h"
 #include "chrome/browser/gcm/gcm_profile_service_factory.h"
@@ -26,12 +27,12 @@
 #include "chrome/browser/signin/about_signin_internals_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
-#include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/unified_consent_helper.h"
 #include "chrome/browser/spellchecker/spellcheck_factory.h"
 #include "chrome/browser/sync/chrome_sync_client.h"
 #include "chrome/browser/sync/sessions/sync_sessions_web_contents_router_factory.h"
-#include "chrome/browser/sync/supervised_user_signin_manager_wrapper.h"
 #include "chrome/browser/sync/user_event_service_factory.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/undo/bookmark_undo_service_factory.h"
@@ -41,13 +42,16 @@
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/network_time/network_time_tracker.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/sync/driver/signin_manager_wrapper.h"
 #include "components/sync/driver/startup_controller.h"
 #include "components/sync/driver/sync_util.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
-#include "extensions/features/features.h"
+#include "content/public/browser/storage_partition.h"
+#include "extensions/buildflags/buildflags.h"
+#include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -56,8 +60,6 @@
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/legacy/supervised_user_shared_settings_service_factory.h"
-#include "chrome/browser/supervised_user/legacy/supervised_user_sync_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -144,6 +146,7 @@ ProfileSyncServiceFactory::ProfileSyncServiceFactory()
   DependsOn(BookmarkUndoServiceFactory::GetInstance());
   DependsOn(browser_sync::UserEventServiceFactory::GetInstance());
   DependsOn(ChromeSigninClientFactory::GetInstance());
+  DependsOn(ConsentAuditorFactory::GetInstance());
   DependsOn(dom_distiller::DomDistillerServiceFactory::GetInstance());
   DependsOn(GaiaCookieManagerServiceFactory::GetInstance());
   DependsOn(gcm::GCMProfileServiceFactory::GetInstance());
@@ -152,17 +155,13 @@ ProfileSyncServiceFactory::ProfileSyncServiceFactory()
   DependsOn(ThemeServiceFactory::GetInstance());
 #endif  // !defined(OS_ANDROID)
   DependsOn(HistoryServiceFactory::GetInstance());
+  DependsOn(IdentityManagerFactory::GetInstance());
   DependsOn(invalidation::ProfileInvalidationProviderFactory::GetInstance());
   DependsOn(PasswordStoreFactory::GetInstance());
-  DependsOn(ProfileOAuth2TokenServiceFactory::GetInstance());
   DependsOn(SigninManagerFactory::GetInstance());
   DependsOn(SpellcheckServiceFactory::GetInstance());
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   DependsOn(SupervisedUserSettingsServiceFactory::GetInstance());
-#if !defined(OS_ANDROID)
-  DependsOn(SupervisedUserSharedSettingsServiceFactory::GetInstance());
-  DependsOn(SupervisedUserSyncServiceFactory::GetInstance());
-#endif  // !defined(OS_ANDROID)
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
   DependsOn(sync_sessions::SyncSessionsWebContentsRouterFactory::GetInstance());
   DependsOn(TemplateURLServiceFactory::GetInstance());
@@ -194,10 +193,14 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
   Profile* profile = Profile::FromBrowserContext(context);
 
   init_params.network_time_update_callback = base::Bind(&UpdateNetworkTime);
-  init_params.base_directory = profile->GetPath();
   init_params.url_request_context = profile->GetRequestContext();
+  init_params.url_loader_factory =
+      content::BrowserContext::GetDefaultStoragePartition(profile)
+          ->GetURLLoaderFactoryForBrowserProcess();
   init_params.debug_identifier = profile->GetDebugName();
   init_params.channel = chrome::GetChannel();
+  init_params.user_events_separate_pref_group =
+      IsUnifiedConsentEnabled(profile);
 
   if (!client_factory_) {
     init_params.sync_client =
@@ -225,13 +228,14 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
     if (local_sync_backend_folder.empty())
       return nullptr;
 
+    init_params.signin_scoped_device_id_callback =
+        base::BindRepeating([]() { return std::string("local_device"); });
+
     init_params.start_behavior = ProfileSyncService::AUTO_START;
   }
 #endif  // defined(OS_WIN)
 
   if (!local_sync_backend_enabled) {
-    SigninManagerBase* signin = SigninManagerFactory::GetForProfile(profile);
-
     // Always create the GCMProfileService instance such that we can listen to
     // the profile notifications and purge the GCM store when the profile is
     // being signed out.
@@ -241,10 +245,15 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
     // once http://crbug.com/171406 has been fixed.
     AboutSigninInternalsFactory::GetForProfile(profile);
 
-    init_params.signin_wrapper =
-        std::make_unique<SupervisedUserSigninManagerWrapper>(profile, signin);
-    init_params.oauth2_token_service =
-        ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
+    init_params.signin_wrapper = std::make_unique<SigninManagerWrapper>(
+        IdentityManagerFactory::GetForProfile(profile),
+        SigninManagerFactory::GetForProfile(profile));
+    // Note: base::Unretained(signin_client) is safe because the SigninClient is
+    // guaranteed to outlive the PSS, per a DependsOn() above (and because PSS
+    // clears the callback in its Shutdown()).
+    init_params.signin_scoped_device_id_callback = base::BindRepeating(
+        &SigninClient::GetSigninScopedDeviceId,
+        base::Unretained(ChromeSigninClientFactory::GetForProfile(profile)));
     init_params.gaia_cookie_manager_service =
         GaiaCookieManagerServiceFactory::GetForProfile(profile);
 

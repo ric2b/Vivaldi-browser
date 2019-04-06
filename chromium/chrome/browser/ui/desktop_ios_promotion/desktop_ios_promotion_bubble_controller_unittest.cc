@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/desktop_ios_promotion/desktop_ios_promotion_bubble_controller.h"
 
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_timeouts.h"
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/browser/sync/profile_sync_test_util.h"
@@ -22,6 +22,7 @@
 #include "components/sync_preferences/pref_service_mock_factory.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -31,7 +32,7 @@ namespace {
 
 class FakeSMSService : public SMSService {
  public:
-  FakeSMSService() : SMSService(nullptr, nullptr, nullptr) {}
+  FakeSMSService() : SMSService(nullptr, nullptr) {}
   ~FakeSMSService() override {}
   MOCK_METHOD1(QueryPhoneNumber, void(const PhoneNumberCallback&));
   MOCK_METHOD2(SendSMS,

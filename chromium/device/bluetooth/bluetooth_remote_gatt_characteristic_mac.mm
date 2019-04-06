@@ -129,28 +129,6 @@ bool BluetoothRemoteGattCharacteristicMac::IsNotifying() const {
   return [cb_characteristic_ isNotifying] == YES;
 }
 
-std::vector<BluetoothRemoteGattDescriptor*>
-BluetoothRemoteGattCharacteristicMac::GetDescriptors() const {
-  std::vector<BluetoothRemoteGattDescriptor*> gatt_descriptors;
-  for (const auto& iter : gatt_descriptor_macs_) {
-    BluetoothRemoteGattDescriptor* gatt_descriptor =
-        static_cast<BluetoothRemoteGattDescriptor*>(iter.second.get());
-    gatt_descriptors.push_back(gatt_descriptor);
-  }
-  return gatt_descriptors;
-}
-
-BluetoothRemoteGattDescriptor*
-BluetoothRemoteGattCharacteristicMac::GetDescriptor(
-    const std::string& identifier) const {
-  auto searched_pair = gatt_descriptor_macs_.find(identifier);
-  if (searched_pair == gatt_descriptor_macs_.end()) {
-    return nullptr;
-  }
-  return static_cast<BluetoothRemoteGattDescriptor*>(
-      searched_pair->second.get());
-}
-
 void BluetoothRemoteGattCharacteristicMac::ReadRemoteCharacteristic(
     const ValueCallback& callback,
     const ErrorCallback& error_callback) {
@@ -211,6 +189,26 @@ void BluetoothRemoteGattCharacteristicMac::WriteRemoteCharacteristic(
         base::Bind(&BluetoothRemoteGattCharacteristicMac::DidWriteValue,
                    weak_ptr_factory_.GetWeakPtr(), nil));
   }
+}
+
+bool BluetoothRemoteGattCharacteristicMac::WriteWithoutResponse(
+    base::span<const uint8_t> value) {
+  if (!IsWritableWithoutResponse()) {
+    VLOG(1) << *this << ": Characteristic not writable without response.";
+    return false;
+  }
+  if (HasPendingRead() || HasPendingWrite()) {
+    VLOG(1) << *this << ": Characteristic write already in progress.";
+    return false;
+  }
+
+  VLOG(1) << *this << ": Write characteristic without response.";
+  base::scoped_nsobject<NSData> nsdata_value(
+      [[NSData alloc] initWithBytes:value.data() length:value.size()]);
+  [GetCBPeripheral() writeValue:nsdata_value
+              forCharacteristic:cb_characteristic_
+                           type:CBCharacteristicWriteWithoutResponse];
+  return true;
 }
 
 void BluetoothRemoteGattCharacteristicMac::SubscribeToNotifications(
@@ -369,7 +367,7 @@ void BluetoothRemoteGattCharacteristicMac::DidDiscoverDescriptors() {
   VLOG(1) << *this << ": Did discover descriptors.";
   --discovery_pending_count_;
   std::unordered_set<std::string> descriptor_identifier_to_remove;
-  for (const auto& iter : gatt_descriptor_macs_) {
+  for (const auto& iter : descriptors_) {
     descriptor_identifier_to_remove.insert(iter.first);
   }
 
@@ -384,21 +382,19 @@ void BluetoothRemoteGattCharacteristicMac::DidDiscoverDescriptors() {
     }
     gatt_descriptor_mac =
         new BluetoothRemoteGattDescriptorMac(this, cb_descriptor);
-    const std::string& identifier = gatt_descriptor_mac->GetIdentifier();
-    auto result_iter = gatt_descriptor_macs_.insert(
-        {identifier, base::WrapUnique(gatt_descriptor_mac)});
-    DCHECK(result_iter.second);
+    bool result = AddDescriptor(base::WrapUnique(gatt_descriptor_mac));
+    DCHECK(result);
     GetMacAdapter()->NotifyGattDescriptorAdded(gatt_descriptor_mac);
     VLOG(1) << *gatt_descriptor_mac << ": New descriptor.";
   }
 
   for (const std::string& identifier : descriptor_identifier_to_remove) {
-    auto pair_to_remove = gatt_descriptor_macs_.find(identifier);
-    std::unique_ptr<BluetoothRemoteGattDescriptorMac> descriptor_to_remove;
-    VLOG(1) << *descriptor_to_remove << ": Removed descriptor.";
-    pair_to_remove->second.swap(descriptor_to_remove);
-    gatt_descriptor_macs_.erase(pair_to_remove);
-    GetMacAdapter()->NotifyGattDescriptorRemoved(descriptor_to_remove.get());
+    auto iter = descriptors_.find(identifier);
+    auto pair = std::move(*iter);
+    VLOG(1) << static_cast<BluetoothRemoteGattDescriptorMac&>(*pair.second)
+            << ": Removed descriptor.";
+    descriptors_.erase(iter);
+    GetMacAdapter()->NotifyGattDescriptorRemoved(pair.second.get());
   }
   is_discovery_complete_ = discovery_pending_count_ == 0;
 }
@@ -411,6 +407,10 @@ bool BluetoothRemoteGattCharacteristicMac::IsWritable() const {
   BluetoothGattCharacteristic::Properties properties = GetProperties();
   return (properties & BluetoothGattCharacteristic::PROPERTY_WRITE) ||
          (properties & PROPERTY_WRITE_WITHOUT_RESPONSE);
+}
+
+bool BluetoothRemoteGattCharacteristicMac::IsWritableWithoutResponse() const {
+  return (GetProperties() & PROPERTY_WRITE_WITHOUT_RESPONSE);
 }
 
 bool BluetoothRemoteGattCharacteristicMac::SupportsNotificationsOrIndications()
@@ -447,19 +447,14 @@ bool BluetoothRemoteGattCharacteristicMac::IsDiscoveryComplete() const {
 BluetoothRemoteGattDescriptorMac*
 BluetoothRemoteGattCharacteristicMac::GetBluetoothRemoteGattDescriptorMac(
     CBDescriptor* cb_descriptor) const {
-  auto found = std::find_if(
-      gatt_descriptor_macs_.begin(), gatt_descriptor_macs_.end(),
-      [cb_descriptor](
-          const std::pair<const std::string,
-                          std::unique_ptr<BluetoothRemoteGattDescriptorMac>>&
-              pair) {
-        return pair.second->GetCBDescriptor() == cb_descriptor;
-      });
-  if (found == gatt_descriptor_macs_.end()) {
-    return nullptr;
-  } else {
-    return found->second.get();
+  for (const auto& pair : descriptors_) {
+    auto* descriptor_mac =
+        static_cast<BluetoothRemoteGattDescriptorMac*>(pair.second.get());
+    if (descriptor_mac->GetCBDescriptor() == cb_descriptor)
+      return descriptor_mac;
   }
+
+  return nullptr;
 }
 
 DEVICE_BLUETOOTH_EXPORT std::ostream& operator<<(

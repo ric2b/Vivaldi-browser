@@ -6,8 +6,10 @@
 
 #include "base/lazy_instance.h"
 #include "base/strings/string_util.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/proximity_auth/proximity_auth_error_bubble.h"
+#include "chrome/browser/ui/views_mode_controller.h"
 #include "chrome/grit/theme_resources.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
@@ -41,6 +43,12 @@ void ShowProximityAuthErrorBubble(const base::string16& message,
                                   const GURL& link_url,
                                   const gfx::Rect& anchor_rect,
                                   content::WebContents* web_contents) {
+#if defined(OS_MACOSX)
+  if (views_mode_controller::IsViewsBrowserCocoa()) {
+    NOTIMPLEMENTED();
+    return;
+  }
+#endif
   // Only one error bubble should be visible at a time.
   // Note that it suffices to check just the |message| for equality, because the
   // |link_range| and |link_url| are always the same for a given |message|
@@ -56,6 +64,12 @@ void ShowProximityAuthErrorBubble(const base::string16& message,
 }
 
 void HideProximityAuthErrorBubble() {
+#if defined(OS_MACOSX)
+  if (views_mode_controller::IsViewsBrowserCocoa()) {
+    NOTIMPLEMENTED();
+    return;
+  }
+#endif
   if (g_bubble.Get())
     g_bubble.Get()->GetWidget()->Close();
 }
@@ -97,11 +111,14 @@ void ProximityAuthErrorBubbleView::Init() {
   views::GridLayout* layout =
       SetLayoutManager(std::make_unique<views::GridLayout>(this));
   views::ColumnSet* columns = layout->AddColumnSet(0);
-  columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING, 0,
-                     views::GridLayout::USE_PREF, 0, 0);
-  columns->AddPaddingColumn(0, kBubbleIntraColumnPadding);
-  columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING, 0,
-                     views::GridLayout::USE_PREF, 0, 0);
+  columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING,
+                     views::GridLayout::kFixedSize, views::GridLayout::USE_PREF,
+                     0, 0);
+  columns->AddPaddingColumn(views::GridLayout::kFixedSize,
+                            kBubbleIntraColumnPadding);
+  columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING,
+                     views::GridLayout::kFixedSize, views::GridLayout::USE_PREF,
+                     0, 0);
 
   // Construct the views.
   std::unique_ptr<views::ImageView> warning_icon(new views::ImageView());
@@ -118,7 +135,7 @@ void ProximityAuthErrorBubbleView::Init() {
                    warning_icon->size().width() - kBubbleIntraColumnPadding);
 
   // Lay out the views.
-  layout->StartRow(0, 0);
+  layout->StartRow(views::GridLayout::kFixedSize, 0);
   layout->AddView(warning_icon.release());
   layout->AddView(label.release());
 }

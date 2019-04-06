@@ -92,10 +92,6 @@ public class InstantAppsHandler {
     private static final TimesHistogramSample sFallbackIntentTimes = new TimesHistogramSample(
             "Android.InstantApps.FallbackDuration", TimeUnit.MILLISECONDS);
 
-    /** A histogram to record how long the GMS Core API call took. */
-    private static final TimesHistogramSample sInstantAppsApiCallTimes = new TimesHistogramSample(
-            "Android.InstantApps.ApiCallDuration2", TimeUnit.MILLISECONDS);
-
     // Only two possible call sources for fallback intents, set boundary at n+1.
     private static final int SOURCE_BOUNDARY = 3;
 
@@ -149,14 +145,6 @@ public class InstantAppsHandler {
      */
     private void recordHandleIntentDuration(long startTime) {
         sHandleIntentDuration.record(SystemClock.elapsedRealtime() - startTime);
-    }
-
-    /**
-     * Record the amount of time spent in the instant apps API call.
-     * @param startTime The time at which we started doing computations.
-     */
-    protected void recordInstantAppsApiCallTime(long startTime) {
-        sInstantAppsApiCallTimes.record(SystemClock.elapsedRealtime() - startTime);
     }
 
     /**
@@ -410,7 +398,14 @@ public class InstantAppsHandler {
      * @param info The resolve info.
      */
     public boolean isInstantAppResolveInfo(ResolveInfo info) {
-        if (info == null || info.activityInfo == null) return false;
-        return EPHEMERAL_INSTALLER_CLASS.equals(info.activityInfo.name);
+        if (info == null) return false;
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return info.isInstantAppAvailable;
+        } else if (info.activityInfo != null) {
+            return EPHEMERAL_INSTALLER_CLASS.equals(info.activityInfo.name);
+        }
+
+        return false;
     }
 }

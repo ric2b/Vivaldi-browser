@@ -10,10 +10,10 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "content/public/browser/download_item.h"
+#include "components/download/public/common/download_item.h"
+#include "components/download/public/common/download_url_parameters.h"
+#include "components/download/public/common/mock_download_item.h"
 #include "content/public/browser/download_manager.h"
-#include "content/public/browser/download_url_parameters.h"
-#include "content/public/test/mock_download_item.h"
 #include "content/public/test/mock_download_manager.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -37,13 +37,13 @@ class MockDownloadManagerService : public DownloadManagerService {
   }
 
   void CreateDownloadItem(bool can_resume) {
-    download_.reset(new content::MockDownloadItem());
+    download_.reset(new download::MockDownloadItem());
     ON_CALL(*download_, CanResume()).WillByDefault(
         ::testing::Return(can_resume));
   }
 
  protected:
-  content::DownloadItem* GetDownloadByGuid(const std::string&) {
+  download::DownloadItem* GetDownloadByGuid(const std::string&) {
     return download_.get();
   }
 
@@ -53,7 +53,7 @@ class MockDownloadManagerService : public DownloadManagerService {
   }
 
  private:
-  std::unique_ptr<content::MockDownloadItem> download_;
+  std::unique_ptr<download::MockDownloadItem> download_;
   content::MockDownloadManager manager_;
 };
 

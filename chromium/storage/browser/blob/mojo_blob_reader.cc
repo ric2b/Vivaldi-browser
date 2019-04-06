@@ -25,15 +25,17 @@ MojoBlobReader::MojoBlobReader(const BlobDataHandle* handle,
       byte_range_(range),
       blob_reader_(handle->CreateReader()),
       writable_handle_watcher_(FROM_HERE,
-                               mojo::SimpleWatcher::ArmingPolicy::MANUAL),
+                               mojo::SimpleWatcher::ArmingPolicy::MANUAL,
+                               base::SequencedTaskRunnerHandle::Get()),
       peer_closed_handle_watcher_(FROM_HERE,
-                                  mojo::SimpleWatcher::ArmingPolicy::MANUAL),
+                                  mojo::SimpleWatcher::ArmingPolicy::MANUAL,
+                                  base::SequencedTaskRunnerHandle::Get()),
       weak_factory_(this) {
   TRACE_EVENT_ASYNC_BEGIN1("Blob", "BlobReader", this, "uuid", handle->uuid());
   DCHECK(delegate_);
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&MojoBlobReader::Start, weak_factory_.GetWeakPtr()));
+      base::BindOnce(&MojoBlobReader::Start, weak_factory_.GetWeakPtr()));
 }
 
 MojoBlobReader::~MojoBlobReader() {
@@ -48,8 +50,8 @@ void MojoBlobReader::Start() {
   }
 
   TRACE_EVENT_ASYNC_BEGIN0("Blob", "BlobReader::CountSize", this);
-  BlobReader::Status size_status = blob_reader_->CalculateSize(
-      base::Bind(&MojoBlobReader::DidCalculateSize, base::Unretained(this)));
+  BlobReader::Status size_status = blob_reader_->CalculateSize(base::BindOnce(
+      &MojoBlobReader::DidCalculateSize, base::Unretained(this)));
   switch (size_status) {
     case BlobReader::Status::NET_ERROR:
       TRACE_EVENT_ASYNC_END1("Blob", "BlobReader::CountSize", this, "result",
@@ -175,42 +177,46 @@ void MojoBlobReader::ReadMore() {
   int bytes_read;
   BlobReader::Status read_status = blob_reader_->Read(
       buf.get(), static_cast<int>(num_bytes), &bytes_read,
-      base::Bind(&MojoBlobReader::DidRead, base::Unretained(this), false));
+      base::BindOnce(&MojoBlobReader::DidRead, base::Unretained(this), false));
   switch (read_status) {
     case BlobReader::Status::NET_ERROR:
-      TRACE_EVENT_ASYNC_END1("Blob", "BlobReader::ReadMore", this, "result",
-                             "error");
-      NotifyCompletedAndDeleteIfNeeded(blob_reader_->net_error());
+      DidRead(true, blob_reader_->net_error());
       return;
     case BlobReader::Status::IO_PENDING:
       // Wait for DidRead.
       return;
     case BlobReader::Status::DONE:
-      if (bytes_read > 0) {
-        DidRead(true, bytes_read);
-      } else {
-        TRACE_EVENT_ASYNC_END1("Blob", "BlobReader::ReadMore", this, "result",
-                               "success");
-        writable_handle_watcher_.Cancel();
-        pending_write_->Complete(0);
-        pending_write_ = nullptr;  // This closes the data pipe.
-        NotifyCompletedAndDeleteIfNeeded(net::OK);
-        return;
-      }
+      DidRead(true, bytes_read);
+      return;
   }
 }
 
 void MojoBlobReader::DidRead(bool completed_synchronously, int num_bytes) {
-  delegate_->DidRead(num_bytes);
+  if (num_bytes < 0) {
+    TRACE_EVENT_ASYNC_END2("Blob", "BlobReader::ReadMore", this, "result",
+                           "error", "net_error", num_bytes);
+    writable_handle_watcher_.Cancel();
+    pending_write_->Complete(0);
+    pending_write_ = nullptr;  // This closes the data pipe.
+    NotifyCompletedAndDeleteIfNeeded(num_bytes);
+    return;
+  }
+  if (num_bytes > 0)
+    delegate_->DidRead(num_bytes);
   TRACE_EVENT_ASYNC_END2("Blob", "BlobReader::ReadMore", this, "result",
                          "success", "num_bytes", num_bytes);
   response_body_stream_ = pending_write_->Complete(num_bytes);
   total_written_bytes_ += num_bytes;
   pending_write_ = nullptr;
+  if (num_bytes == 0) {
+    response_body_stream_.reset();  // This closes the data pipe.
+    NotifyCompletedAndDeleteIfNeeded(net::OK);
+    return;
+  }
   if (completed_synchronously) {
     base::SequencedTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&MojoBlobReader::ReadMore, weak_factory_.GetWeakPtr()));
+        base::BindOnce(&MojoBlobReader::ReadMore, weak_factory_.GetWeakPtr()));
   } else {
     ReadMore();
   }
@@ -223,7 +229,10 @@ void MojoBlobReader::OnResponseBodyStreamClosed(MojoResult result) {
 }
 
 void MojoBlobReader::OnResponseBodyStreamReady(MojoResult result) {
-  // TODO(jam): Handle a bad |result| value.
+  if (result == MOJO_RESULT_FAILED_PRECONDITION) {
+    OnResponseBodyStreamClosed(MOJO_RESULT_OK);
+    return;
+  }
   DCHECK_EQ(result, MOJO_RESULT_OK);
   ReadMore();
 }

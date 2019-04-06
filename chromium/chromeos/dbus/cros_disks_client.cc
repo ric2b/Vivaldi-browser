@@ -9,6 +9,7 @@
 
 #include <map>
 #include <memory>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
@@ -33,15 +34,11 @@ namespace chromeos {
 
 namespace {
 
-const char* kDefaultMountOptions[] = {
-    "nodev", "noexec", "nosuid",
-};
-const char kReadOnlyOption[] = "ro";
-const char kReadWriteOption[] = "rw";
-const char kRemountOption[] = "remount";
-const char kMountLabelOption[] = "mountlabel";
-
-const char kLazyUnmountOption[] = "lazy";
+constexpr char kReadOnlyOption[] = "ro";
+constexpr char kReadWriteOption[] = "rw";
+constexpr char kRemountOption[] = "remount";
+constexpr char kMountLabelOption[] = "mountlabel";
+constexpr char kLazyUnmountOption[] = "lazy";
 
 // Checks if retrieved media type is in boundaries of DeviceMediaType.
 bool IsValidMediaType(uint32_t type) {
@@ -111,29 +108,28 @@ class CrosDisksClientImpl : public CrosDisksClient {
   void Mount(const std::string& source_path,
              const std::string& source_format,
              const std::string& mount_label,
+             const std::vector<std::string>& mount_options,
              MountAccessMode access_mode,
              RemountOption remount,
-             const base::Closure& callback,
-             const base::Closure& error_callback) override {
+             VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(cros_disks::kCrosDisksInterface,
                                  cros_disks::kMount);
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(source_path);
     writer.AppendString(source_format);
-    std::vector<std::string> mount_options =
-        ComposeMountOptions(mount_label, access_mode, remount);
-    writer.AppendArrayOfStrings(mount_options);
-    proxy_->CallMethod(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-                       base::BindOnce(&CrosDisksClientImpl::OnMount,
-                                      weak_ptr_factory_.GetWeakPtr(), callback,
-                                      error_callback));
+    std::vector<std::string> options =
+        ComposeMountOptions(mount_options, mount_label, access_mode, remount);
+    writer.AppendArrayOfStrings(options);
+    proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&CrosDisksClientImpl::OnVoidMethod,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
   // CrosDisksClient override.
   void Unmount(const std::string& device_path,
                UnmountOptions options,
-               const base::Closure& callback,
-               const base::Closure& error_callback) override {
+               VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(cros_disks::kCrosDisksInterface,
                                  cros_disks::kUnmount);
     dbus::MessageWriter writer(&method_call);
@@ -144,10 +140,10 @@ class CrosDisksClientImpl : public CrosDisksClient {
       unmount_options.push_back(kLazyUnmountOption);
 
     writer.AppendArrayOfStrings(unmount_options);
-    proxy_->CallMethod(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-                       base::BindOnce(&CrosDisksClientImpl::OnUnmount,
-                                      weak_ptr_factory_.GetWeakPtr(), callback,
-                                      error_callback));
+    proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&CrosDisksClientImpl::OnUnmount,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
   // CrosDisksClient override.
@@ -187,8 +183,7 @@ class CrosDisksClientImpl : public CrosDisksClient {
   // CrosDisksClient override.
   void Format(const std::string& device_path,
               const std::string& filesystem,
-              const base::Closure& callback,
-              const base::Closure& error_callback) override {
+              VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(cros_disks::kCrosDisksInterface,
                                  cros_disks::kFormat);
     dbus::MessageWriter writer(&method_call);
@@ -198,25 +193,24 @@ class CrosDisksClientImpl : public CrosDisksClient {
     // argument to specify options for the format operation.
     std::vector<std::string> format_options;
     writer.AppendArrayOfStrings(format_options);
-    proxy_->CallMethod(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-                       base::BindOnce(&CrosDisksClientImpl::OnFormat,
-                                      weak_ptr_factory_.GetWeakPtr(), callback,
-                                      error_callback));
+    proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&CrosDisksClientImpl::OnVoidMethod,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
   void Rename(const std::string& device_path,
               const std::string& volume_name,
-              const base::Closure& callback,
-              const base::Closure& error_callback) override {
+              VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(cros_disks::kCrosDisksInterface,
                                  cros_disks::kRename);
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(device_path);
     writer.AppendString(volume_name);
-    proxy_->CallMethod(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
-                       base::BindOnce(&CrosDisksClientImpl::OnRename,
-                                      weak_ptr_factory_.GetWeakPtr(), callback,
-                                      error_callback));
+    proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&CrosDisksClientImpl::OnVoidMethod,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
   // CrosDisksClient override.
@@ -288,23 +282,15 @@ class CrosDisksClientImpl : public CrosDisksClient {
     MountEventType event_type;
   };
 
-  // Handles the result of Mount and calls |callback| or |error_callback|.
-  void OnMount(const base::Closure& callback,
-               const base::Closure& error_callback,
-               dbus::Response* response) {
-    if (!response) {
-      error_callback.Run();
-      return;
-    }
-    callback.Run();
+  // Handles the result of D-Bus method call with no return value.
+  void OnVoidMethod(VoidDBusMethodCallback callback, dbus::Response* response) {
+    std::move(callback).Run(response);
   }
 
   // Handles the result of Unmount and calls |callback| or |error_callback|.
-  void OnUnmount(const base::Closure& callback,
-                 const base::Closure& error_callback,
-                 dbus::Response* response) {
+  void OnUnmount(VoidDBusMethodCallback callback, dbus::Response* response) {
     if (!response) {
-      error_callback.Run();
+      std::move(callback).Run(false);
       return;
     }
 
@@ -320,11 +306,11 @@ class CrosDisksClientImpl : public CrosDisksClient {
     uint32_t error_code = 0;
     if (reader.PopUint32(&error_code) &&
         static_cast<MountError>(error_code) != MOUNT_ERROR_NONE) {
-      error_callback.Run();
+      std::move(callback).Run(false);
       return;
     }
 
-    callback.Run();
+    std::move(callback).Run(true);
   }
 
   // Handles the result of EnumerateDevices and EnumarateAutoMountableDevices.
@@ -378,28 +364,6 @@ class CrosDisksClientImpl : public CrosDisksClient {
       entries.push_back(entry);
     }
     callback.Run(entries);
-  }
-
-  // Handles the result of Format and calls |callback| or |error_callback|.
-  void OnFormat(const base::Closure& callback,
-                const base::Closure& error_callback,
-                dbus::Response* response) {
-    if (!response) {
-      error_callback.Run();
-      return;
-    }
-    callback.Run();
-  }
-
-  // Handles the result of Rename and calls |callback| or |error_callback|.
-  void OnRename(const base::Closure& callback,
-                const base::Closure& error_callback,
-                dbus::Response* response) {
-    if (!response) {
-      error_callback.Run();
-      return;
-    }
-    callback.Run();
   }
 
   // Handles the result of GetDeviceProperties and calls |callback| or
@@ -707,12 +671,11 @@ base::FilePath CrosDisksClient::GetRemovableDiskMountPoint() {
 
 // static
 std::vector<std::string> CrosDisksClient::ComposeMountOptions(
+    const std::vector<std::string>& options,
     const std::string& mount_label,
     MountAccessMode access_mode,
     RemountOption remount) {
-  std::vector<std::string> mount_options(
-      kDefaultMountOptions,
-      kDefaultMountOptions + arraysize(kDefaultMountOptions));
+  std::vector<std::string> mount_options = options;
   switch (access_mode) {
     case MOUNT_ACCESS_MODE_READ_ONLY:
       mount_options.push_back(kReadOnlyOption);
@@ -730,6 +693,7 @@ std::vector<std::string> CrosDisksClient::ComposeMountOptions(
         base::StringPrintf("%s=%s", kMountLabelOption, mount_label.c_str());
     mount_options.push_back(mount_label_option);
   }
+
   return mount_options;
 }
 

@@ -6,6 +6,7 @@
 
 #include "base/base64.h"
 #include "base/strings/stringprintf.h"
+#include "base/syslog_logging.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
@@ -23,15 +24,18 @@ namespace extensions {
 
 using api::extension_types::ImageDetails;
 
-bool WebContentsCaptureClient::CaptureAsync(
+WebContentsCaptureClient::CaptureResult WebContentsCaptureClient::CaptureAsync(
     WebContents* web_contents,
     const ImageDetails* image_details,
-    const content::ReadbackRequestCallback callback) {
-  if (!web_contents)
-    return false;
+    base::OnceCallback<void(const SkBitmap&)> callback) {
+  // TODO(crbug/419878): Account for fullscreen render widget?
+  RenderWidgetHostView* const view =
+      web_contents ? web_contents->GetRenderWidgetHostView() : nullptr;
+  if (!view)
+    return FAILURE_REASON_VIEW_INVISIBLE;
 
   if (!IsScreenshotEnabled())
-    return false;
+    return FAILURE_REASON_SCREEN_SHOTS_DISABLED;
 
   // The default format and quality setting used when encoding jpegs.
   const api::extension_types::ImageFormat kDefaultFormat =
@@ -48,42 +52,23 @@ bool WebContentsCaptureClient::CaptureAsync(
       image_quality_ = *image_details->quality;
   }
 
-  // TODO(miu): Account for fullscreen render widget?  http://crbug.com/419878
-  RenderWidgetHostView* view = web_contents->GetRenderWidgetHostView();
-  if (!view) {
-    OnCaptureFailure(FAILURE_REASON_VIEW_INVISIBLE);
-    return false;
-  }
   view->CopyFromSurface(gfx::Rect(),  // Copy entire surface area.
                         gfx::Size(),  // Result contains device-level detail.
-                        callback, kN32_SkColorType);
-  return true;
+                        std::move(callback));
+
+#if defined(OS_CHROMEOS)
+  SYSLOG(INFO) << "Screenshot taken";
+#endif
+
+  return OK;
 }
 
-void WebContentsCaptureClient::CopyFromSurfaceComplete(
-    const SkBitmap& bitmap,
-    content::ReadbackResponse response) {
-  if (response == content::READBACK_SUCCESS) {
+void WebContentsCaptureClient::CopyFromSurfaceComplete(const SkBitmap& bitmap) {
+  if (bitmap.drawsNothing()) {
+    OnCaptureFailure(FAILURE_REASON_READBACK_FAILED);
+  } else {
     OnCaptureSuccess(bitmap);
-    return;
   }
-  // TODO(wjmaclean): Improve error reporting. Why aren't we passing more
-  // information here?
-  std::string reason;
-  switch (response) {
-    case content::READBACK_FAILED:
-      reason = "READBACK_FAILED";
-      break;
-    case content::READBACK_SURFACE_UNAVAILABLE:
-      reason = "READBACK_SURFACE_UNAVAILABLE";
-      break;
-    case content::READBACK_BITMAP_ALLOCATION_FAILURE:
-      reason = "READBACK_BITMAP_ALLOCATION_FAILURE";
-      break;
-    default:
-      reason = "<unknown>";
-  }
-  OnCaptureFailure(FAILURE_REASON_UNKNOWN);
 }
 
 // TODO(wjmaclean) can this be static?

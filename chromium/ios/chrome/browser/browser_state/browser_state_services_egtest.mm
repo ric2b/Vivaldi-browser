@@ -4,16 +4,15 @@
 
 #import <EarlGrey/EarlGrey.h>
 
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#import "base/test/ios/wait_util.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#import "ios/testing/wait_util.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/service_manager_connection.h"
-#include "services/identity/public/interfaces/constants.mojom.h"
-#include "services/identity/public/interfaces/identity_manager.mojom.h"
+#include "services/identity/public/mojom/constants.mojom.h"
+#include "services/identity/public/mojom/identity_manager.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -42,8 +41,9 @@ void WaitForCallback(const std::string& callback_name,
                                  block:^BOOL {
                                    return *callback_called_flag;
                                  }];
-  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
-             @"Failed waiting for %s callback", callback_name.c_str());
+  GREYAssert(
+      [condition waitWithTimeout:base::test::ios::kWaitForUIElementTimeout],
+      @"Failed waiting for %s callback", callback_name.c_str());
 }
 }
 

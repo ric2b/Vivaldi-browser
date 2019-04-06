@@ -33,6 +33,11 @@ namespace chrome {
 void AttemptRestart();
 }
 
+namespace contextual_suggestions {
+struct ContextualSuggestionsResult;
+void RegisterSyntheticFieldTrials(const ContextualSuggestionsResult& result);
+}  // namespace contextual_suggestions
+
 namespace domain_reliability {
 class DomainReliabilityServiceFactory;
 }
@@ -44,6 +49,10 @@ class ChromeMetricsPrivateDelegate;
 class FileManagerPrivateIsUMAEnabledFunction;
 }
 
+namespace metrics {
+class UkmConsentParamBrowserTest;
+}
+
 namespace options {
 class BrowserOptionsHandler;
 }
@@ -52,7 +61,7 @@ namespace prerender {
 bool IsOmniboxEnabled(Profile* profile);
 }
 
-namespace profiling {
+namespace heap_profiling {
 class BackgroundProfilingTriggers;
 }
 
@@ -102,6 +111,8 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class ChromeBrowserMainParts;
   friend class ChromeMetricsServicesManagerClient;
   friend class ChromeRenderMessageFilter;
+  friend void contextual_suggestions::RegisterSyntheticFieldTrials(
+      const contextual_suggestions::ContextualSuggestionsResult& result);
   friend class DataReductionProxyChromeSettings;
   friend class domain_reliability::DomainReliabilityServiceFactory;
   friend class extensions::ChromeExtensionWebContentsObserver;
@@ -113,7 +124,7 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
       const OnMetricsReportingCallbackType&);
   friend class options::BrowserOptionsHandler;
   friend bool prerender::IsOmniboxEnabled(Profile* profile);
-  friend class profiling::BackgroundProfilingTriggers;
+  friend class heap_profiling::BackgroundProfilingTriggers;
   friend class settings::MetricsReportingHandler;
   friend class speech::ChromeSpeechRecognitionManagerDelegate;
   friend class system_logs::ChromeInternalLogSource;
@@ -125,15 +136,21 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class safe_browsing::SRTGlobalError;
   friend class safe_browsing::SafeBrowsingService;
   friend class safe_browsing::SafeBrowsingUIManager;
-  friend void SyzyASANRegisterExperiment(const char*, const char*);
   friend class ChromeMetricsServiceClient;
   friend class ChromePasswordManagerClient;
   friend class NavigationMetricsRecorder;
+  friend class ChromeUnifiedConsentServiceClient;
 
+  // Testing related friends.
+  friend class MetricsReportingStateTest;
+  friend class metrics::UkmConsentParamBrowserTest;
   FRIEND_TEST_ALL_PREFIXES(ChromeMetricsServiceAccessorTest,
                            MetricsReportingEnabled);
 
-  // Returns true if metrics reporting is enabled.
+  // Returns true if metrics reporting is enabled. This does NOT necessary mean
+  // that it is active as configuration may prevent it on some devices (i.e.
+  // the "MetricsReporting" field trial that controls sampling). To include
+  // that, call: metrics_services_manager->IsReportingEnabled().
   // TODO(gayane): Consolidate metric prefs on all platforms.
   // http://crbug.com/362192,  http://crbug.com/532084
   static bool IsMetricsAndCrashReportingEnabled();
@@ -158,6 +175,10 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   static bool RegisterSyntheticFieldTrialWithNameHash(
       uint32_t trial_name_hash,
       base::StringPiece group_name);
+
+  // Cover for function of same name in MetricsServiceAccssor. See
+  // ChromeMetricsServiceAccessor for details.
+  static void SetForceIsMetricsReportingEnabledPrefLookup(bool value);
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(ChromeMetricsServiceAccessor);
 };

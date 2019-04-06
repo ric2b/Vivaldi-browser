@@ -32,7 +32,8 @@ class Offliner {
     REQUEST_COORDINATOR_CANCELED = 3,
     // Loading was canceled.
     LOADING_CANCELED = 4,
-    // Loader failed to load page.
+    // Loader failed to load page because the system or Chrome encountered an
+    // error.
     LOADING_FAILED = 5,
     // Failed to save loaded page.
     SAVE_FAILED = 6,
@@ -66,19 +67,28 @@ class Offliner {
     // We detect the situation in ReconcileTask after starting
     // RequestCoordinator.
     BROWSER_KILLED = 16,
+    // The page initiated a download, we denied the downloads.
+    LOADING_FAILED_DOWNLOAD = 17,
+    // The page initiated a download, and we passed it on to downloads.
+    DOWNLOAD_THROTTLED = 18,
+    // Loader failed to load page due to net error.
+    LOADING_FAILED_NET_ERROR = 19,
+    // Loader failed to load page due to HTTP error.
+    LOADING_FAILED_HTTP_ERROR = 20,
     // NOTE: insert new values above this line and update histogram enum too.
     STATUS_COUNT
   };
 
   // Reports the load progress of a request.
-  typedef base::Callback<void(const SavePageRequest&, int64_t received_bytes)>
+  typedef base::RepeatingCallback<void(const SavePageRequest&,
+                                       int64_t received_bytes)>
       ProgressCallback;
   // Reports the completion status of a request.
-  typedef base::Callback<void(const SavePageRequest&, RequestStatus)>
+  typedef base::OnceCallback<void(const SavePageRequest&, RequestStatus)>
       CompletionCallback;
   // Reports that the cancel operation has completed.
   // TODO(chili): make save operation cancellable.
-  typedef base::Callback<void(const SavePageRequest&)> CancelCallback;
+  typedef base::OnceCallback<void(const SavePageRequest&)> CancelCallback;
 
   Offliner() {}
   virtual ~Offliner() {}
@@ -89,13 +99,13 @@ class Offliner {
   // called on it. |progress_callback| is invoked periodically to report the
   // number of bytes received from the network (for UI purposes).
   virtual bool LoadAndSave(const SavePageRequest& request,
-                           const CompletionCallback& completion_callback,
+                           CompletionCallback completion_callback,
                            const ProgressCallback& progress_callback) = 0;
 
   // Clears the currently processing request, if any, and skips running its
   // CompletionCallback. Returns false if there is nothing to cancel, otherwise
   // returns true and canceled request will be delivered using callback.
-  virtual bool Cancel(const CancelCallback& callback) = 0;
+  virtual bool Cancel(CancelCallback callback) = 0;
 
   // On some external condition changes (RAM pressure, browser backgrounded on
   // low-level devices, etc) it is needed to terminate a load if there is one

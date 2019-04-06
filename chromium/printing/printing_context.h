@@ -51,7 +51,7 @@ class PRINTING_EXPORT PrintingContext {
 
   // Callback of AskUserForSettings, used to notify the PrintJobWorker when
   // print settings are available.
-  typedef base::Callback<void(Result)> PrintSettingsCallback;
+  using PrintSettingsCallback = base::OnceCallback<void(Result)>;
 
   // Asks the user what printer and format should be used to print. Updates the
   // context with the select device settings. The result of the call is returned
@@ -63,7 +63,7 @@ class PRINTING_EXPORT PrintingContext {
   virtual void AskUserForSettings(int max_pages,
                                   bool has_selection,
                                   bool is_scripted,
-                                  const PrintSettingsCallback& callback) = 0;
+                                  PrintSettingsCallback callback) = 0;
 
   // Selects the user's default printer and format. Updates the context with the
   // default device settings.
@@ -85,6 +85,12 @@ class PRINTING_EXPORT PrintingContext {
   // Updates Print Settings. |job_settings| contains all print job
   // settings information. |ranges| has the new page range settings.
   Result UpdatePrintSettings(const base::DictionaryValue& job_settings);
+
+#if defined(OS_CHROMEOS)
+  // Updates Print Settings.
+  Result UpdatePrintSettingsFromPOD(
+      std::unique_ptr<PrintSettings> job_settings);
+#endif
 
   // Does platform specific setup of the printer before the printing. Signal the
   // printer that a document is about to be spooled.

@@ -7,27 +7,27 @@
 //    DISABLE(foo,baz)
 
 // Assume these fails due to switches::kExtensionActionRedesign being disabled
-DISABLE(ToolbarActionViewInteractiveUITest, TestClickingOnOverflowedAction)
+//DISABLE(ToolbarActionViewInteractiveUITest, TestClickingOnOverflowedAction)
 
 // VB-22258
 DISABLE(ComponentFlashHintFileTest, CorruptionTest)
 DISABLE(ComponentFlashHintFileTest, InstallTest)
 
 // Seems to have broken in v57
-DISABLE(RenderTextHarfBuzzTest, GetSubstringBoundsMultiline/HarfBuzz)
+//DISABLE(RenderTextHarfBuzzTest, GetSubstringBoundsMultiline/HarfBuzz)
 
 // Flaky
-DISABLE(SitePerProcessBrowserTest, PopupMenuTest)
+//DISABLE(SitePerProcessBrowserTest, PopupMenuTest)
 
-DISABLE(PointerLockBrowserTest, PointerLockEventRouting)
-DISABLE(PointerLockBrowserTest, PointerLockWheelEventRouting)
-DISABLE(LayerTreeHostTilesTestPartialInvalidation,
-        PartialRaster_MultiThread_OneCopy)
-DISABLE(SitePerProcessBrowserTest, SubframeGestureEventRouting)
-DISABLE_MULTI(WebViewInteractiveTest, EditCommandsNoMenu)
+//DISABLE(PointerLockBrowserTest, PointerLockEventRouting)
+//DISABLE(PointerLockBrowserTest, PointerLockWheelEventRouting)
+//DISABLE(LayerTreeHostTilesTestPartialInvalidation,
+//        PartialRaster_MultiThread_OneCopy)
+//DISABLE(SitePerProcessBrowserTest, SubframeGestureEventRouting)
+//DISABLE_MULTI(WebViewInteractiveTest, EditCommandsNoMenu)
 
 // Seems to have broken in v64, at least flaky
-DISABLE(SitePerProcessBrowserTest, ScrollFocusedEditableElementIntoView)
+//DISABLE(SitePerProcessBrowserTest, ScrollFocusedEditableElementIntoView)
 
 DISABLE(InputImeApiTest, BasicApiTest)
 
@@ -49,6 +49,9 @@ DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_ClearVideo_WEBM_Encryp
 DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_EncryptedVideo_MP4_ClearAudio_WEBM/0)
 DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_EncryptedVideo_WEBM_EncryptedAudio_MP4/0)
 DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VideoOnly_MP4/0)
+DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VideoOnly_MP4_MDAT/0)
+DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_Encryption_CBCS/0)
+
 
 DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_ClearVideo_WEBM_EncryptedAudio_MP4/0)
 DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_EncryptedVideo_MP4_ClearAudio_WEBM/0)
@@ -57,41 +60,41 @@ DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VideoOnly_MP4/0)
 #endif
 
 #if defined(NO_EXTERNAL_CLEARKEY)
-DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, Audio_WebM)
-DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, SessionType)
-DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, Video_WebM)
+//DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, Audio_WebM)
+//DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, SessionType)
+//DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, Video_WebM)
 
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, ConfigChangeVideo_ClearToEncrypted/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, ConfigChangeVideo_EncryptedToClear/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, ConfigChangeVideo_EncryptedToEncrypted/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, FrameSizeChangeVideo/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, InvalidResponseKeyError/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_AudioClearVideo_WebM/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_Multiple_VideoAudio_WebM/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VP9Video_WebM_Fullsample/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VP9Video_WebM_Subsample/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VideoAudio_WebM/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VideoAudio_WebM_Opus/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VideoClearAudio_WebM/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VideoClearAudio_WebM_Opus/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VideoOnly_MP4_VP9/0)
-DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, PolicyCheck/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, ConfigChangeVideo_ClearToEncrypted/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, ConfigChangeVideo_EncryptedToClear/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, ConfigChangeVideo_EncryptedToEncrypted/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, FrameSizeChangeVideo/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, InvalidResponseKeyError/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_AudioClearVideo_WebM/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_Multiple_VideoAudio_WebM/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VP9Video_WebM_Fullsample/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VP9Video_WebM_Subsample/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VideoAudio_WebM/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VideoAudio_WebM_Opus/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VideoClearAudio_WebM/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VideoClearAudio_WebM_Opus/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, Playback_VideoOnly_MP4_VP9/0)
+//DISABLE(MSE_ExternalClearKey/EncryptedMediaTest, PolicyCheck/0)
 
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, ConfigChangeVideo_ClearToEncrypted/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, ConfigChangeVideo_EncryptedToClear/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, ConfigChangeVideo_EncryptedToEncrypted/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, FrameSizeChangeVideo/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, InvalidResponseKeyError/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_AudioClearVideo_WebM/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_Multiple_VideoAudio_WebM/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VP9Video_WebM_Fullsample/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VP9Video_WebM_Subsample/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VideoAudio_WebM/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VideoAudio_WebM_Opus/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VideoClearAudio_WebM/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VideoClearAudio_WebM_Opus/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VideoOnly_MP4_VP9/0)
-DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, PolicyCheck/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, ConfigChangeVideo_ClearToEncrypted/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, ConfigChangeVideo_EncryptedToClear/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, ConfigChangeVideo_EncryptedToEncrypted/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, FrameSizeChangeVideo/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, InvalidResponseKeyError/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_AudioClearVideo_WebM/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_Multiple_VideoAudio_WebM/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VP9Video_WebM_Fullsample/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VP9Video_WebM_Subsample/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VideoAudio_WebM/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VideoAudio_WebM_Opus/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VideoClearAudio_WebM/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VideoClearAudio_WebM_Opus/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, Playback_VideoOnly_MP4_VP9/0)
+//DISABLE(MSE_ExternalClearKey_Mojo/EncryptedMediaTest, PolicyCheck/0)
 #endif
 
 #if defined(NO_EXTRA_CODECS)
@@ -103,6 +106,8 @@ DISABLE(MSE_ClearKey/EncryptedMediaTest, Playback_ClearVideo_WEBM_EncryptedAudio
 DISABLE(MSE_ClearKey/EncryptedMediaTest, Playback_EncryptedVideo_MP4_ClearAudio_WEBM/0)
 DISABLE(MSE_ClearKey/EncryptedMediaTest, Playback_EncryptedVideo_WEBM_EncryptedAudio_MP4/0)
 DISABLE(MSE_ClearKey/EncryptedMediaTest, Playback_VideoOnly_MP4/0)
+DISABLE(MSE_ClearKey/EncryptedMediaTest, Playback_VideoOnly_MP4_MDAT/0)
+DISABLE(MSE_ClearKey/EncryptedMediaTest, Playback_Encryption_CBCS/0)
 
 DISABLE(WebRtcBrowserTest, RunsAudioVideoWebRTCCallInTwoTabsH264)
 #endif
@@ -129,10 +134,10 @@ DISABLE(MediaCanPlayTypeTest, CodecSupportTest_Avc1Variants)
 DISABLE(MediaCanPlayTypeTest, CodecSupportTest_Avc3Variants)
 DISABLE(MediaCanPlayTypeTest, CodecSupportTest_AvcLevels)
 DISABLE(MediaCanPlayTypeTest, CodecSupportTest_Mp4aVariants)
-DISABLE(MediaCanPlayTypeTest, CodecSupportTest_mp3)
+//DISABLE(MediaCanPlayTypeTest, CodecSupportTest_mp3)
 DISABLE(MediaCanPlayTypeTest, CodecSupportTest_mp4)
 
-DISABLE(MediaColorTest, Yuv420pHighBitDepth)
+//DISABLE(MediaColorTest, Yuv420pHighBitDepth)
 DISABLE(MediaColorTest, Yuv422pH264)
 DISABLE(MediaColorTest, Yuv444pH264)
 
@@ -151,6 +156,7 @@ DISABLE(MediaTest, VideoBearRotated90)
 DISABLE(FFmpegDemuxerTest, MP4_ZeroStszEntry)
 DISABLE(FFmpegDemuxerTest, Read_Mp4_Media_Track_Info)
 DISABLE(FFmpegDemuxerTest, Read_Mp4_Multiple_Tracks)
+DISABLE(FFmpegDemuxerTest, Read_AudioNegativeStartTimeAndOpusDiscardH264Mp4_Sync)
 
 // Hang
 DISABLE(FFmpegDemuxerTest, IsValidAnnexB)
@@ -167,6 +173,7 @@ DISABLE(NewByPts/MSEPipelineIntegrationTest, EncryptedPlayback_MP4_CENC_SENC_NO_
 DISABLE(NewByPts/MSEPipelineIntegrationTest, EncryptedPlayback_MP4_CENC_KeyRotation_Video/0)
 DISABLE(NewByPts/MSEPipelineIntegrationTest, EncryptedPlayback_MP4_CENC_KeyRotation_Audio/0)
 DISABLE(NewByPts/MSEPipelineIntegrationTest, BasicPlayback_VideoOnly_MP4_AVC3/0)
+DISABLE(NewByPts/MSEPipelineIntegrationTest, EncryptedPlayback_MP4_CENC_MDAT_Video/0)
 
 DISABLE(LegacyByDts/MSEPipelineIntegrationTest, ADTS/0)
 DISABLE(LegacyByDts/MSEPipelineIntegrationTest, ADTS_TimestampOffset/0)
@@ -180,9 +187,9 @@ DISABLE(LegacyByDts/MSEPipelineIntegrationTest, EncryptedPlayback_MP4_CENC_SENC_
 DISABLE(LegacyByDts/MSEPipelineIntegrationTest, EncryptedPlayback_MP4_CENC_KeyRotation_Video/0)
 DISABLE(LegacyByDts/MSEPipelineIntegrationTest, EncryptedPlayback_MP4_CENC_KeyRotation_Audio/0)
 DISABLE(LegacyByDts/MSEPipelineIntegrationTest, BasicPlayback_VideoOnly_MP4_AVC3/0)
+DISABLE(LegacyByDts/MSEPipelineIntegrationTest, EncryptedPlayback_MP4_CENC_MDAT_Video/0)
 
 // Fail
-DISABLE(AudioFileReaderTest, AAC)
 DISABLE(FFmpeg/AudioDecoderTest, Decode/1)
 DISABLE(FFmpeg/AudioDecoderTest, Initialize/1)
 DISABLE(FFmpeg/AudioDecoderTest, NoTimestamp/1)
@@ -191,6 +198,14 @@ DISABLE(FFmpeg/AudioDecoderTest, Reinitialize_AfterDecode/1)
 DISABLE(FFmpeg/AudioDecoderTest, Reinitialize_AfterInitialize/1)
 DISABLE(FFmpeg/AudioDecoderTest, Reinitialize_AfterReset/1)
 DISABLE(FFmpeg/AudioDecoderTest, Reset/1)
+DISABLE(FFmpeg/AudioDecoderTest, Decode/2)
+DISABLE(FFmpeg/AudioDecoderTest, Initialize/2)
+DISABLE(FFmpeg/AudioDecoderTest, NoTimestamp/2)
+DISABLE(FFmpeg/AudioDecoderTest, ProduceAudioSamples/2)
+DISABLE(FFmpeg/AudioDecoderTest, Reinitialize_AfterDecode/2)
+DISABLE(FFmpeg/AudioDecoderTest, Reinitialize_AfterInitialize/2)
+DISABLE(FFmpeg/AudioDecoderTest, Reinitialize_AfterReset/2)
+DISABLE(FFmpeg/AudioDecoderTest, Reset/2)
 DISABLE(FFmpegDemuxerTest, NaturalSizeWithPASP)
 DISABLE(FFmpegDemuxerTest, NaturalSizeWithoutPASP)
 DISABLE(FFmpegDemuxerTest, Read_Mp4_Crbug657437)
@@ -225,11 +240,87 @@ DISABLE(ProprietaryCodecs/BasicPlaybackTest, PlayToEnd/1)
 DISABLE(ProprietaryCodecs/BasicPlaybackTest, PlayToEnd/2)
 DISABLE(ProprietaryCodecs/BasicPlaybackTest, PlayToEnd/3)
 
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bear320x240audioonlywebm_AND_bear640x360a_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bear320x240audioonlywebm_AND_bearaudiomainaacaac)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bear640x360a_fragmp4_AND_bear320x240audioonlywebm)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bear640x360a_fragmp4_AND_bear640x360a_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bear640x360a_fragmp4_AND_bearaudiomainaacaac)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bear640x360a_fragmp4_AND_sfxflac_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bear640x360a_fragmp4_AND_sfxmp3)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bear640x360a_fragmp4_AND_sfxopus441webm)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bearaudiomainaacaac_AND_bear320x240audioonlywebm)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bearaudiomainaacaac_AND_bear640x360a_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bearaudiomainaacaac_AND_bearaudiomainaacaac)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bearaudiomainaacaac_AND_sfxflac_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bearaudiomainaacaac_AND_sfxmp3)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/bearaudiomainaacaac_AND_sfxopus441webm)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/sfxflac_fragmp4_AND_bear640x360a_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/sfxflac_fragmp4_AND_bearaudiomainaacaac)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/sfxmp3_AND_bear640x360a_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/sfxmp3_AND_bearaudiomainaacaac)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/sfxopus441webm_AND_bear640x360a_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, LegacyByDts_PlayBackToBack/sfxopus441webm_AND_bearaudiomainaacaac)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bear320x240audioonlywebm_AND_bear640x360a_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bear320x240audioonlywebm_AND_bearaudiomainaacaac)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bear640x360a_fragmp4_AND_bear320x240audioonlywebm)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bear640x360a_fragmp4_AND_bear640x360a_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bear640x360a_fragmp4_AND_bearaudiomainaacaac)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bear640x360a_fragmp4_AND_sfxflac_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bear640x360a_fragmp4_AND_sfxmp3)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bear640x360a_fragmp4_AND_sfxopus441webm)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bearaudiomainaacaac_AND_bear320x240audioonlywebm)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bearaudiomainaacaac_AND_bear640x360a_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bearaudiomainaacaac_AND_bearaudiomainaacaac)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bearaudiomainaacaac_AND_sfxflac_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bearaudiomainaacaac_AND_sfxmp3)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/bearaudiomainaacaac_AND_sfxopus441webm)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/sfxflac_fragmp4_AND_bear640x360a_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/sfxflac_fragmp4_AND_bearaudiomainaacaac)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/sfxmp3_AND_bear640x360a_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/sfxmp3_AND_bearaudiomainaacaac)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/sfxopus441webm_AND_bear640x360a_fragmp4)
+DISABLE(AudioOnly/MSEChangeTypeTest, NewByPts_PlayBackToBack/sfxopus441webm_AND_bearaudiomainaacaac)
+
 #endif
 
-// Flaky on Linux
-DISABLE(PopupsOnlyUiDelegateTest, ManyPopupNotifications)
+// broke in v66
+DISABLE(WebViewTests/WebViewSizeTest,
+        Shim_TestResizeWebviewWithDisplayNoneResizesContent/0)
+DISABLE(ExtensionApiTabTest, UpdateWindowResize)
 DISABLE(ExtensionWindowLastFocusedTest, NoTabIdForDevToolsAndAppWindows)
+
+// Started failing May 13, probably due to expired certs. Supposed fix is on Master, did not work when backporting
+DISABLE(CertDatabaseNSSTest, ImportCACertNotHierarchy)
+DISABLE(CertDatabaseNSSTest, ImportCACert_EmailTrust)
+DISABLE(CertDatabaseNSSTest, ImportCACert_ObjSignTrust)
+DISABLE(CertDatabaseNSSTest, ImportCACert_SSLTrust)
+DISABLE(CertDatabaseNSSTest, ImportCaAndServerCert)
+DISABLE(CertDatabaseNSSTest, ImportCaAndServerCert_DistrustServer)
+
+// broke in v67
+DISABLE(EncryptedMediaTestExperimentalCdmInterface, Playback_Encryption_CENC)
+DISABLE_MULTI(EncryptedMediaTest, Playback_Encryption_CENC)
+
+// Broke in v68
+DISABLE_MULTI(ECKEncryptedMediaTest, Playback_Encryption_CENC)
+DISABLE_MULTI(ECKEncryptedMediaTest, Playback_Encryption_CBCS)
+DISABLE_MULTI(EncryptedMediaTest, Playback_Encryption_CBCS)
+DISABLE_MULTI(EncryptedMediaTest, Playback_EncryptedVideo_CBCS_EncryptedAudio_CENC)
+DISABLE_MULTI(EncryptedMediaTest, Playback_EncryptedVideo_CENC_EncryptedAudio_CBCS)
+DISABLE_MULTI(ECKEncryptedMediaTest, DecryptOnly_VideoOnly_MP4_CBCS)
+
+// Broke in v69
+DISABLE(MSE_ClearKey/EncryptedMediaTest, Playback_Encryption_CBCS_Video_CENC_Audio/0)
+DISABLE(MSE_ClearKey/EncryptedMediaTest, Playback_Encryption_CENC_Video_CBCS_Audio/0)
+
+// Seems to not work in v67 on the tester
+DISABLE(BrowserShutdownBrowserTest, ShutdownConfirmation)
+
+// Causes an assert due to a IO operation in Vivaldi prefs registration
 DISABLE(ProfileHelperTest, OpenNewWindowForProfile)
-DISABLE(AccessibilityFullscreenBrowserTest, InsideIFrame)
-DISABLE(SingleClientDirectorySyncTest, DeleteDirectoryWhenCorrupted)
+
+// Flaky
+DISABLE(BrowserFocusTest, AppLocationBar)
+DISABLE(BrowserFocusTest, PopupLocationBar)
+DISABLE(X11TopmostWindowFinderTest, NonRectangularNullShape)
+DISABLE(CrExtensionsToolbarTest, ClickHandlers)

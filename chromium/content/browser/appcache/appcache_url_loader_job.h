@@ -15,11 +15,11 @@
 #include "content/browser/appcache/appcache_request_handler.h"
 #include "content/browser/appcache/appcache_response.h"
 #include "content/browser/appcache/appcache_storage.h"
-#include "content/browser/loader/url_loader_request_handler.h"
+#include "content/browser/loader/navigation_loader_interceptor.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/data_pipe.h"
-#include "services/network/public/interfaces/url_loader.mojom.h"
+#include "services/network/public/mojom/url_loader.mojom.h"
 
 namespace network {
 class NetToMojoPendingBuffer;
@@ -55,7 +55,10 @@ class CONTENT_EXPORT AppCacheURLLoaderJob : public AppCacheJob,
   base::WeakPtr<AppCacheURLLoaderJob> GetDerivedWeakPtr();
 
   // network::mojom::URLLoader implementation:
-  void FollowRedirect() override;
+  void FollowRedirect(const base::Optional<std::vector<std::string>>&
+                          to_be_removed_request_headers,
+                      const base::Optional<net::HttpRequestHeaders>&
+                          modified_request_headers) override;
   void ProceedWithResponse() override;
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override;
@@ -68,9 +71,10 @@ class CONTENT_EXPORT AppCacheURLLoaderJob : public AppCacheJob,
   // AppCacheRequestHandler::CreateJob() creates this instance.
   friend class AppCacheRequestHandler;
 
-  AppCacheURLLoaderJob(AppCacheURLLoaderRequest* appcache_request,
-                       AppCacheStorage* storage,
-                       LoaderCallback loader_callback);
+  AppCacheURLLoaderJob(
+      AppCacheURLLoaderRequest* appcache_request,
+      AppCacheStorage* storage,
+      NavigationLoaderInterceptor::LoaderCallback loader_callback);
 
   // Invokes the loader callback which is expected to setup the mojo binding.
   void CallLoaderCallback();
@@ -121,7 +125,7 @@ class CONTENT_EXPORT AppCacheURLLoaderJob : public AppCacheJob,
 
   // The Callback to be invoked in the network service land to indicate if
   // the resource request can be serviced via the AppCache.
-  LoaderCallback loader_callback_;
+  NavigationLoaderInterceptor::LoaderCallback loader_callback_;
 
   // The AppCacheRequest instance, used to inform the loader job about range
   // request headers. Not owned by this class.

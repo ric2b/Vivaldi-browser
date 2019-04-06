@@ -5,21 +5,16 @@
 #ifndef COMPONENTS_VIZ_SERVICE_HIT_TEST_HIT_TEST_AGGREGATOR_DELEGATE_H_
 #define COMPONENTS_VIZ_SERVICE_HIT_TEST_HIT_TEST_AGGREGATOR_DELEGATE_H_
 
+#include "components/viz/common/hit_test/aggregated_hit_test_region.h"
+
 namespace viz {
-// Used by HitTestAggregator to talk to GpuRootCompositorFrameSink.
+// Used by HitTestAggregator to talk to FrameSinkManagerImpl.
 class HitTestAggregatorDelegate {
  public:
-  // Called if any of the buffer that stores the aggregated hit-test data is
-  // updated (e.g. destroyed, reallocated etc.). |active_handle| and
-  // |idle_handle| both must be valid.
+  // Called to send |hit_test_data| when we receive new data.
   virtual void OnAggregatedHitTestRegionListUpdated(
-      mojo::ScopedSharedBufferHandle active_handle,
-      uint32_t active_handle_size,
-      mojo::ScopedSharedBufferHandle idle_handle,
-      uint32_t idle_handle_size) = 0;
-
-  virtual void SwitchActiveAggregatedHitTestRegionList(
-      uint8_t active_handle_index) = 0;
+      const FrameSinkId& frame_sink_id,
+      const std::vector<AggregatedHitTestRegion>& hit_test_data) = 0;
 
  protected:
   // The dtor is protected so that HitTestAggregator does not take ownership.

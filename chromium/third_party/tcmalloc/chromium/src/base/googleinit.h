@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2005, Google Inc.
 // All rights reserved.
 // 
@@ -39,34 +40,19 @@ class GoogleInitializer {
  public:
   typedef void (*VoidFunction)(void);
   GoogleInitializer(const char* name, VoidFunction ctor, VoidFunction dtor)
-      : /* name_(name), */ destructor_(dtor) {
-    // TODO(dmikurube): Re-enable the commented-out code.
-    // We commented out the following line, since Chromium does not have the
-    // proper includes to log using these macros.
-    //
-    // Commended-out code:
-    //   RAW_VLOG(10, "<GoogleModuleObject> constructing: %s\n", name_);
-    //
-    // This googleinit.h is included from out of third_party/tcmalloc, such as
-    // net/tools/flip_server/balsa_headers.cc.
-    // "base/logging.h" (included above) indicates Chromium's base/logging.h
-    // when this googleinit.h is included from out of third_party/tcmalloc.
+      : name_(name), destructor_(dtor) {
+    RAW_VLOG(10, "<GoogleModuleObject> constructing: %s\n", name_);
     if (ctor)
       ctor();
   }
   ~GoogleInitializer() {
-    // TODO(dmikurube): Re-enable the commented-out code.
-    // The same as above.  The following line is commented out in Chromium.
-    //
-    // Commended-out code:
-    //   RAW_VLOG(10, "<GoogleModuleObject> destroying: %s\n", name_);
+    RAW_VLOG(10, "<GoogleModuleObject> destroying: %s\n", name_);
     if (destructor_)
       destructor_();
   }
 
  private:
-  // TODO(dmikurube): Re-enable the commented-out code.
-  // const char* const name_;
+  const char* const name_;
   const VoidFunction destructor_;
 };
 

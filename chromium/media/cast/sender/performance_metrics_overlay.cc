@@ -180,7 +180,7 @@ void RenderLineOfText(const std::string& line, int top, VideoFrame* frame) {
       case '+':
         DivergePixels(gfx::Rect(1, 1, 1, 1), p_ul, stride);
         DivergePixels(gfx::Rect(1, 3, 1, 1), p_ul, stride);
-        // ...fall through...
+        FALLTHROUGH;
       case '-':
         DivergePixels(gfx::Rect(0, 2, 3, 1), p_ul, stride);
         break;
@@ -252,8 +252,18 @@ scoped_refptr<VideoFrame> MaybeRenderPerformanceMetricsOverlay(
     return source;  // Allocation failure: Return source frame.
   for (size_t plane = 0, num_planes = VideoFrame::NumPlanes(source->format());
        plane < num_planes; ++plane) {
-    memcpy(frame->data(plane), source->data(plane),
-           source->stride(plane) * source->rows(plane));
+    const size_t row_count = VideoFrame::Rows(plane, source->format(),
+                                              source->visible_rect().height());
+    const size_t bytes_per_row = VideoFrame::RowBytes(
+        plane, source->format(), source->visible_rect().width());
+    const uint8_t* src = source->visible_data(plane);
+    const int src_stride = source->stride(plane);
+    uint8_t* dst = frame->visible_data(plane);
+    const int dst_stride = frame->stride(plane);
+    for (size_t row = 0; row < row_count;
+         ++row, src += src_stride, dst += dst_stride) {
+      memcpy(dst, src, bytes_per_row);
+    }
   }
   frame->metadata()->MergeMetadataFrom(source->metadata());
   // Important: After all consumers are done with the frame, copy-back the

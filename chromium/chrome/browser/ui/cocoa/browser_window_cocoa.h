@@ -11,7 +11,7 @@
 #include "chrome/browser/signin/chrome_signin_helper.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
-#include "chrome/common/features.h"
+#include "chrome/common/buildflags.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "ui/base/ui_base_types.h"
 
@@ -44,6 +44,7 @@ class BrowserWindowCocoa
   void Show() override;
   void ShowInactive() override;
   void Hide() override;
+  bool IsVisible() const override;
   void SetBounds(const gfx::Rect& bounds) override;
   void Close() override;
   void Activate() override;
@@ -80,6 +81,7 @@ class BrowserWindowCocoa
   bool ShouldHideUIForFullscreen() const override;
   bool IsFullscreen() const override;
   bool IsFullscreenBubbleVisible() const override;
+  PageActionIconContainer* GetPageActionIconContainer() override;
   LocationBar* GetLocationBar() const override;
   void SetFocusToLocationBar(bool select_all) override;
   void UpdateReloadStopState(bool is_loading, bool force) override;
@@ -90,7 +92,7 @@ class BrowserWindowCocoa
   void ToolbarSizeChanged(bool is_animating) override;
   void FocusAppMenu() override;
   void FocusBookmarksToolbar() override;
-  void FocusInfobars() override;
+  void FocusInactivePopupForAccessibility() override;
   void RotatePaneFocus(bool forwards) override;
   bool IsBookmarkBarVisible() const override;
   bool IsBookmarkBarAnimating() const override;
@@ -102,6 +104,10 @@ class BrowserWindowCocoa
   autofill::SaveCardBubbleView* ShowSaveCreditCardBubble(
       content::WebContents* contents,
       autofill::SaveCardBubbleController* controller,
+      bool user_gesture) override;
+  autofill::LocalCardMigrationBubble* ShowLocalCardMigrationBubble(
+      content::WebContents* contents,
+      autofill::LocalCardMigrationBubbleController* controller,
       bool user_gesture) override;
   ShowTranslateBubbleResult ShowTranslateBubble(
       content::WebContents* contents,
@@ -127,8 +133,6 @@ class BrowserWindowCocoa
   void HandleKeyboardEvent(
       const content::NativeWebKeyboardEvent& event) override;
   void CutCopyPaste(int command_id) override;
-  WindowOpenDisposition GetDispositionForPopupBounds(
-      const gfx::Rect& bounds) override;
   FindBar* CreateFindBar() override;
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost()
       override;

@@ -8,10 +8,13 @@
 
 #include <memory>
 
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/content_switches.h"
+#include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/web_contents_tester.h"
@@ -30,29 +33,11 @@ namespace views {
 
 namespace {
 
-// Provides functionality to create a test WebContents.
-class WebViewTestViewsDelegate : public views::TestViewsDelegate {
- public:
-  WebViewTestViewsDelegate() {}
-  ~WebViewTestViewsDelegate() override {}
-
-  // Overriden from TestViewsDelegate.
-  content::WebContents* CreateWebContents(
-      content::BrowserContext* browser_context,
-      content::SiteInstance* site_instance) override {
-    return content::WebContentsTester::CreateTestWebContents(browser_context,
-                                                             site_instance);
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(WebViewTestViewsDelegate);
-};
-
-// Provides functionality to observe events on a WebContents like WasShown/
-// WasHidden/WebContentsDestroyed.
+// Provides functionality to observe events on a WebContents like
+// OnVisibilityChanged/WebContentsDestroyed.
 class WebViewTestWebContentsObserver : public content::WebContentsObserver {
  public:
-  WebViewTestWebContentsObserver(content::WebContents* web_contents)
+  explicit WebViewTestWebContentsObserver(content::WebContents* web_contents)
       : web_contents_(web_contents),
         was_shown_(false),
         shown_count_(0),
@@ -72,18 +57,27 @@ class WebViewTestWebContentsObserver : public content::WebContentsObserver {
     web_contents_ = NULL;
   }
 
-  void WasShown() override {
+  void OnVisibilityChanged(content::Visibility visibility) override {
+    switch (visibility) {
+      case content::Visibility::VISIBLE: {
 #if defined(USE_AURA)
-    valid_root_while_shown_ =
-        web_contents()->GetNativeView()->GetRootWindow() != NULL;
+        valid_root_while_shown_ =
+            web_contents()->GetNativeView()->GetRootWindow() != NULL;
 #endif
-    was_shown_ = true;
-    ++shown_count_;
-  }
-
-  void WasHidden() override {
-    was_shown_ = false;
-    ++hidden_count_;
+        was_shown_ = true;
+        ++shown_count_;
+        break;
+      }
+      case content::Visibility::HIDDEN: {
+        was_shown_ = false;
+        ++hidden_count_;
+        break;
+      }
+      default: {
+        ADD_FAILURE() << "Unexpected call to OnVisibilityChanged.";
+        break;
+      }
+    }
   }
 
   bool was_shown() const { return was_shown_; }
@@ -134,13 +128,27 @@ class WebViewUnitTest : public views::test::WidgetTest {
 
   ~WebViewUnitTest() override {}
 
+  std::unique_ptr<content::WebContents> CreateWebContentsForWebView(
+      content::BrowserContext* browser_context) {
+    return content::WebContentsTester::CreateTestWebContents(browser_context,
+                                                             nullptr);
+  }
+
   void SetUp() override {
-    set_views_delegate(base::WrapUnique(new WebViewTestViewsDelegate));
+    views::WebView::WebContentsCreator creator = base::BindRepeating(
+        &WebViewUnitTest::CreateWebContentsForWebView, base::Unretained(this));
+    scoped_web_contents_creator_ =
+        std::make_unique<views::WebView::ScopedWebContentsCreatorForTesting>(
+            creator);
+    set_views_delegate(base::WrapUnique(new views::TestViewsDelegate));
     browser_context_.reset(new content::TestBrowserContext);
     WidgetTest::SetUp();
     // Set the test content browser client to avoid pulling in needless
     // dependencies from content.
     SetBrowserClientForTesting(&test_browser_client_);
+
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kDisableBackgroundingOccludedWindowsForTesting);
 
     // Create a top level widget and add a child, and give it a WebView as a
     // child.
@@ -156,6 +164,7 @@ class WebViewUnitTest : public views::test::WidgetTest {
   }
 
   void TearDown() override {
+    scoped_web_contents_creator_.reset();
     top_level_widget_->Close();  // Deletes all children and itself.
     RunPendingMessages();
 
@@ -172,14 +181,16 @@ class WebViewUnitTest : public views::test::WidgetTest {
   NativeViewHost* holder() const { return web_view_->holder_; }
 
   std::unique_ptr<content::WebContents> CreateWebContents() const {
-    return base::WrapUnique(content::WebContents::Create(
-        content::WebContents::CreateParams(browser_context_.get())));
+    return content::WebContents::Create(
+        content::WebContents::CreateParams(browser_context_.get()));
   }
 
  private:
   content::TestBrowserThreadBundle test_browser_thread_bundle_;
   std::unique_ptr<content::TestBrowserContext> browser_context_;
   content::TestContentBrowserClient test_browser_client_;
+  std::unique_ptr<views::WebView::ScopedWebContentsCreatorForTesting>
+      scoped_web_contents_creator_;
 
   Widget* top_level_widget_ = nullptr;
   WebView* web_view_ = nullptr;
@@ -483,6 +494,60 @@ TEST_F(WebViewUnitTest, DetachedWebViewDestructor) {
   // Destroy WebView. NativeView should be detached secondary.
   // There should be no crash.
   webview.reset();
+}
+
+// Test that the specified crashed overlay view is shown when a WebContents
+// is in a crashed state.
+TEST_F(WebViewUnitTest, CrashedOverlayView) {
+  const std::unique_ptr<content::WebContents> web_contents(CreateWebContents());
+  std::unique_ptr<WebView> web_view(
+      new WebView(web_contents->GetBrowserContext()));
+  View* contents_view = top_level_widget()->GetContentsView();
+  contents_view->AddChildView(web_view.get());
+  web_view->SetWebContents(web_contents.get());
+
+  View* crashed_overlay_view = new View();
+  web_view->SetCrashedOverlayView(crashed_overlay_view);
+  EXPECT_FALSE(crashed_overlay_view->IsDrawn());
+
+  // Normally when a renderer crashes, the WebView will learn about it
+  // automatically via WebContentsObserver. Since this is a test
+  // WebContents, simulate that by calling SetIsCrashed and then
+  // explicitly calling RenderViewDeleted on the WebView to trigger it
+  // to swap in the crashed overlay view.
+  web_contents->SetIsCrashed(base::TERMINATION_STATUS_PROCESS_CRASHED, -1);
+  EXPECT_TRUE(web_contents->IsCrashed());
+  static_cast<content::WebContentsObserver*>(web_view.get())
+      ->RenderViewDeleted(nullptr);
+  EXPECT_TRUE(crashed_overlay_view->IsDrawn());
+}
+
+// Test that a crashed overlay view isn't deleted if it's owned by client.
+TEST_F(WebViewUnitTest, CrashedOverlayViewOwnedbyClient) {
+  const std::unique_ptr<content::WebContents> web_contents(CreateWebContents());
+  std::unique_ptr<WebView> web_view(
+      new WebView(web_contents->GetBrowserContext()));
+  View* contents_view = top_level_widget()->GetContentsView();
+  contents_view->AddChildView(web_view.get());
+  web_view->SetWebContents(web_contents.get());
+
+  View* crashed_overlay_view = new View();
+  crashed_overlay_view->set_owned_by_client();
+  web_view->SetCrashedOverlayView(crashed_overlay_view);
+  EXPECT_FALSE(crashed_overlay_view->IsDrawn());
+
+  // Simulate a renderer crash (see above).
+  web_contents->SetIsCrashed(base::TERMINATION_STATUS_PROCESS_CRASHED, -1);
+  EXPECT_TRUE(web_contents->IsCrashed());
+  static_cast<content::WebContentsObserver*>(web_view.get())
+      ->RenderViewDeleted(nullptr);
+  EXPECT_TRUE(crashed_overlay_view->IsDrawn());
+
+  web_view->SetCrashedOverlayView(nullptr);
+  web_view.reset();
+
+  // This shouldn't crash, we still own this.
+  delete crashed_overlay_view;
 }
 
 }  // namespace views

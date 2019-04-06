@@ -9,7 +9,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
@@ -17,7 +16,6 @@
 #include "chrome/browser/extensions/extension_function_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/browsing_data/core/browsing_data_utils.h"
@@ -62,7 +60,6 @@ class ExtensionBrowsingDataTest : public InProcessBrowserTest {
 
  protected:
   void SetUp() override {
-    feature_list_.InitAndEnableFeature(features::kTabsInCbd);
     InProcessBrowserTest::SetUp();
   }
 
@@ -297,7 +294,6 @@ class ExtensionBrowsingDataTest : public InProcessBrowserTest {
   }
 
  private:
-  base::test::ScopedFeatureList feature_list_;
   // Cached pointer to BrowsingDataRemover for access to testing methods.
   content::BrowsingDataRemover* remover_;
 };
@@ -352,6 +348,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, RemoveBrowsingDataAll) {
       content::BrowsingDataRemover::DATA_TYPE_COOKIES |
           content::BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
           (content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE &
+           ~content::BrowsingDataRemover::DATA_TYPE_BACKGROUND_FETCH &
            ~content::BrowsingDataRemover::DATA_TYPE_EMBEDDER_DOM_STORAGE) |
           content::BrowsingDataRemover::DATA_TYPE_CACHE |
           content::BrowsingDataRemover::DATA_TYPE_DOWNLOADS |
@@ -552,6 +549,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, SettingsFunctionSiteData) {
       (content::BrowsingDataRemover::DATA_TYPE_COOKIES |
        content::BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
        content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE) &
+      ~content::BrowsingDataRemover::DATA_TYPE_BACKGROUND_FETCH &
       ~content::BrowsingDataRemover::DATA_TYPE_EMBEDDER_DOM_STORAGE;
   int supported_site_data =
       supported_site_data_except_plugins |
@@ -583,6 +581,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, SettingsFunctionAssorted) {
       (content::BrowsingDataRemover::DATA_TYPE_COOKIES |
        content::BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
        content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE) &
+      ~content::BrowsingDataRemover::DATA_TYPE_BACKGROUND_FETCH &
       ~content::BrowsingDataRemover::DATA_TYPE_EMBEDDER_DOM_STORAGE;
 
   SetPrefsAndVerifySettings(

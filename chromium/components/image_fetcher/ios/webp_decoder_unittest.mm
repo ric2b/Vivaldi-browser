@@ -14,7 +14,6 @@
 
 #include "base/base_paths.h"
 #include "base/files/file_path.h"
-#include "base/ios/ios_util.h"
 #include "base/logging.h"
 #include "base/mac/scoped_cftyperef.h"
 #import "base/mac/scoped_nsobject.h"
@@ -59,7 +58,7 @@ class WebpDecoderTest : public testing::Test {
 
   NSData* LoadImage(const base::FilePath& filename) {
     base::FilePath path;
-    PathService::Get(base::DIR_SOURCE_ROOT, &path);
+    base::PathService::Get(base::DIR_SOURCE_ROOT, &path);
     path = path.AppendASCII("components/test/data/webp_transcode")
                .Append(filename);
     return

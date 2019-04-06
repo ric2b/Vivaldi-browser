@@ -7,7 +7,6 @@
 #include <stddef.h>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/process/process_iterator.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -17,7 +16,7 @@
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_constants.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/extension_host.h"
@@ -103,7 +102,7 @@ void PerformanceMonitor::GatherMetricsMapOnUIThread() {
     content::RenderProcessHost* host = rph_iter.GetCurrentValue();
     ProcessMetricsMetadata data;
     data.process_type = content::PROCESS_TYPE_RENDERER;
-    data.handle = host->GetHandle();
+    data.handle = host->GetProcess().Handle();
 
     GatherMetricsForRenderProcess(host, &data);
     MarkProcessAsAlive(data, current_update_sequence);
@@ -129,7 +128,7 @@ void PerformanceMonitor::MarkProcessAsAlive(
   MetricsMap::iterator process_metrics_iter = metrics_map_.find(handle);
   if (process_metrics_iter == metrics_map_.end()) {
     // If we're not already watching the process, let's initialize it.
-    metrics_map_[handle] = base::MakeUnique<ProcessMetricsHistory>();
+    metrics_map_[handle] = std::make_unique<ProcessMetricsHistory>();
     metrics_map_[handle]->Initialize(process_data, current_update_sequence);
   } else {
     // If we are watching the process, touch it to keep it alive.
@@ -143,10 +142,12 @@ void PerformanceMonitor::GatherMetricsMapOnIOThread(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   auto process_data_list =
-      base::MakeUnique<std::vector<ProcessMetricsMetadata>>();
+      std::make_unique<std::vector<ProcessMetricsMetadata>>();
 
   // Find all child processes (does not include renderers), which has to be
   // done on the IO thread.
+  // This creates a race on usage of the child process handles on Windows.
+  // See https://crbug.com/821453.
   for (content::BrowserChildProcessHostIterator iter; !iter.Done(); ++iter) {
     ProcessMetricsMetadata child_process_data;
     child_process_data.handle = iter.GetData().handle;
@@ -168,8 +169,7 @@ void PerformanceMonitor::GatherMetricsMapOnIOThread(
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::BindOnce(&PerformanceMonitor::MarkProcessesAsAliveOnUIThread,
-                     base::Unretained(this),
-                     base::Passed(std::move(process_data_list)),
+                     base::Unretained(this), std::move(process_data_list),
                      current_update_sequence));
 }
 

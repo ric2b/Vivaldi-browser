@@ -467,12 +467,39 @@ cursors.Cursor.prototype = {
         break;
       } else if (
           newNode.role != RoleType.INLINE_TEXT_BOX &&
-          newNode.children[newIndex]) {
+          !newNode.state[StateType.EDITABLE] && newNode.children[newIndex]) {
         // Valid node offset.
         newNode = newNode.children[newIndex];
         newIndex = 0;
       } else {
-        // Invalid offset.
+        // This offset is a text offset into the descendant visible
+        // text. Approximate this by indexing into the inline text boxes.
+        var lines = this.getAllLeaves_(newNode);
+        if (!lines.length)
+          break;
+
+        var targetLine, targetIndex = 0;
+        for (var i = 0, line, cur = 0; line = lines[i]; i++) {
+          var lineLength = line.name ? line.name.length : 1;
+          cur += lineLength;
+          if (cur > newIndex) {
+            targetLine = line;
+            if (!line.name)
+              targetIndex = cursors.NODE_INDEX;
+            else
+              targetIndex = newIndex - (cur - lineLength);
+            break;
+          }
+        }
+        if (!targetLine) {
+          // If we got here, that means the index is actually beyond the total
+          // length of text. Just get the last line.
+          targetLine = lines[lines.length - 1];
+          targetIndex =
+              targetLine ? targetLine.name.length : cursors.NODE_INDEX;
+        }
+        newNode = targetLine;
+        newIndex = targetIndex;
         break;
       }
     }
@@ -486,6 +513,24 @@ cursors.Cursor.prototype = {
    */
   isValid: function() {
     return this.node != null;
+  },
+
+  /**
+   * @private
+   * @param {!AutomationNode} node
+   * @return {!Array<!AutomationNode>}
+   */
+  getAllLeaves_: function(node) {
+    var ret = [];
+    if (!node.firstChild) {
+      ret.push(node);
+      return ret;
+    }
+
+    for (var i = 0; i < node.children.length; i++)
+      ret = ret.concat(this.getAllLeaves_(node.children[i]));
+
+    return ret;
   }
 };
 
@@ -756,8 +801,13 @@ cursors.Range.prototype = {
    * Select the text contained within this range.
    */
   select: function() {
-    var startNode = this.start.selectionNode_;
-    var endNode = this.end.selectionNode_;
+    var start = this.start_, end = this.end_;
+    if (this.start.compare(this.end) == Dir.BACKWARD) {
+      start = this.end;
+      end = this.start;
+    }
+    var startNode = start.selectionNode_;
+    var endNode = end.selectionNode_;
 
     if (!startNode || !endNode)
       return;
@@ -767,10 +817,10 @@ cursors.Range.prototype = {
         startNode.root == endNode.root) {
       // We want to adjust to select the entire node for node offsets;
       // otherwise, use the plain character offset.
-      var startIndex = this.start.selectionIndex_;
-      var endIndex = this.end.index_ == cursors.NODE_INDEX ?
-          this.end.selectionIndex_ + 1 :
-          this.end.selectionIndex_;
+      var startIndex = start.selectionIndex_;
+      var endIndex = end.index_ == cursors.NODE_INDEX ?
+          end.selectionIndex_ + 1 :
+          end.selectionIndex_;
 
       // Richly editables should always set a caret, but not select. This makes
       // it possible to navigate through content editables using ChromeVox keys
@@ -804,6 +854,33 @@ cursors.Range.prototype = {
    */
   isValid: function() {
     return this.start.isValid() && this.end.isValid();
+  },
+
+  /**
+   * Compares this range with |rhs|.
+   * @param {cursors.Range} rhs
+   * @return {Dir|undefined} Dir.BACKWARD if |rhs| comes before this range in
+   * document order. Dir.FORWARD if |rhs| comes after this range. Undefined
+   * otherwise.
+   */
+  compare: function(rhs) {
+    var startDir = this.start.compare(rhs.start);
+    var endDir = this.end.compare(rhs.end);
+    if (startDir != endDir)
+      return undefined;
+
+    return startDir;
+  },
+
+  /**
+   * Returns an undirected version of this range.
+   * @return {!cursors.Range}
+   */
+  normalize: function() {
+    if (this.start.compare(this.end) == Dir.BACKWARD) {
+      return new cursors.Range(this.end, this.start);
+    }
+    return this;
   }
 };
 

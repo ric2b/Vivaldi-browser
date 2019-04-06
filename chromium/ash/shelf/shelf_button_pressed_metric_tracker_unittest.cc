@@ -11,9 +11,9 @@
 #include "ash/shelf/shelf_view_test_api.h"
 #include "ash/test/ash_test_base.h"
 #include "base/macros.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/metrics/user_action_tester.h"
 #include "base/test/simple_test_tick_clock.h"
-#include "base/test/user_action_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event.h"
 #include "ui/views/controls/button/button.h"
@@ -85,7 +85,7 @@ class ShelfButtonPressedMetricTrackerTest : public AshTestBase {
   ShelfButtonPressedMetricTracker* metric_tracker_;
 
   // The TickClock injected in to the test target.
-  base::SimpleTestTickClock* tick_clock_;
+  base::SimpleTestTickClock tick_clock_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ShelfButtonPressedMetricTrackerTest);
@@ -112,19 +112,14 @@ void ShelfButtonPressedMetricTrackerTest::SetUp() {
 
   ShelfButtonPressedMetricTrackerTestAPI test_api(metric_tracker_);
 
-  std::unique_ptr<base::TickClock> test_tick_clock(
-      new base::SimpleTestTickClock());
-  tick_clock_ = static_cast<base::SimpleTestTickClock*>(test_tick_clock.get());
-  test_api.SetTickClock(std::move(test_tick_clock));
+  test_api.SetTickClock(&tick_clock_);
 
   // Ensure the TickClock->NowTicks() doesn't return base::TimeTicks because
   // ShelfButtonPressedMetricTracker interprets that value as unset.
-  tick_clock_->Advance(base::TimeDelta::FromMilliseconds(100));
+  tick_clock_.Advance(base::TimeDelta::FromMilliseconds(100));
 }
 
 void ShelfButtonPressedMetricTrackerTest::TearDown() {
-  tick_clock_ = nullptr;
-
   AshTestBase::TearDown();
 }
 
@@ -280,7 +275,7 @@ TEST_F(ShelfButtonPressedMetricTrackerTest,
   base::HistogramTester histogram_tester;
 
   ButtonPressed(&kDummyButton, SHELF_ACTION_WINDOW_MINIMIZED);
-  tick_clock_->Advance(
+  tick_clock_.Advance(
       base::TimeDelta::FromMilliseconds(kTimeDeltaInMilliseconds));
   ButtonPressed(&kDummyButton, SHELF_ACTION_WINDOW_ACTIVATED);
 

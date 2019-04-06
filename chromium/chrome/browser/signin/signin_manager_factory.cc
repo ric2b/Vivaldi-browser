@@ -7,6 +7,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/account_fetcher_service_factory.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
@@ -17,10 +18,6 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/signin/core/browser/signin_manager.h"
-
-#include "app/vivaldi_apptools.h"
-#include "sync/vivaldi_signin_manager.h"
-#include "sync/vivaldi_signin_manager_factory.h"
 
 SigninManagerFactory::SigninManagerFactory()
     : BrowserContextKeyedServiceFactory(
@@ -82,10 +79,6 @@ const SigninManager* SigninManagerFactory::GetForProfileIfExists(
 
 // static
 SigninManagerFactory* SigninManagerFactory::GetInstance() {
-#if defined(VIVALDI_BUILD)
-  if(vivaldi::IsVivaldiRunning())
-    return vivaldi::VivaldiSigninManagerFactory::GetInstance();
-#endif
   return base::Singleton<SigninManagerFactory>::get();
 }
 
@@ -129,9 +122,10 @@ KeyedService* SigninManagerFactory::BuildServiceInstanceFor(
       client, ProfileOAuth2TokenServiceFactory::GetForProfile(profile),
       AccountTrackerServiceFactory::GetForProfile(profile),
       GaiaCookieManagerServiceFactory::GetForProfile(profile),
-      SigninErrorControllerFactory::GetForProfile(profile));
-  AccountFetcherServiceFactory::GetForProfile(profile);
+      SigninErrorControllerFactory::GetForProfile(profile),
+      AccountConsistencyModeManager::GetMethodForProfile(profile));
 #endif
+  AccountFetcherServiceFactory::GetForProfile(profile);
   service->Initialize(g_browser_process->local_state());
   for (Observer& observer : observer_list_)
     observer.SigninManagerCreated(service);

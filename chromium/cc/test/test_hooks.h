@@ -11,6 +11,10 @@
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_impl.h"
 
+namespace gfx {
+struct PresentationFeedback;
+}
+
 namespace viz {
 class CompositorFrame;
 class OutputSurface;
@@ -25,10 +29,8 @@ class TestHooks : public AnimationDelegate {
   ~TestHooks() override;
 
   // Compositor thread hooks.
-  virtual void CreateResourceAndRasterBufferProvider(
-      LayerTreeHostImpl* host_impl,
-      std::unique_ptr<RasterBufferProvider>* raster_buffer_provider,
-      std::unique_ptr<ResourcePool>* resource_pool);
+  virtual std::unique_ptr<RasterBufferProvider> CreateRasterBufferProvider(
+      LayerTreeHostImpl* host_impl);
   virtual void WillBeginImplFrameOnThread(LayerTreeHostImpl* host_impl,
                                           const viz::BeginFrameArgs& args) {}
   virtual void DidFinishImplFrameOnThread(LayerTreeHostImpl* host_impl) {}
@@ -61,6 +63,10 @@ class TestHooks : public AnimationDelegate {
       LayerTreeHostImpl* host_impl) {}
   virtual void DidReceiveCompositorFrameAckOnThread(
       LayerTreeHostImpl* host_impl) {}
+  virtual void DidReceivePresentationTimeOnThread(
+      LayerTreeHostImpl* host_impl,
+      uint32_t frame_token,
+      const gfx::PresentationFeedback& feedback) {}
   virtual void DidSetVisibleOnImplTree(LayerTreeHostImpl* host_impl,
                                        bool visible) {}
   virtual void AnimateLayers(LayerTreeHostImpl* host_impl,
@@ -70,6 +76,7 @@ class TestHooks : public AnimationDelegate {
   virtual void WillAnimateLayers(LayerTreeHostImpl* host_impl,
                                  base::TimeTicks monotonic_time) {}
   virtual void DidInvalidateContentOnImplSide(LayerTreeHostImpl* host_impl) {}
+  virtual void DidInvalidateLayerTreeFrameSink(LayerTreeHostImpl* host_impl) {}
   virtual void DidReceiveImplSideInvalidationRequest(
       LayerTreeHostImpl* host_impl) {}
   virtual void DidRequestImplSideInvalidation(LayerTreeHostImpl* host_impl) {}

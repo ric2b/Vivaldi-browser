@@ -60,14 +60,14 @@ void LogCollectionStatus(CollectionStatus status) {
 }  // namespace
 
 PostmortemReportCollector::PostmortemReportCollector(
-    SystemSessionAnalyzer* analyzer)
+    metrics::SystemSessionAnalyzer* analyzer)
     : report_database_(nullptr), system_session_analyzer_(analyzer) {}
 PostmortemReportCollector::PostmortemReportCollector(
     const std::string& product_name,
     const std::string& version_number,
     const std::string& channel_name,
     crashpad::CrashReportDatabase* report_database,
-    SystemSessionAnalyzer* analyzer)
+    metrics::SystemSessionAnalyzer* analyzer)
     : product_name_(product_name),
       version_number_(version_number),
       channel_name_(channel_name),
@@ -193,19 +193,19 @@ void PostmortemReportCollector::RecordSystemShutdownState(
   } else if (!system_session_analyzer_) {
     status = SYSTEM_SESSION_ANALYSIS_NO_ANALYZER;
   } else {
-    SystemSessionAnalyzer::Status analyzer_status =
+    metrics::SystemSessionAnalyzer::Status analyzer_status =
         system_session_analyzer_->IsSessionUnclean(time);
     switch (analyzer_status) {
-      case SystemSessionAnalyzer::FAILED:
+      case metrics::SystemSessionAnalyzer::FAILED:
         status = SYSTEM_SESSION_ANALYSIS_FAILED;
         break;
-      case SystemSessionAnalyzer::CLEAN:
+      case metrics::SystemSessionAnalyzer::CLEAN:
         session_state = SystemState::CLEAN;
         break;
-      case SystemSessionAnalyzer::UNCLEAN:
+      case metrics::SystemSessionAnalyzer::UNCLEAN:
         session_state = SystemState::UNCLEAN;
         break;
-      case SystemSessionAnalyzer::OUTSIDE_RANGE:
+      case metrics::SystemSessionAnalyzer::OUTSIDE_RANGE:
         status = SYSTEM_SESSION_ANALYSIS_OUTSIDE_RANGE;
         break;
     }
@@ -224,19 +224,17 @@ void PostmortemReportCollector::GenerateCrashReport(
   DCHECK(report_proto);
 
   // Prepare a crashpad report.
-  CrashReportDatabase::NewReport* new_report = nullptr;
+  std::unique_ptr<CrashReportDatabase::NewReport> new_report;
   CrashReportDatabase::OperationStatus database_status =
       report_database_->PrepareNewCrashReport(&new_report);
   if (database_status != CrashReportDatabase::kNoError) {
     LogCollectionStatus(PREPARE_NEW_CRASH_REPORT_FAILED);
     return;
   }
-  CrashReportDatabase::CallErrorWritingCrashReport
-      call_error_writing_crash_report(report_database_, new_report);
 
   // Write the report to a minidump.
-  if (!WriteReportToMinidump(report_proto, client_id, new_report->uuid,
-                             reinterpret_cast<FILE*>(new_report->handle))) {
+  if (!WriteReportToMinidump(report_proto, client_id, new_report->ReportID(),
+                             new_report->Writer())) {
     LogCollectionStatus(WRITE_TO_MINIDUMP_FAILED);
     return;
   }
@@ -244,10 +242,9 @@ void PostmortemReportCollector::GenerateCrashReport(
   // Finalize the report wrt the report database. Note that this doesn't trigger
   // an immediate upload, but Crashpad will eventually upload the report (as of
   // writing, the delay is on the order of up to 15 minutes).
-  call_error_writing_crash_report.Disarm();
   crashpad::UUID unused_report_id;
   database_status = report_database_->FinishedWritingCrashReport(
-      new_report, &unused_report_id);
+      std::move(new_report), &unused_report_id);
   if (database_status != CrashReportDatabase::kNoError) {
     LogCollectionStatus(FINISHED_WRITING_CRASH_REPORT_FAILED);
     return;
@@ -260,9 +257,8 @@ bool PostmortemReportCollector::WriteReportToMinidump(
     StabilityReport* report,
     const crashpad::UUID& client_id,
     const crashpad::UUID& report_id,
-    base::PlatformFile minidump_file) {
+    crashpad::FileWriterInterface* minidump_file) {
   DCHECK(report);
-
   return WritePostmortemDump(minidump_file, client_id, report_id, report);
 }
 

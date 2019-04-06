@@ -9,7 +9,6 @@
 
 #include "base/feature_list.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -21,6 +20,7 @@
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -31,7 +31,9 @@
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/favicon_size.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icon_types.h"
 
 using content::WebContents;
 
@@ -45,6 +47,7 @@ using content::WebContents;
 //     ContentSettingMIDISysExImageModel         - midi sysex
 //     ContentSettingDownloadsImageModel         - automatic downloads
 //     ContentSettingClipboardReadImageModel     - clipboard read
+//     ContentSettingSensorsImageModel           - sensors
 //   ContentSettingMediaImageModel             - media
 //   ContentSettingSubresourceFilterImageModel - deceptive content
 //   ContentSettingFramebustBlockImageModel    - blocked framebust
@@ -131,6 +134,16 @@ class ContentSettingMediaImageModel : public ContentSettingImageModel {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ContentSettingMediaImageModel);
+};
+
+class ContentSettingSensorsImageModel : public ContentSettingSimpleImageModel {
+ public:
+  ContentSettingSensorsImageModel();
+
+  void UpdateFromWebContents(WebContents* web_contents) override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ContentSettingSensorsImageModel);
 };
 
 namespace {
@@ -257,6 +270,8 @@ ContentSettingImageModel::CreateForContentType(ImageType image_type) {
       return std::make_unique<ContentSettingFramebustBlockImageModel>();
     case ImageType::CLIPBOARD_READ:
       return std::make_unique<ContentSettingClipboardReadImageModel>();
+    case ImageType::SENSORS:
+      return std::make_unique<ContentSettingSensorsImageModel>();
     case ImageType::NUM_IMAGE_TYPES:
       break;
   }
@@ -329,7 +344,13 @@ void ContentSettingBlockedImageModel::UpdateFromWebContents(
   else if (content_settings->IsContentBlocked(type))
     badge_id = &kBlockedBadgeIcon;
 
-  set_icon(image_details->icon, *badge_id);
+  const gfx::VectorIcon* icon = &image_details->icon;
+  // Touch mode uses a different tab audio icon.
+  if (image_details->content_type == CONTENT_SETTINGS_TYPE_SOUND &&
+      ui::MaterialDesignController::IsTouchOptimizedUiEnabled()) {
+    icon = &kTabAudioRoundedIcon;
+  }
+  set_icon(*icon, *badge_id);
   set_explanatory_string_id(explanation_id);
   DCHECK(tooltip_id);
   set_tooltip(l10n_util::GetStringUTF16(tooltip_id));
@@ -674,11 +695,42 @@ void ContentSettingFramebustBlockImageModel::SetAnimationHasRun(
       ->set_animation_has_run();
 }
 
+// Sensors ---------------------------------------------------------------------
+
+ContentSettingSensorsImageModel::ContentSettingSensorsImageModel()
+    : ContentSettingSimpleImageModel(ImageType::SENSORS,
+                                     CONTENT_SETTINGS_TYPE_SENSORS) {}
+
+void ContentSettingSensorsImageModel::UpdateFromWebContents(
+    WebContents* web_contents) {
+  set_visible(false);
+  if (!web_contents)
+    return;
+  auto* content_settings =
+      TabSpecificContentSettings::FromWebContents(web_contents);
+  if (!content_settings)
+    return;
+
+  bool blocked = content_settings->IsContentBlocked(content_type());
+  bool allowed = content_settings->IsContentAllowed(content_type());
+  if (!blocked && !allowed)
+    return;
+
+  set_visible(true);
+  set_icon(kSensorsIcon, allowed ? gfx::kNoneIcon : kBlockedBadgeIcon);
+  set_tooltip(l10n_util::GetStringUTF16(allowed ? IDS_SENSORS_ALLOWED_TOOLTIP
+                                                : IDS_SENSORS_BLOCKED_TOOLTIP));
+}
+
 // Base class ------------------------------------------------------------------
 
 gfx::Image ContentSettingImageModel::GetIcon(SkColor icon_color) const {
-  return gfx::Image(
-      gfx::CreateVectorIconWithBadge(*icon_, 16, icon_color, *icon_badge_));
+  int icon_size = GetLayoutConstant(LOCATION_BAR_ICON_SIZE);
+#if defined(OS_MACOSX) && !BUILDFLAG(MAC_VIEWS_BROWSER)
+  icon_size = gfx::kFaviconSize;
+#endif
+  return gfx::Image(gfx::CreateVectorIconWithBadge(*icon_, icon_size,
+                                                   icon_color, *icon_badge_));
 }
 
 ContentSettingImageModel::ContentSettingImageModel(ImageType image_type)
@@ -714,6 +766,7 @@ ContentSettingImageModel::GenerateContentSettingImageModels() {
       ImageType::MIXEDSCRIPT,
       ImageType::PROTOCOL_HANDLERS,
       ImageType::MEDIASTREAM,
+      ImageType::SENSORS,
       ImageType::ADS,
       ImageType::AUTOMATIC_DOWNLOADS,
       ImageType::MIDI_SYSEX,

@@ -19,6 +19,8 @@ namespace net {
 
 namespace {
 
+const int kMaxAsyncReadsAndWrites = 1000;
+
 // Some of the socket errors that can be returned by normal socket connection
 // attempts.
 const Error kConnectErrors[] = {
@@ -45,7 +47,7 @@ FuzzedSocket::~FuzzedSocket() = default;
 
 int FuzzedSocket::Read(IOBuffer* buf,
                        int buf_len,
-                       const CompletionCallback& callback) {
+                       CompletionOnceCallback callback) {
   DCHECK(!connect_pending_);
   DCHECK(!read_pending_);
 
@@ -57,8 +59,12 @@ int FuzzedSocket::Read(IOBuffer* buf,
     result = net_error_;
     sync = !error_pending_;
   } else {
-    // Otherwise, use |data_provider_|.
-    sync = data_provider_->ConsumeBool();
+    // Otherwise, use |data_provider_|. Always consume a bool, even when
+    // ForceSync() is true, to behave more consistently against input mutations.
+    sync = data_provider_->ConsumeBool() || ForceSync();
+
+    num_async_reads_and_writes_ += static_cast<int>(!sync);
+
     std::string data = data_provider_->ConsumeRandomLengthString(buf_len);
     result = data.size();
 
@@ -85,15 +91,16 @@ int FuzzedSocket::Read(IOBuffer* buf,
 
   read_pending_ = true;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&FuzzedSocket::OnReadComplete,
-                            weak_factory_.GetWeakPtr(), callback, result));
+      FROM_HERE,
+      base::BindOnce(&FuzzedSocket::OnReadComplete, weak_factory_.GetWeakPtr(),
+                     std::move(callback), result));
   return ERR_IO_PENDING;
 }
 
 int FuzzedSocket::Write(
     IOBuffer* buf,
     int buf_len,
-    const CompletionCallback& callback,
+    CompletionOnceCallback callback,
     const NetworkTrafficAnnotationTag& /* traffic_annotation */) {
   DCHECK(!connect_pending_);
   DCHECK(!write_pending_);
@@ -106,8 +113,12 @@ int FuzzedSocket::Write(
     result = net_error_;
     sync = !error_pending_;
   } else {
-    // Otherwise, use |data_|.
-    sync = data_provider_->ConsumeBool();
+    // Otherwise, use |data_provider_|. Always consume a bool, even when
+    // ForceSync() is true, to behave more consistently against input mutations.
+    sync = data_provider_->ConsumeBool() || ForceSync();
+
+    num_async_reads_and_writes_ += static_cast<int>(!sync);
+
     result = data_provider_->ConsumeUint8();
     if (result > buf_len)
       result = buf_len;
@@ -127,8 +138,9 @@ int FuzzedSocket::Write(
 
   write_pending_ = true;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&FuzzedSocket::OnWriteComplete,
-                            weak_factory_.GetWeakPtr(), callback, result));
+      FROM_HERE,
+      base::BindOnce(&FuzzedSocket::OnWriteComplete, weak_factory_.GetWeakPtr(),
+                     std::move(callback), result));
   return ERR_IO_PENDING;
 }
 
@@ -140,7 +152,12 @@ int FuzzedSocket::SetSendBufferSize(int32_t size) {
   return OK;
 }
 
-int FuzzedSocket::Connect(const CompletionCallback& callback) {
+int FuzzedSocket::Bind(const net::IPEndPoint& local_addr) {
+  NOTREACHED();
+  return ERR_NOT_IMPLEMENTED;
+}
+
+int FuzzedSocket::Connect(CompletionOnceCallback callback) {
   // Sockets can normally be reused, but don't support it here.
   DCHECK_NE(net_error_, OK);
   DCHECK(!connect_pending_);
@@ -169,8 +186,9 @@ int FuzzedSocket::Connect(const CompletionCallback& callback) {
   if (result != OK)
     error_pending_ = true;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&FuzzedSocket::OnConnectComplete,
-                            weak_factory_.GetWeakPtr(), callback, result));
+      FROM_HERE,
+      base::BindOnce(&FuzzedSocket::OnConnectComplete,
+                     weak_factory_.GetWeakPtr(), std::move(callback), result));
   return ERR_IO_PENDING;
 }
 
@@ -209,10 +227,6 @@ const NetLogWithSource& FuzzedSocket::NetLog() const {
   return net_log_;
 }
 
-void FuzzedSocket::SetSubresourceSpeculation() {}
-
-void FuzzedSocket::SetOmniboxSpeculation() {}
-
 bool FuzzedSocket::WasEverUsed() const {
   return total_bytes_written_ != 0 || total_bytes_read_ != 0;
 }
@@ -249,8 +263,7 @@ Error FuzzedSocket::ConsumeReadWriteErrorFromData() {
   return data_provider_->PickValueInArray(kReadWriteErrors);
 }
 
-void FuzzedSocket::OnReadComplete(const CompletionCallback& callback,
-                                  int result) {
+void FuzzedSocket::OnReadComplete(CompletionOnceCallback callback, int result) {
   CHECK(read_pending_);
   read_pending_ = false;
   if (result <= 0) {
@@ -258,10 +271,10 @@ void FuzzedSocket::OnReadComplete(const CompletionCallback& callback,
   } else {
     total_bytes_read_ += result;
   }
-  callback.Run(result);
+  std::move(callback).Run(result);
 }
 
-void FuzzedSocket::OnWriteComplete(const CompletionCallback& callback,
+void FuzzedSocket::OnWriteComplete(CompletionOnceCallback callback,
                                    int result) {
   CHECK(write_pending_);
   write_pending_ = false;
@@ -270,17 +283,21 @@ void FuzzedSocket::OnWriteComplete(const CompletionCallback& callback,
   } else {
     total_bytes_written_ += result;
   }
-  callback.Run(result);
+  std::move(callback).Run(result);
 }
 
-void FuzzedSocket::OnConnectComplete(const CompletionCallback& callback,
+void FuzzedSocket::OnConnectComplete(CompletionOnceCallback callback,
                                      int result) {
   CHECK(connect_pending_);
   connect_pending_ = false;
   if (result < 0)
     error_pending_ = false;
   net_error_ = result;
-  callback.Run(result);
+  std::move(callback).Run(result);
+}
+
+bool FuzzedSocket::ForceSync() const {
+  return (num_async_reads_and_writes_ >= kMaxAsyncReadsAndWrites);
 }
 
 }  // namespace net

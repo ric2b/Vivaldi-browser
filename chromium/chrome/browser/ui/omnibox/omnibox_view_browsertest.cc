@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
@@ -34,6 +33,7 @@
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "chrome/test/views/scoped_macviews_browser_mode.cc"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
@@ -342,6 +342,22 @@ class OmniboxViewTest : public InProcessBrowserTest,
     ASSERT_NO_FATAL_FAILURE(SetupHistory());
   }
 
+  void SetTestToolbarPermanentText(const base::string16& text) {
+    OmniboxView* omnibox_view = nullptr;
+    ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
+    OmniboxEditModel* edit_model = omnibox_view->model();
+    ASSERT_NE(nullptr, edit_model);
+
+    if (!test_toolbar_model_) {
+      test_toolbar_model_ = new TestToolbarModel;
+      std::unique_ptr<ToolbarModel> toolbar_model(test_toolbar_model_);
+      browser()->swap_toolbar_models(&toolbar_model);
+    }
+
+    test_toolbar_model_->set_formatted_full_url(text);
+    omnibox_view->Update();
+  }
+
   void Observe(int type,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override {
@@ -357,6 +373,11 @@ class OmniboxViewTest : public InProcessBrowserTest,
   }
 
  private:
+  test::ScopedMacViewsBrowserMode views_mode_{true};
+
+  // Non-owning pointer.
+  TestToolbarModel* test_toolbar_model_ = nullptr;
+
   DISALLOW_COPY_AND_ASSIGN(OmniboxViewTest);
 };
 
@@ -657,7 +678,16 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, MAYBE_DesiredTLDWithTemporaryText) {
 }
 
 // See http://crbug.com/431575.
-IN_PROC_BROWSER_TEST_F(OmniboxViewTest, ClearUserTextAfterBackgroundCommit) {
+// Flaky on Mac (crbug.com/841195).
+#if defined(OS_MACOSX)
+#define MAYBE_ClearUserTextAfterBackgroundCommit \
+  DISABLED_ClearUserTextAfterBackgroundCommit
+#else
+#define MAYBE_ClearUserTextAfterBackgroundCommit \
+  ClearUserTextAfterBackgroundCommit
+#endif
+IN_PROC_BROWSER_TEST_F(OmniboxViewTest,
+                       MAYBE_ClearUserTextAfterBackgroundCommit) {
   OmniboxView* omnibox_view = NULL;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
 
@@ -796,7 +826,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, BasicTextOperations) {
 
   size_t start, end;
   omnibox_view->GetSelectionBounds(&start, &end);
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if defined(TOOLKIT_VIEWS)
   // Views textfields select-all in reverse to show the leading text.
   std::swap(start, end);
 #endif
@@ -828,7 +858,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, BasicTextOperations) {
   omnibox_view->SelectAll(true);
   EXPECT_TRUE(omnibox_view->IsSelectAll());
   omnibox_view->GetSelectionBounds(&start, &end);
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if defined(TOOLKIT_VIEWS)
   // Views textfields select-all in reverse to show the leading text.
   std::swap(start, end);
 #endif
@@ -1375,11 +1405,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, MAYBE_TabAcceptKeyword) {
   ASSERT_TRUE(omnibox_view->GetText().empty());
 
   // Revert to keyword hint mode with SHIFT+TAB.
-#if defined(OS_MACOSX)
-  ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_BACKTAB, 0));
-#else
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_TAB, ui::EF_SHIFT_DOWN));
-#endif
   ASSERT_TRUE(omnibox_view->model()->is_keyword_hint());
   ASSERT_EQ(text, omnibox_view->model()->keyword());
   ASSERT_EQ(text, omnibox_view->GetText());
@@ -1485,6 +1511,10 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, MAYBE_TabTraverseResultsTest) {
 #if defined(OS_LINUX)
 #define MAYBE_PersistKeywordModeOnTabSwitch \
     DISABLED_PersistKeywordModeOnTabSwitch
+#elif defined(OS_MACOSX)
+// Getting text from textfields doesn't always work: https://crbug.com/823532
+#define MAYBE_PersistKeywordModeOnTabSwitch \
+    DISABLED_PersistKeywordModeOnTabSwitch
 #else
 #define MAYBE_PersistKeywordModeOnTabSwitch PersistKeywordModeOnTabSwitch
 #endif
@@ -1582,25 +1612,18 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, UndoRedo) {
       SendKey(ui::VKEY_Z, kCtrlOrCmdMask | ui::EF_SHIFT_DOWN));
   EXPECT_TRUE(omnibox_view->GetText().empty());
 
-  // The toolkit-views undo manager doesn't support restoring selection. Cocoa
-  // does, so it needs to be cleared.
+  // Perform an undo.
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_Z, kCtrlOrCmdMask));
-#if defined(OS_MACOSX)
-  // TODO(tapted): This next line may fail if running a toolkit-views browser
-  // window on Mac. We should fix the toolkit-views undo manager to restore
-  // selection rather than deleting this #ifdef.
   EXPECT_TRUE(omnibox_view->IsSelectAll());
-  ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_RIGHT, 0));
-#endif
-  EXPECT_FALSE(omnibox_view->IsSelectAll());
 
-  // The cursor should be at the end.
+  // The text should be selected.
   size_t start, end;
   omnibox_view->GetSelectionBounds(&start, &end);
   EXPECT_EQ(old_text.size(), start);
-  EXPECT_EQ(old_text.size(), end);
+  EXPECT_EQ(0U, end);
 
   // Delete three characters; "about:bl" should not trigger inline autocomplete.
+  ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_END, 0));
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_BACK, 0));
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_BACK, 0));
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_BACK, 0));
@@ -1725,9 +1748,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, CopyURLToClipboard) {
   // as URL (not as ordinary user input).
   OmniboxView* omnibox_view = NULL;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
-  OmniboxEditModel* edit_model = omnibox_view->model();
-  ASSERT_NE(static_cast<OmniboxEditModel*>(NULL), edit_model);
-  edit_model->SetPermanentText(ASCIIToUTF16("http://www.google.com/"));
+  SetTestToolbarPermanentText(ASCIIToUTF16("http://www.google.com"));
 
   const char* target_url = "http://www.google.com/calendar";
   omnibox_view->SetUserText(ASCIIToUTF16(target_url));
@@ -1770,9 +1791,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, CutURLToClipboard) {
   // as URL (not as ordinary user input).
   OmniboxView* omnibox_view = NULL;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
-  OmniboxEditModel* edit_model = omnibox_view->model();
-  ASSERT_NE(static_cast<OmniboxEditModel*>(NULL), edit_model);
-  edit_model->SetPermanentText(ASCIIToUTF16("http://www.google.com/"));
+  SetTestToolbarPermanentText(ASCIIToUTF16("http://www.google.com"));
 
   const char* target_url = "http://www.google.com/calendar";
   omnibox_view->SetUserText(ASCIIToUTF16(target_url));
@@ -1931,35 +1950,28 @@ size_t GetSelectionSize(OmniboxView* omnibox_view) {
 IN_PROC_BROWSER_TEST_F(OmniboxViewTest, SelectAllStaysAfterUpdate) {
   OmniboxView* omnibox_view = nullptr;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
-  TestToolbarModel* test_toolbar_model = new TestToolbarModel;
-  std::unique_ptr<ToolbarModel> toolbar_model(test_toolbar_model);
-  browser()->swap_toolbar_models(&toolbar_model);
 
   base::string16 url_a(ASCIIToUTF16("http://www.a.com/"));
   base::string16 url_b(ASCIIToUTF16("http://www.b.com/"));
   chrome::FocusLocationBar(browser());
 
-  test_toolbar_model->set_text(url_a);
-  omnibox_view->Update();
+  SetTestToolbarPermanentText(url_a);
   EXPECT_EQ(url_a, omnibox_view->GetText());
   EXPECT_TRUE(omnibox_view->IsSelectAll());
 
   // Updating while selected should retain SelectAll().
-  test_toolbar_model->set_text(url_b);
-  omnibox_view->Update();
+  SetTestToolbarPermanentText(url_b);
   EXPECT_EQ(url_b, omnibox_view->GetText());
   EXPECT_TRUE(omnibox_view->IsSelectAll());
 
   // Select nothing, then update. Should gain SelectAll().
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_RIGHT, 0));
-  test_toolbar_model->set_text(url_a);
-  omnibox_view->Update();
+  SetTestToolbarPermanentText(url_a);
   EXPECT_EQ(url_a, omnibox_view->GetText());
   EXPECT_TRUE(omnibox_view->IsSelectAll());
 
   // Test behavior of the "reversed" attribute of OmniboxView::SelectAll().
-  test_toolbar_model->set_text(ASCIIToUTF16("AB"));
-  omnibox_view->Update();
+  SetTestToolbarPermanentText(ASCIIToUTF16("AB"));
   // Should be at beginning. Shift+left should do nothing.
   EXPECT_EQ(2u, GetSelectionSize(omnibox_view));
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_LEFT, ui::EF_SHIFT_DOWN));
@@ -1967,8 +1979,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, SelectAllStaysAfterUpdate) {
   EXPECT_EQ(2u, GetSelectionSize(omnibox_view));
   EXPECT_TRUE(omnibox_view->IsSelectAll());
 
-  test_toolbar_model->set_text(ASCIIToUTF16("CD"));
-  omnibox_view->Update();
+  SetTestToolbarPermanentText(ASCIIToUTF16("CD"));
   EXPECT_EQ(2u, GetSelectionSize(omnibox_view));
 
   // At the start, so Shift+Left should do nothing.
@@ -1984,8 +1995,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, SelectAllStaysAfterUpdate) {
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_LEFT, 0));
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_RIGHT, ui::EF_SHIFT_DOWN));
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_RIGHT, ui::EF_SHIFT_DOWN));
-  test_toolbar_model->set_text(ASCIIToUTF16("AB"));
-  omnibox_view->Update();
+  SetTestToolbarPermanentText(ASCIIToUTF16("AB"));
   EXPECT_EQ(2u, GetSelectionSize(omnibox_view));
 
   // We reverse select all on Update() so shift-left won't do anything.

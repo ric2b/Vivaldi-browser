@@ -4,16 +4,26 @@
 
 #include "ui/gfx/gpu_memory_buffer.h"
 
+#include "base/process/process_handle.h"
 #include "ui/gfx/generic_shared_memory_id.h"
+
+#if defined(OS_WIN)
+#include <windows.h>
+#elif defined(OS_ANDROID)
+#include "base/android/android_hardware_buffer_compat.h"
+#endif
 
 namespace gfx {
 
 GpuMemoryBufferHandle::GpuMemoryBufferHandle() : type(EMPTY_BUFFER), id(0) {}
 
-GpuMemoryBufferHandle::GpuMemoryBufferHandle(
-    const GpuMemoryBufferHandle& other) = default;
+GpuMemoryBufferHandle::GpuMemoryBufferHandle(GpuMemoryBufferHandle&& other) =
+    default;
 
-GpuMemoryBufferHandle::~GpuMemoryBufferHandle() {}
+GpuMemoryBufferHandle& GpuMemoryBufferHandle::operator=(
+    GpuMemoryBufferHandle&& other) = default;
+
+GpuMemoryBufferHandle::~GpuMemoryBufferHandle() = default;
 
 void GpuMemoryBuffer::SetColorSpace(const gfx::ColorSpace& color_space) {}
 
@@ -22,7 +32,7 @@ GpuMemoryBufferHandle CloneHandleForIPC(
   switch (source_handle.type) {
     case gfx::EMPTY_BUFFER:
       NOTREACHED();
-      return source_handle;
+      return gfx::GpuMemoryBufferHandle();
     case gfx::SHARED_MEMORY_BUFFER: {
       gfx::GpuMemoryBufferHandle handle;
       handle.type = gfx::SHARED_MEMORY_BUFFER;
@@ -46,16 +56,36 @@ GpuMemoryBufferHandle CloneHandleForIPC(
       gfx::GpuMemoryBufferHandle handle;
       handle.type = gfx::ANDROID_HARDWARE_BUFFER;
       handle.id = source_handle.id;
-      handle.handle = base::SharedMemory::DuplicateHandle(source_handle.handle);
+#if defined(OS_ANDROID)
+      base::AndroidHardwareBufferCompat::GetInstance().Acquire(
+          source_handle.android_hardware_buffer);
+      handle.android_hardware_buffer = source_handle.android_hardware_buffer;
+#endif
       return handle;
     }
-    case gfx::IO_SURFACE_BUFFER:
-      return source_handle;
+    case gfx::IO_SURFACE_BUFFER: {
+      gfx::GpuMemoryBufferHandle handle;
+      handle.type = gfx::IO_SURFACE_BUFFER;
+      handle.id = source_handle.id;
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+      handle.mach_port = source_handle.mach_port;
+#endif
+      return handle;
+    }
     case gfx::DXGI_SHARED_HANDLE:
       gfx::GpuMemoryBufferHandle handle;
       handle.type = gfx::DXGI_SHARED_HANDLE;
       handle.id = source_handle.id;
-      handle.handle = base::SharedMemory::DuplicateHandle(source_handle.handle);
+#if defined(OS_WIN)
+      base::ProcessHandle process = ::GetCurrentProcess();
+      HANDLE duplicated_handle;
+      BOOL result = ::DuplicateHandle(
+          process, source_handle.dxgi_handle.GetHandle(), process,
+          &duplicated_handle, 0, FALSE, DUPLICATE_SAME_ACCESS);
+      if (!result)
+        DPLOG(ERROR) << "Failed to duplicate DXGI resource handle.";
+      handle.dxgi_handle = IPC::PlatformFileForTransit(duplicated_handle);
+#endif
       return handle;
   }
   return gfx::GpuMemoryBufferHandle();

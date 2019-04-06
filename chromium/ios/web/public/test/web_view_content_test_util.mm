@@ -9,8 +9,8 @@
 
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
+#import "base/test/ios/wait_util.h"
 #include "base/values.h"
-#import "ios/testing/wait_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 #import "net/base/mac/url_conversions.h"
 
@@ -18,8 +18,8 @@
 #error "This file requires ARC support."
 #endif
 
-using testing::kWaitForDownloadTimeout;
-using testing::WaitUntilConditionOrTimeout;
+using base::test::ios::kWaitForDownloadTimeout;
+using base::test::ios::WaitUntilConditionOrTimeout;
 
 // A helper delegate class that allows downloading responses with invalid
 // SSL certs.
@@ -77,8 +77,8 @@ UIImage* LoadImage(const GURL& image_url) {
 }
 }
 
-using testing::WaitUntilConditionOrTimeout;
-using testing::kWaitForUIElementTimeout;
+using base::test::ios::WaitUntilConditionOrTimeout;
+using base::test::ios::kWaitForUIElementTimeout;
 
 namespace web {
 namespace test {
@@ -152,13 +152,11 @@ bool WaitForWebViewContainingImage(std::string image_id,
   });
 }
 
-bool IsWebViewContainingCssSelector(web::WebState* web_state,
-                                    const std::string& css_selector) {
-  // Script that tests presence of css selector.
-  char testCssSelectorJavaScriptTemplate[] =
-      "!!document.querySelector(\"%s\");";
-  std::string script = base::StringPrintf(testCssSelectorJavaScriptTemplate,
-                                          css_selector.c_str());
+bool IsWebViewContainingElement(web::WebState* web_state,
+                                const web::test::ElementSelector& selector) {
+  // Script that tests presence of element.
+  std::string script =
+      base::StringPrintf("!!(%s)", selector.GetSelectorScript().c_str());
 
   bool did_succeed = false;
   std::unique_ptr<base::Value> value =

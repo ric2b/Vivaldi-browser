@@ -8,17 +8,6 @@
 
 namespace extension_urls {
 
-namespace {
-
-const char kGalleryUpdateHttpsUrl[] =
-    "https://clients2.google.com/service/update2/crx";
-
-}  // namespace
-
-const char* GetDefaultWebstoreUpdateUrl() {
-  return kGalleryUpdateHttpsUrl;
-}
-
 const char kWebstoreSourceField[] = "utm_source";
 
 const char kLaunchSourceAppList[] = "chrome-app-launcher";
@@ -29,7 +18,6 @@ const char kLaunchSourceAppListInfoDialog[] = "chrome-app-launcher-info-dialog";
 
 namespace extension_misc {
 
-const char kBookmarkManagerId[] = "eemcgdkfndhakfknompkggombfjjjeno";
 const char kCameraAppId[] = "hfhhnacclhffhdffklopdkcgdhifgngh";
 const char kCalculatorAppId[] = "joodangkbfjnajiiifokapkpmhfnpleo";
 const char kCalendarAppId[] = "ejjicmeblgpmajnghnpcppodonldlgfn";
@@ -63,8 +51,8 @@ const char kInAppPaymentsSupportAppId[] = "nmmhkkegccagdldgiimedpiccmgmieda";
 const char kMediaRouterStableExtensionId[] = "pkedcjkdefgpdelpbcmbmeomcjbeemfm";
 
 #if defined(OS_CHROMEOS)
-// The extension id for the built-in component extension.
-const char kChromeVoxExtensionId[] = "mndnfokpggljbaajbnioimlmbfngpief";
+const char kAssessmentAssistantExtensionId[] =
+    "gndmhdcefbhlchkhipcnnbkcmicncehk";
 const char kChromeVoxExtensionPath[] = "chromeos/chromevox";
 const char kSelectToSpeakExtensionId[] = "klbcgckkldhdhonijdbnhhaiedfkllef";
 const char kSelectToSpeakExtensionPath[] = "chromeos/select_to_speak";
@@ -85,10 +73,6 @@ const char kWebstoreWidgetAppId[] = "fbjakikfhfdajcamjleinfciajelkpek";
 const char kZIPUnpackerExtensionId[] = "oedeeodfidgoollimchfdnbmhcpnklnd";
 const char kZipArchiverExtensionId[] = "dmboannefpncccogfdikhmhpmdnddgoe";
 const char kZipArchiverExtensionPath[] = "chromeos/zip_archiver";
-#else
-// The extension id for the web store extension.
-const char kChromeVoxExtensionId[] =
-    "kgejglhpjiefppelpmljglcjbhoiplfn";
 #endif
 
 const char kAppStateNotInstalled[] = "not_installed";

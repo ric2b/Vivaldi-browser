@@ -21,12 +21,13 @@ namespace syncer {
 const char* ProtoEnumToString(
     sync_pb::AppListSpecifics::AppListItemType item_type) {
   ASSERT_ENUM_BOUNDS(sync_pb::AppListSpecifics, AppListItemType, TYPE_APP,
-                     TYPE_URL);
+                     TYPE_PAGE_BREAK);
   switch (item_type) {
     ENUM_CASE(sync_pb::AppListSpecifics, TYPE_APP);
     ENUM_CASE(sync_pb::AppListSpecifics, TYPE_REMOVE_DEFAULT_APP);
     ENUM_CASE(sync_pb::AppListSpecifics, TYPE_FOLDER);
     ENUM_CASE(sync_pb::AppListSpecifics, TYPE_URL);
+    ENUM_CASE(sync_pb::AppListSpecifics, TYPE_PAGE_BREAK);
   }
   NOTREACHED();
   return "";
@@ -160,8 +161,9 @@ const char* ProtoEnumToString(sync_pb::SyncEnums::Action action) {
 }
 
 const char* ProtoEnumToString(sync_pb::SyncEnums::DeviceType device_type) {
-  ASSERT_ENUM_BOUNDS(sync_pb::SyncEnums, DeviceType, TYPE_WIN, TYPE_TABLET);
+  ASSERT_ENUM_BOUNDS(sync_pb::SyncEnums, DeviceType, TYPE_UNSET, TYPE_TABLET);
   switch (device_type) {
+    ENUM_CASE(sync_pb::SyncEnums, TYPE_UNSET);
     ENUM_CASE(sync_pb::SyncEnums, TYPE_WIN);
     ENUM_CASE(sync_pb::SyncEnums, TYPE_MAC);
     ENUM_CASE(sync_pb::SyncEnums, TYPE_LINUX);
@@ -294,6 +296,33 @@ const char* ProtoEnumToString(sync_pb::TabNavigation::PasswordState state) {
   return "";
 }
 
+const char* ProtoEnumToString(sync_pb::UserConsentSpecifics::Feature feature) {
+  ASSERT_ENUM_BOUNDS(sync_pb::UserConsentSpecifics, Feature,
+                     FEATURE_UNSPECIFIED, CHROME_UNIFIED_CONSENT);
+  switch (feature) {
+    ENUM_CASE(sync_pb::UserConsentSpecifics, FEATURE_UNSPECIFIED);
+    ENUM_CASE(sync_pb::UserConsentSpecifics, CHROME_SYNC);
+    ENUM_CASE(sync_pb::UserConsentSpecifics, PLAY_STORE);
+    ENUM_CASE(sync_pb::UserConsentSpecifics, BACKUP_AND_RESTORE);
+    ENUM_CASE(sync_pb::UserConsentSpecifics, GOOGLE_LOCATION_SERVICE);
+    ENUM_CASE(sync_pb::UserConsentSpecifics, CHROME_UNIFIED_CONSENT);
+  }
+  NOTREACHED();
+  return "";
+}
+
+const char* ProtoEnumToString(sync_pb::UserConsentTypes::ConsentStatus status) {
+  ASSERT_ENUM_BOUNDS(sync_pb::UserConsentTypes, ConsentStatus,
+                     CONSENT_STATUS_UNSPECIFIED, GIVEN);
+  switch (status) {
+    ENUM_CASE(sync_pb::UserConsentTypes, CONSENT_STATUS_UNSPECIFIED);
+    ENUM_CASE(sync_pb::UserConsentTypes, NOT_GIVEN);
+    ENUM_CASE(sync_pb::UserConsentTypes, GIVEN);
+  }
+  NOTREACHED();
+  return "";
+}
+
 const char* ProtoEnumToString(
     sync_pb::UserEventSpecifics::Translation::Interaction interaction) {
   ASSERT_ENUM_BOUNDS(sync_pb::UserEventSpecifics::Translation, Interaction,
@@ -317,13 +346,17 @@ const char* ProtoEnumToString(
 }
 
 const char* ProtoEnumToString(
-    sync_pb::UserEventSpecifics::UserConsent::ConsentStatus status) {
-  ASSERT_ENUM_BOUNDS(sync_pb::UserEventSpecifics::UserConsent, ConsentStatus,
-                     UNSPECIFIED, GIVEN);
-  switch (status) {
-    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent, UNSPECIFIED);
-    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent, REVOKED);
-    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent, GIVEN);
+    sync_pb::UserEventSpecifics::UserConsent::Feature feature) {
+  ASSERT_ENUM_BOUNDS(sync_pb::UserEventSpecifics::UserConsent, Feature,
+                     FEATURE_UNSPECIFIED, CHROME_UNIFIED_CONSENT);
+  switch (feature) {
+    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent, FEATURE_UNSPECIFIED);
+    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent, CHROME_SYNC);
+    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent, PLAY_STORE);
+    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent, BACKUP_AND_RESTORE);
+    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent,
+              GOOGLE_LOCATION_SERVICE);
+    ENUM_CASE(sync_pb::UserEventSpecifics::UserConsent, CHROME_UNIFIED_CONSENT);
   }
   NOTREACHED();
   return "";
@@ -384,7 +417,7 @@ const char* ProtoEnumToString(
         LookupResult lookup_result) {
   ASSERT_ENUM_BOUNDS(
       sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordReuseLookup,
-      LookupResult, UNSPECIFIED, URL_UNSUPPORTED);
+      LookupResult, UNSPECIFIED, TURNED_OFF_BY_POLICY);
   switch (lookup_result) {
     ENUM_CASE(
         sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordReuseLookup,
@@ -404,6 +437,12 @@ const char* ProtoEnumToString(
     ENUM_CASE(
         sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordReuseLookup,
         URL_UNSUPPORTED);
+    ENUM_CASE(
+        sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordReuseLookup,
+        ENTERPRISE_WHITELIST_HIT);
+    ENUM_CASE(
+        sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordReuseLookup,
+        TURNED_OFF_BY_POLICY);
   }
   NOTREACHED();
   return "";
@@ -428,6 +467,23 @@ const char* ProtoEnumToString(
     ENUM_CASE(
         sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordReuseLookup,
         PHISHING);
+  }
+  NOTREACHED();
+  return "";
+}
+
+const char* ProtoEnumToString(sync_pb::UserEventSpecifics::GaiaPasswordReuse::
+                                  PasswordCaptured::EventTrigger trigger) {
+  ASSERT_ENUM_BOUNDS(
+      sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordCaptured,
+      EventTrigger, UNSPECIFIED, EXPIRED_28D_TIMER);
+  switch (trigger) {
+    ENUM_CASE(sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordCaptured,
+              UNSPECIFIED);
+    ENUM_CASE(sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordCaptured,
+              USER_LOGGED_IN);
+    ENUM_CASE(sync_pb::UserEventSpecifics::GaiaPasswordReuse::PasswordCaptured,
+              EXPIRED_28D_TIMER);
   }
   NOTREACHED();
   return "";
@@ -504,32 +560,6 @@ const char* ProtoEnumToString(
   NOTREACHED();
   return "";
 }
-
-// Vivaldi specific
-const char* ProtoEnumToString(
-  sync_pb::NotesSpecifics::VivaldiSpecialNotesType special_type) {
-  ASSERT_ENUM_BOUNDS(sync_pb::NotesSpecifics, VivaldiSpecialNotesType,
-    NORMAL, TRASH_NODE);
-  switch (special_type) {
-    ENUM_CASE(sync_pb::NotesSpecifics, NORMAL);
-    ENUM_CASE(sync_pb::NotesSpecifics, TRASH_NODE);
-  }
-  NOTREACHED();
-  return "";
-}
-
-const char* ProtoEnumToString(
-  sync_pb::BookmarkSpecifics::VivaldiSpecialBookmarkType special_type) {
-  ASSERT_ENUM_BOUNDS(sync_pb::BookmarkSpecifics, VivaldiSpecialBookmarkType,
-    NORMAL, TRASH_NODE);
-  switch (special_type) {
-    ENUM_CASE(sync_pb::BookmarkSpecifics, NORMAL);
-    ENUM_CASE(sync_pb::BookmarkSpecifics, TRASH_NODE);
-  }
-  NOTREACHED();
-  return "";
-}
-// End Vivaldi specific
 
 #undef ASSERT_ENUM_BOUNDS
 #undef ENUM_CASE

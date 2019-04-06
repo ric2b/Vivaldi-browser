@@ -20,9 +20,9 @@
 #include "chrome/browser/ui/views/download/download_item_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/download/public/common/download_item.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
-#include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/page_navigator.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -30,6 +30,7 @@
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/canvas.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
@@ -38,41 +39,12 @@
 #include "ui/views/controls/link.h"
 #include "ui/views/mouse_watcher_view_host.h"
 
-using content::DownloadItem;
+using download::DownloadItem;
 
 namespace {
 
-// Max number of download views we'll contain. Any time a view is added and
-// we already have this many download views, one is removed.
-const size_t kMaxDownloadViews = 15;
-
-// Padding from left edge and first download view.
-const int kStartPadding = 4;
-
-// Padding from right edge and close button/show downloads link.
-const int kEndPadding = 6;
-
-// Padding between the show all link and close button.
-const int kCloseAndLinkPadding = 6;
-
 // Padding above the content.
-const int kTopPadding = 1;
-
-// Border color.
-const SkColor kBorderColor = SkColorSetRGB(214, 214, 214);
-
-// New download item animation speed in milliseconds.
-const int kNewItemAnimationDurationMs = 800;
-
-// Shelf show/hide speed.
-const int kShelfAnimationDurationMs = 120;
-
-// Amount of time to delay if the mouse leaves the shelf by way of entering
-// another window. This is much larger than the normal delay as opening a
-// download is most likely going to trigger a new window to appear over the
-// button. Delay the time so that the user has a chance to quickly close the
-// other app and return to chrome with the download shelf still open.
-const int kNotifyOnExitTimeMS = 5000;
+constexpr int kTopPadding = 1;
 
 // Sets size->width() to view's preferred width + size->width().
 // Sets size->height() to the max of the view's preferred height and
@@ -118,8 +90,15 @@ DownloadShelfView::DownloadShelfView(Browser* browser, BrowserView* parent)
       l10n_util::GetStringUTF16(IDS_ACCNAME_CLOSE));
   AddChildView(close_button_);
 
+  accessible_alert_ = new views::View();
+  AddChildView(accessible_alert_);
+
   new_item_animation_.SetSlideDuration(kNewItemAnimationDurationMs);
   shelf_animation_.SetSlideDuration(kShelfAnimationDurationMs);
+
+  GetViewAccessibility().OverrideName(
+      l10n_util::GetStringUTF16(IDS_ACCNAME_DOWNLOADS_BAR));
+  GetViewAccessibility().OverrideRole(ax::mojom::Role::kGroup);
 }
 
 DownloadShelfView::~DownloadShelfView() {
@@ -146,7 +125,7 @@ void DownloadShelfView::AddDownloadView(DownloadItemView* view) {
 }
 
 void DownloadShelfView::DoAddDownload(DownloadItem* download) {
-  AddDownloadView(new DownloadItemView(download, this));
+  AddDownloadView(new DownloadItemView(download, this, accessible_alert_));
 }
 
 void DownloadShelfView::MouseMovedOutOfHost() {
@@ -342,7 +321,7 @@ void DownloadShelfView::UpdateColorsFromTheme() {
       GetThemeProvider()->GetColor(ThemeProperties::COLOR_TOOLBAR)));
 
   views::SetImageFromVectorIcon(
-      close_button_, vector_icons::kClose16Icon,
+      close_button_, vector_icons::kCloseRoundedIcon,
       DownloadItemView::GetTextColorForThemeProvider(GetThemeProvider()));
 }
 

@@ -40,6 +40,14 @@ Status StubWebView::Reload(const Timeout* timeout) {
   return Status(kOk);
 }
 
+Status StubWebView::Freeze(const Timeout* timeout) {
+  return Status(kOk);
+}
+
+Status StubWebView::Resume(const Timeout* timeout) {
+  return Status(kOk);
+}
+
 Status StubWebView::SendCommand(const std::string& cmd,
                                 const base::DictionaryValue& params) {
   return Status(kOk);
@@ -209,4 +217,12 @@ Status StubWebView::SetScreenOrientation(std::string orientation) {
 
 Status StubWebView::DeleteScreenOrientation() {
   return Status(kOk);
+}
+
+bool StubWebView::IsOOPIF(const std::string& frame_id) {
+  return false;
+}
+
+FrameTracker* StubWebView::GetFrameTracker() const {
+  return nullptr;
 }

@@ -11,6 +11,10 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/common/api/extension_types.h"
 
+namespace extensions {
+class WebViewGuest;
+}
+
 class VivaldiBrowserWindow;
 
 namespace vivaldi {

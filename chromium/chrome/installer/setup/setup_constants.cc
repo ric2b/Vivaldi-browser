@@ -10,7 +10,7 @@ namespace installer {
 const wchar_t kChromeArchive[] = L"vivaldi.7z";
 const wchar_t kChromeCompressedArchive[] = L"vivaldi.packed.7z";
 const wchar_t kVisualElements[] = L"VisualElements";
-const wchar_t kVisualElementsManifest[] = L"chrome.VisualElementsManifest.xml";
+const wchar_t kVisualElementsManifest[] = L"vivaldi.VisualElementsManifest.xml";
 const wchar_t kStandaloneProfileHelper[] = L"stp.viv";
 
 // Sub directory of install source package under install temporary directory.
@@ -19,6 +19,12 @@ const wchar_t kInstallSourceChromeDir[] = L"Vivaldi-bin";
 
 const wchar_t kMediaPlayerRegPath[] =
     L"Software\\Microsoft\\MediaPlayer\\ShimInclusionList";
+
+const char kCourgette[] = "courgette";
+const char kBsdiff[] = "bsdiff";
+#if BUILDFLAG(ZUCCHINI)
+const char kZucchini[] = "zucchini";
+#endif  // BUILDFLAG(ZUCCHINI)
 
 namespace switches {
 

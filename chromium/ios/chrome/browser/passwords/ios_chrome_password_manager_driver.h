@@ -31,6 +31,9 @@ class PasswordManager;
 // |completionHandler| can be nil.
 - (void)fillPasswordForm:(const autofill::PasswordFormFillData&)formData
        completionHandler:(void (^)(BOOL))completionHandler;
+
+// Informs delegate that there are no saved credentials for the current page.
+- (void)onNoSavedCredentials;
 @end
 
 // An iOS implementation of password_manager::PasswordManagerDriver.
@@ -44,6 +47,7 @@ class IOSChromePasswordManagerDriver
   // password_manager::PasswordManagerDriver implementation.
   void FillPasswordForm(
       const autofill::PasswordFormFillData& form_data) override;
+  void InformNoSavedCredentials() override;
   void AllowPasswordGenerationForForm(
       const autofill::PasswordForm& form) override;
   void FormsEligibleForGenerationFound(
@@ -64,8 +68,6 @@ class IOSChromePasswordManagerDriver
   void ForceSavePassword() override;
   autofill::AutofillDriver* GetAutofillDriver() override;
   bool IsMainFrame() const override;
-  void MatchingBlacklistedFormFound() override;
-  void UserSelectedManualGenerationOption() override;
 
  private:
   id<PasswordManagerDriverDelegate> delegate_;  // (weak)

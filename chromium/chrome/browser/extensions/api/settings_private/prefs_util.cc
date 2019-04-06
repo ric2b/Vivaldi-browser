@@ -13,20 +13,25 @@
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/components/proximity_auth/proximity_auth_pref_names.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/browsing_data/core/pref_names.h"
+#include "components/component_updater/pref_names.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/drive/drive_pref_names.h"
+#include "components/language/core/browser/pref_names.h"
+#include "components/omnibox/browser/omnibox_pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/payments/core/payment_prefs.h"
 #include "components/prefs/pref_service.h"
-#include "components/proximity_auth/proximity_auth_pref_names.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/search_engines/default_search_manager.h"
 #include "components/spellcheck/browser/pref_names.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
+#include "components/unified_consent/pref_names.h"
 #include "components/url_formatter/url_fixer.h"
 #include "extensions/browser/extension_pref_value_map.h"
 #include "extensions/browser/extension_pref_value_map_factory.h"
@@ -37,6 +42,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "ash/public/cpp/ash_pref_names.h"  // nogncheck
+#include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -65,15 +71,28 @@ bool IsPrivilegedCrosSetting(const std::string& pref_name) {
   // controlled or owner controlled.
   return true;
 }
+#endif
 
-bool IsCrosSettingReadOnly(const std::string& pref_name) {
-  if (chromeos::system::PerUserTimezoneEnabled()) {
-    // System timezone is never directly changable by user.
-    return pref_name == chromeos::kSystemTimezone;
-  }
+bool IsSettingReadOnly(const std::string& pref_name) {
+  // download.default_directory is used to display the directory location and
+  // for policy indicators, but should not be changed directly.
+  if (pref_name == prefs::kDownloadDefaultDirectory)
+    return true;
+#if defined(OS_CHROMEOS)
+  // System timezone is never directly changeable by the user.
+  if (pref_name == chromeos::kSystemTimezone)
+    return chromeos::system::PerUserTimezoneEnabled();
+  // enable_screen_lock must be changed through the quickUnlockPrivate API.
+  if (pref_name == ash::prefs::kEnableAutoScreenLock)
+    return true;
+#endif
+#if defined(OS_WIN)
+  // Don't allow user to change sw_reporter preferences.
+  if (pref_name == prefs::kSwReporterEnabled)
+    return true;
+#endif
   return false;
 }
-#endif
 
 }  // namespace
 
@@ -99,6 +118,12 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[::prefs::kAlternateErrorPagesEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[autofill::prefs::kAutofillEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[autofill::prefs::kAutofillProfileEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[autofill::prefs::kAutofillCreditCardEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[payments::kCanMakePaymentEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[bookmarks::prefs::kShowBookmarkBar] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
@@ -163,7 +188,7 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kEnableEncryptedMedia] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kApplicationLocale] =
+  (*s_whitelist)[::language::prefs::kApplicationLocale] =
       settings_api::PrefType::PREF_TYPE_STRING;
   (*s_whitelist)[::prefs::kNetworkPredictionOptions] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
@@ -171,11 +196,20 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[password_manager::prefs::kCredentialsEnableAutosignin] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+
+  // Sync and personalization page.
   (*s_whitelist)[::prefs::kSafeBrowsingEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kSafeBrowsingExtendedReportingEnabled] =
+  (*s_whitelist)[::prefs::kSafeBrowsingScoutReportingEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kSearchSuggestEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::unified_consent::prefs::kUnifiedConsentGiven] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)
+      [::unified_consent::prefs::kUrlKeyedAnonymizedDataCollectionEnabled] =
+          settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::omnibox::kDocumentSuggestEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Languages page
@@ -252,7 +286,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[chromeos::kAccountsPrefUsers] =
       settings_api::PrefType::PREF_TYPE_LIST;
-  (*s_whitelist)[::prefs::kEnableAutoScreenLock] =
+  // kEnableAutoScreenLock is read-only.
+  (*s_whitelist)[ash::prefs::kEnableAutoScreenLock] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kEnableQuickUnlockFingerprint] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
@@ -274,6 +309,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[ash::prefs::kShouldAlwaysShowAccessibilityMenu] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[ash::prefs::kAccessibilityDictationEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[ash::prefs::kAccessibilityFocusHighlightEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[ash::prefs::kAccessibilityHighContrastEnabled] =
@@ -284,6 +321,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)[ash::prefs::kAccessibilityScreenMagnifierEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[ash::prefs::kAccessibilityScreenMagnifierScale] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)[ash::prefs::kAccessibilitySelectToSpeakEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[ash::prefs::kAccessibilityStickyKeysEnabled] =
@@ -295,16 +334,34 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[ash::prefs::kAccessibilityMonoAudioEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
+  // Text to Speech.
+  (*s_whitelist)[::prefs::kTextToSpeechLangToVoiceName] =
+      settings_api::PrefType::PREF_TYPE_DICTIONARY;
+  (*s_whitelist)[::prefs::kTextToSpeechRate] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[::prefs::kTextToSpeechPitch] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[::prefs::kTextToSpeechVolume] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+
+  // Crostini
+  (*s_whitelist)[crostini::prefs::kCrostiniEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+
   // Android Apps.
   (*s_whitelist)[arc::prefs::kArcEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Google Assistant.
+  (*s_whitelist)[arc::prefs::kVoiceInteractionActivityControlAccepted] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[arc::prefs::kArcVoiceInteractionValuePropAccepted] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[arc::prefs::kVoiceInteractionEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[arc::prefs::kVoiceInteractionContextEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[arc::prefs::kVoiceInteractionHotwordEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Misc.
@@ -312,7 +369,7 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kLanguagePreferredLanguages] =
       settings_api::PrefType::PREF_TYPE_STRING;
-  (*s_whitelist)[::prefs::kTapDraggingEnabled] =
+  (*s_whitelist)[ash::prefs::kTapDraggingEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[chromeos::kStatsReportingPref] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
@@ -364,12 +421,18 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)[ash::prefs::kNightLightCustomEndTime] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[ash::prefs::kDockedMagnifierEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[ash::prefs::kDockedMagnifierScale] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
 
   // Input method settings.
   (*s_whitelist)[::prefs::kLanguagePreloadEngines] =
       settings_api::PrefType::PREF_TYPE_STRING;
-  (*s_whitelist)[::prefs::kLanguageEnabledExtensionImes] =
+  (*s_whitelist)[::prefs::kLanguageEnabledImes] =
       settings_api::PrefType::PREF_TYPE_STRING;
+  (*s_whitelist)[::prefs::kLanguageAllowedInputMethods] =
+      settings_api::PrefType::PREF_TYPE_LIST;
 
   // Device settings.
   (*s_whitelist)[::prefs::kTapToClickEnabled] =
@@ -411,6 +474,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[arc::prefs::kSmsConnectEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
+  // Native Printing settings.
+  (*s_whitelist)[::prefs::kUserNativePrintersAllowed] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+
 #else
   (*s_whitelist)[::prefs::kAcceptLanguages] =
       settings_api::PrefType::PREF_TYPE_STRING;
@@ -446,6 +513,12 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   // Media Remoting settings.
   (*s_whitelist)[::prefs::kMediaRouterMediaRemotingEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+
+#if defined(OS_WIN)
+  // SwReporter settings.
+  (*s_whitelist)[::prefs::kSwReporterEnabled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+#endif
 
   return *s_whitelist;
 }
@@ -633,20 +706,24 @@ settings_private::SetPrefResult PrefsUtil::SetPref(const std::string& pref_name,
 
   switch (pref->GetType()) {
     case base::Value::Type::BOOLEAN:
-    case base::Value::Type::DOUBLE:
     case base::Value::Type::LIST:
     case base::Value::Type::DICTIONARY:
       pref_service->Set(pref_name, *value);
       break;
-    case base::Value::Type::INTEGER: {
-      // In JS all numbers are doubles.
+    case base::Value::Type::DOUBLE:
+    case base::Value::Type::INTEGER:
+      // Explicitly set the double value or the integer value.
+      // Otherwise if the number is a whole number like 2.0, it will
+      // automatically be of type INTEGER causing type mismatches in
+      // PrefService::SetUserPrefValue for doubles, and vice versa.
       double double_value;
       if (!value->GetAsDouble(&double_value))
         return settings_private::SetPrefResult::PREF_TYPE_MISMATCH;
-
-      pref_service->SetInteger(pref_name, static_cast<int>(double_value));
+      if (pref->GetType() == base::Value::Type::DOUBLE)
+        pref_service->SetDouble(pref_name, double_value);
+      else
+        pref_service->SetInteger(pref_name, static_cast<int>(double_value));
       break;
-    }
     case base::Value::Type::STRING: {
       std::string string_value;
       if (!value->GetAsString(&string_value))
@@ -792,10 +869,8 @@ bool PrefsUtil::IsPrefSupervisorControlled(const std::string& pref_name) {
 }
 
 bool PrefsUtil::IsPrefUserModifiable(const std::string& pref_name) {
-#if defined(OS_CHROMEOS)
-  if (IsCrosSettingReadOnly(pref_name))
+  if (IsSettingReadOnly(pref_name))
     return false;
-#endif
 
   const PrefService::Preference* profile_pref =
       profile_->GetPrefs()->FindPreference(pref_name);

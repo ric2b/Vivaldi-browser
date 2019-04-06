@@ -5,7 +5,6 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
@@ -20,9 +19,7 @@ namespace policy {
 
 class VariationsServiceDevicePolicyTest : public DevicePolicyCrosBrowserTest {
  protected:
-  VariationsServiceDevicePolicyTest() {
-    variations::VariationsService::EnableForTesting();
-  }
+  VariationsServiceDevicePolicyTest() {}
 
   void SetUpInProcessBrowserTestFixture() override {
     DevicePolicyCrosBrowserTest::SetUpInProcessBrowserTestFixture();

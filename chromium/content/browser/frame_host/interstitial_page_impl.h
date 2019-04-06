@@ -12,6 +12,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observer.h"
 #include "build/build_config.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/navigator_delegate.h"
@@ -21,6 +22,7 @@
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "content/public/browser/render_widget_host_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/renderer_preferences.h"
 #include "url/gurl.h"
@@ -45,6 +47,7 @@ enum ResourceRequestAction {
 class CONTENT_EXPORT InterstitialPageImpl : public InterstitialPage,
                                             public NotificationObserver,
                                             public RenderFrameHostDelegate,
+                                            public RenderWidgetHostObserver,
                                             public RenderViewHostDelegate,
                                             public RenderWidgetHostDelegate,
                                             public NavigatorDelegate {
@@ -97,6 +100,7 @@ class CONTENT_EXPORT InterstitialPageImpl : public InterstitialPage,
   // NavigatorDelegate implementation.
   WebContents* OpenURL(const OpenURLParams& params) override;
   const std::string& GetUserAgentOverride() const override;
+  bool ShouldOverrideUserAgentInNewTabs() override;
   bool ShowingInterstitialPage() const override;
 
  protected:
@@ -120,6 +124,10 @@ class CONTENT_EXPORT InterstitialPageImpl : public InterstitialPage,
   void Copy() override;
   void Paste() override;
   void SelectAll() override;
+  // Undo/Redo/Delete addeded by Vivaldi
+  void Undo() override;
+  void Redo() override;
+  void Delete() override;
   void CreateNewWindow(
       RenderFrameHost* opener,
       int32_t render_view_route_id,
@@ -133,6 +141,7 @@ class CONTENT_EXPORT InterstitialPageImpl : public InterstitialPage,
                          const gfx::Rect& initial_rect,
                          bool user_gesture) override;
   void SetFocusedFrame(FrameTreeNode* node, SiteInstance* source) override;
+  Visibility GetVisibility() const override;
 
   // RenderViewHostDelegate implementation:
   RenderViewHostDelegateView* GetDelegateView() override;
@@ -167,7 +176,6 @@ class CONTENT_EXPORT InterstitialPageImpl : public InterstitialPage,
       const NativeWebKeyboardEvent& event) override;
   void HandleKeyboardEvent(const NativeWebKeyboardEvent& event) override;
   TextInputManager* GetTextInputManager() override;
-  void GetScreenInfo(content::ScreenInfo* screen_info) override;
   RenderWidgetHostInputEventRouter* GetInputEventRouter() override;
   BrowserAccessibilityManager* GetRootBrowserAccessibilityManager() override;
   BrowserAccessibilityManager* GetOrCreateRootBrowserAccessibilityManager()
@@ -207,6 +215,9 @@ class CONTENT_EXPORT InterstitialPageImpl : public InterstitialPage,
 
     DISALLOW_COPY_AND_ASSIGN(UnderlyingContentObserver);
   };
+
+  // RenderWidgetHostObserver implementation:
+  void RenderWidgetHostDestroyed(RenderWidgetHost* widget_host) override;
 
   // Disable the interstitial:
   // - if it is not yet showing, then it won't be shown.
@@ -305,6 +316,8 @@ class CONTENT_EXPORT InterstitialPageImpl : public InterstitialPage,
   std::unique_ptr<InterstitialPageDelegate> delegate_;
 
   scoped_refptr<SessionStorageNamespace> session_storage_namespace_;
+
+  ScopedObserver<RenderWidgetHost, RenderWidgetHostObserver> widget_observer_;
 
   base::WeakPtrFactory<InterstitialPageImpl> weak_ptr_factory_;
 

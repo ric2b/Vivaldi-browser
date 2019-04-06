@@ -15,10 +15,6 @@
 
 namespace extension_urls {
 
-// This returns the compile-time constant webstore update url specific to
-// Chrome. Usually you should prefer using GetWebstoreUpdateUrl.
-const char* GetDefaultWebstoreUpdateUrl();
-
 // Field to use with webstore URL for tracking launch source.
 extern const char kWebstoreSourceField[];
 
@@ -30,9 +26,6 @@ extern const char kLaunchSourceAppListInfoDialog[];
 }  // namespace extension_urls
 
 namespace extension_misc {
-
-// The extension id of the bookmark manager.
-extern const char kBookmarkManagerId[];
 
 // The extension id of the Camera application.
 extern const char kCameraAppId[];
@@ -213,10 +206,9 @@ enum AppLaunchBucket {
   APP_LAUNCH_BUCKET_INVALID
 };
 
-// The extension id of the ChromeVox extension.
-extern const char kChromeVoxExtensionId[];
-
 #if defined(OS_CHROMEOS)
+// The extension id of the Assessment Assistant extension.
+extern const char kAssessmentAssistantExtensionId[];
 // Path to preinstalled ChromeVox screen reader extension (relative to
 // |chrome::DIR_RESOURCES|).
 extern const char kChromeVoxExtensionPath[];

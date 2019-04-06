@@ -9,6 +9,7 @@
 
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/trace_event/memory_usage_estimator.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/url_formatter/url_fixer.h"
@@ -29,6 +30,8 @@ const char* AutocompleteProvider::TypeToString(Type type) {
       return "Bookmark";
     case TYPE_BUILTIN:
       return "Builtin";
+    case TYPE_DOCUMENT:
+      return "Document";
     case TYPE_HISTORY_QUICK:
       return "HistoryQuick";
     case TYPE_HISTORY_URL:
@@ -43,8 +46,6 @@ const char* AutocompleteProvider::TypeToString(Type type) {
       return "ZeroSuggest";
     case TYPE_CLIPBOARD_URL:
       return "ClipboardURL";
-    case TYPE_PHYSICAL_WEB:
-      return "PhysicalWeb";
     default:
       NOTREACHED() << "Unhandled AutocompleteProvider::Type " << type;
       return "Unknown";
@@ -67,6 +68,8 @@ metrics::OmniboxEventProto_ProviderType AutocompleteProvider::
       return metrics::OmniboxEventProto::BOOKMARK;
     case TYPE_BUILTIN:
       return metrics::OmniboxEventProto::BUILTIN;
+    case TYPE_DOCUMENT:
+      return metrics::OmniboxEventProto::DOCUMENT;
     case TYPE_HISTORY_QUICK:
       return metrics::OmniboxEventProto::HISTORY_QUICK;
     case TYPE_HISTORY_URL:
@@ -81,8 +84,6 @@ metrics::OmniboxEventProto_ProviderType AutocompleteProvider::
       return metrics::OmniboxEventProto::ZERO_SUGGEST;
     case TYPE_CLIPBOARD_URL:
       return metrics::OmniboxEventProto::CLIPBOARD_URL;
-    case TYPE_PHYSICAL_WEB:
-      return metrics::OmniboxEventProto::PHYSICAL_WEB;
     default:
       NOTREACHED() << "Unhandled AutocompleteProvider::Type " << type_;
       return metrics::OmniboxEventProto::UNKNOWN_PROVIDER;
@@ -98,6 +99,10 @@ void AutocompleteProvider::AddProviderInfo(ProvidersInfo* provider_info) const {
 }
 
 void AutocompleteProvider::ResetSession() {
+}
+
+size_t AutocompleteProvider::EstimateMemoryUsage() const {
+  return base::trace_event::EstimateMemoryUsage(matches_);
 }
 
 AutocompleteProvider::~AutocompleteProvider() {

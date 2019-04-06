@@ -4,8 +4,9 @@
 
 #include "media/base/android/media_codec_loop.h"
 
+#include "base/android/build_info.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/base/android/media_codec_bridge.h"
@@ -25,13 +26,6 @@ using ::testing::StrictMock;
 
 namespace media {
 
-// These will come from mockable BuildInfo, once it exists.
-enum TemporaryAndroidVersions {
-  kJellyBeanMR1 = 17,
-  kJellyBeanMR2 = 18,
-  kLollipop = 21,
-};
-
 // The client is a strict mock, since we don't want random calls into it.  We
 // want to be sure about the call sequence.
 class MockMediaCodecLoopClient : public StrictMock<MediaCodecLoop::Client> {
@@ -39,7 +33,7 @@ class MockMediaCodecLoopClient : public StrictMock<MediaCodecLoop::Client> {
   MOCK_CONST_METHOD0(IsAnyInputPending, bool());
   MOCK_METHOD0(ProvideInputData, MediaCodecLoop::InputData());
   MOCK_METHOD1(OnInputDataQueued, void(bool));
-  MOCK_METHOD1(OnDecodedEos, void(const MediaCodecLoop::OutputBuffer&));
+  MOCK_METHOD1(OnDecodedEos, bool(const MediaCodecLoop::OutputBuffer&));
   MOCK_METHOD1(OnDecodedFrame, bool(const MediaCodecLoop::OutputBuffer&));
   MOCK_METHOD0(OnOutputFormatChanged, bool());
   MOCK_METHOD0(OnCodecLoopError, void());
@@ -89,18 +83,18 @@ class MediaCodecLoopTest : public testing::Test {
     mock_task_runner_->FastForwardBy(base::TimeDelta::FromSeconds(30));
   }
 
-  void ConstructCodecLoop(int sdk_int = kLollipop) {
+  void ConstructCodecLoop(int sdk_int = base::android::SDK_VERSION_LOLLIPOP) {
     std::unique_ptr<MediaCodecBridge> codec(new MockMediaCodecBridge());
     // Since we're providing a codec, we do not expect an error.
     EXPECT_CALL(*client_, OnCodecLoopError()).Times(0);
     codec_loop_.reset(new MediaCodecLoop(sdk_int, client_.get(),
                                          std::move(codec), mock_task_runner_));
-    codec_loop_->SetTestTickClock(clock_.get());
+    codec_loop_->SetTestTickClock(mock_task_runner_->GetMockTickClock());
     Mock::VerifyAndClearExpectations(client_.get());
   }
 
   // Set an expectation that MCL will try to get another input / output buffer,
-  // and not get one in DoPendingWork.
+  // and not get one in ExpectWork.
   void ExpectEmptyIOLoop() {
     ExpectIsAnyInputPending(false);
     EXPECT_CALL(Codec(), DequeueOutputBuffer(_, _, _, _, _, _, _))
@@ -190,10 +184,6 @@ class MediaCodecLoopTest : public testing::Test {
       new base::TestMockTimeTaskRunner;
   base::ThreadTaskRunnerHandle task_runner_handle_;
 
-  // A reference to |mock_task_runner_|'s TickClock handed to |codec_loop_|.
-  std::unique_ptr<base::TickClock> clock_ =
-      mock_task_runner_->GetMockTickClock();
-
   std::unique_ptr<MediaCodecLoop> codec_loop_;
   std::unique_ptr<MockMediaCodecLoopClient> client_;
 
@@ -203,7 +193,7 @@ class MediaCodecLoopTest : public testing::Test {
 TEST_F(MediaCodecLoopTest, TestConstructionWithNullCodec) {
   std::unique_ptr<MediaCodecBridge> codec;
   EXPECT_CALL(*client_, OnCodecLoopError()).Times(1);
-  const int sdk_int = kLollipop;
+  const int sdk_int = base::android::SDK_VERSION_LOLLIPOP;
   codec_loop_.reset(
       new MediaCodecLoop(sdk_int, client_.get(), std::move(codec),
                          scoped_refptr<base::SingleThreadTaskRunner>()));
@@ -225,7 +215,7 @@ TEST_F(MediaCodecLoopTest, TestPendingWorkWithoutInput) {
   EXPECT_CALL(Codec(), DequeueOutputBuffer(_, _, _, _, _, _, _))
       .Times(1)
       .WillOnce(Return(MEDIA_CODEC_TRY_AGAIN_LATER));
-  codec_loop_->DoPendingWork();
+  codec_loop_->ExpectWork();
   WaitUntilIdle(ShouldNotBeIdle);
 }
 
@@ -236,7 +226,7 @@ TEST_F(MediaCodecLoopTest, TestPendingWorkWithInput) {
   ExpectIsAnyInputPending(true);
   EXPECT_CALL(Codec(), DequeueOutputBuffer(_, _, _, _, _, _, _)).Times(1);
   EXPECT_CALL(Codec(), DequeueInputBuffer(_, _)).Times(1);
-  codec_loop_->DoPendingWork();
+  codec_loop_->ExpectWork();
   WaitUntilIdle(ShouldNotBeIdle);
 }
 
@@ -251,16 +241,16 @@ TEST_F(MediaCodecLoopTest, TestPendingWorkWithOutputBuffer) {
     ExpectDequeueOutputBuffer(buf);
     ExpectOnDecodedFrame(buf);
 
-    // MCL will try again for another set of buffers before DoPendingWork()
+    // MCL will try again for another set of buffers before ExpectWork()
     // returns.  This is why we don't just leave them for WaitUntilIdle().
     ExpectEmptyIOLoop();
   }
-  codec_loop_->DoPendingWork();
+  codec_loop_->ExpectWork();
   WaitUntilIdle(ShouldNotBeIdle);
 }
 
 TEST_F(MediaCodecLoopTest, TestQueueEos) {
-  // Test sending an EOS to MCL => MCB =dequeue output=> MCL .
+  // Test sending an EOS to MCL => MCB =dequeue EOS=> MCL .
   ConstructCodecLoop();
   {
     InSequence _s;
@@ -279,15 +269,42 @@ TEST_F(MediaCodecLoopTest, TestQueueEos) {
     EosOutputBuffer eos;
     ExpectDequeueOutputBuffer(eos);
     EXPECT_CALL(Codec(), ReleaseOutputBuffer(eos.index, false));
-    EXPECT_CALL(*client_, OnDecodedEos(_)).Times(1);
+    EXPECT_CALL(*client_, OnDecodedEos(_)).Times(1).WillOnce(Return(true));
 
     // See TestUnqueuedEos.
     EXPECT_CALL(Codec(), DequeueOutputBuffer(_, _, _, _, _, _, _))
         .Times(1)
         .WillOnce(Return(MEDIA_CODEC_TRY_AGAIN_LATER));
   }
-  codec_loop_->DoPendingWork();
+  codec_loop_->ExpectWork();
   // Don't WaitUntilIdle() here.  See TestUnqueuedEos.
+}
+
+TEST_F(MediaCodecLoopTest, TestQueueEosFailure) {
+  // Test sending an EOS to MCL => MCB =dequeue EOS fails=> MCL error.
+  ConstructCodecLoop();
+  {
+    InSequence _s;
+
+    ExpectIsAnyInputPending(true);
+    int input_buffer_index = 123;
+    ExpectDequeueInputBuffer(input_buffer_index);
+
+    MediaCodecLoop::InputData data;
+    data.is_eos = true;
+    ExpectProvideInputData(data);
+    EXPECT_CALL(Codec(), QueueEOS(input_buffer_index));
+    ExpectInputDataQueued(true);
+
+    // Now send the EOS back on the output queue.
+    EosOutputBuffer eos;
+    ExpectDequeueOutputBuffer(eos);
+    EXPECT_CALL(Codec(), ReleaseOutputBuffer(eos.index, false));
+    EXPECT_CALL(*client_, OnDecodedEos(_)).Times(1).WillOnce(Return(false));
+    EXPECT_CALL(*client_, OnCodecLoopError()).Times(1);
+  }
+  codec_loop_->ExpectWork();
+  // Don't WaitUntilIdle() here.
 }
 
 TEST_F(MediaCodecLoopTest, TestQueueInputData) {
@@ -313,10 +330,10 @@ TEST_F(MediaCodecLoopTest, TestQueueInputData) {
         .Times(1)
         .WillOnce(Return(MEDIA_CODEC_TRY_AGAIN_LATER));
 
-    // DoPendingWork will try again.
+    // ExpectWork will try again.
     ExpectEmptyIOLoop();
   }
-  codec_loop_->DoPendingWork();
+  codec_loop_->ExpectWork();
   WaitUntilIdle(ShouldNotBeIdle);
 }
 
@@ -339,7 +356,7 @@ TEST_F(MediaCodecLoopTest, TestQueueInputDataFails) {
     ExpectInputDataQueued(false);
     EXPECT_CALL(*client_, OnCodecLoopError()).Times(1);
   }
-  codec_loop_->DoPendingWork();
+  codec_loop_->ExpectWork();
   // MCL is now in the error state.
 }
 
@@ -354,7 +371,7 @@ TEST_F(MediaCodecLoopTest, TestQueueInputDataTryAgain) {
     // MCL will try for output too.
     ExpectDequeueOutputBuffer(MEDIA_CODEC_TRY_AGAIN_LATER);
   }
-  codec_loop_->DoPendingWork();
+  codec_loop_->ExpectWork();
   // Note that the client might not be allowed to change from "input pending"
   // to "no input pending" without actually being asked for input.  For now,
   // MCL doesn't assume this.
@@ -388,12 +405,12 @@ TEST_F(MediaCodecLoopTest, TestSeveralPendingIOBuffers) {
 
   ExpectEmptyIOLoop();
 
-  codec_loop_->DoPendingWork();
+  codec_loop_->ExpectWork();
 }
 
 TEST_F(MediaCodecLoopTest, TestTryFlushOnJellyBeanMR2) {
   // On JB MR2+ MCL should be willing to use MediaCodecBridge::Flush.
-  ConstructCodecLoop(kJellyBeanMR2);
+  ConstructCodecLoop(base::android::SDK_VERSION_JELLY_BEAN_MR2);
   EXPECT_CALL(Codec(), Flush()).Times(1).WillOnce(Return(MEDIA_CODEC_OK));
   ASSERT_TRUE(codec_loop_->TryFlush());
 }
@@ -401,7 +418,7 @@ TEST_F(MediaCodecLoopTest, TestTryFlushOnJellyBeanMR2) {
 TEST_F(MediaCodecLoopTest, TestTryFlushAfterJellyBeanMR2Fails) {
   // On JB MR2+, MCL should be willing to use MediaCodecBridge::Flush.  Try
   // that, but make Flush fail.
-  ConstructCodecLoop(kJellyBeanMR2);
+  ConstructCodecLoop(base::android::SDK_VERSION_JELLY_BEAN_MR2);
   EXPECT_CALL(Codec(), Flush()).Times(1).WillOnce(Return(MEDIA_CODEC_ERROR));
   EXPECT_CALL(*client_, OnCodecLoopError()).Times(1);
   ASSERT_FALSE(codec_loop_->TryFlush());
@@ -409,7 +426,7 @@ TEST_F(MediaCodecLoopTest, TestTryFlushAfterJellyBeanMR2Fails) {
 
 TEST_F(MediaCodecLoopTest, TestTryFlushOnJellyBeanMR1) {
   // In JB MR1, MCL should not be willing to use MediaCodecBridge::Flush.
-  ConstructCodecLoop(kJellyBeanMR1);
+  ConstructCodecLoop(base::android::SDK_VERSION_JELLY_BEAN_MR1);
   ASSERT_FALSE(codec_loop_->TryFlush());
 }
 
@@ -423,7 +440,7 @@ TEST_F(MediaCodecLoopTest, TestOnKeyAdded) {
   {
     InSequence _s;
 
-    // First DoPendingWork()
+    // First ExpectWork()
     ExpectIsAnyInputPending(true);
     ExpectDequeueInputBuffer(input_buffer_index);
 
@@ -441,18 +458,18 @@ TEST_F(MediaCodecLoopTest, TestOnKeyAdded) {
     // the buffer we just provided.
     ExpectDequeueOutputBuffer(MEDIA_CODEC_TRY_AGAIN_LATER);
   }
-  codec_loop_->DoPendingWork();
+  codec_loop_->ExpectWork();
 
   // Try again, to be sure that MCL doesn't request more input.  Note that this
   // is also done in the above loop, but that one could be made optional.  This
-  // forces MCL to try again as part of an entirely new DoPendingWork cycle.
+  // forces MCL to try again as part of an entirely new ExpectWork cycle.
   {
     InSequence _s;
     // MCL should only try for output buffers, since it's still waiting for a
     // key to be added.
     ExpectDequeueOutputBuffer(MEDIA_CODEC_TRY_AGAIN_LATER);
   }
-  codec_loop_->DoPendingWork();
+  codec_loop_->ExpectWork();
 
   // When we add the key, MCL will DoPending work again.  This time, it should
   // succeed since the key has been added.

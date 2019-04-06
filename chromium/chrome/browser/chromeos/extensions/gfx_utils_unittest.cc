@@ -41,7 +41,10 @@ class DualBadgeMapTest : public ExtensionServiceTestBase {
     arc_test_.SetUp(profile_.get());
   }
 
-  void TearDown() override { arc_test_.TearDown(); }
+  void TearDown() override {
+    arc_test_.TearDown();
+    extensions::ExtensionServiceTestBase::TearDown();
+  }
 
   Profile* profile() { return profile_.get(); }
 
@@ -75,7 +78,6 @@ class DualBadgeMapTest : public ExtensionServiceTestBase {
     info.activity = activity;
     info.sticky = false;
     info.notifications_enabled = false;
-    info.orientation_lock = arc::mojom::OrientationLock::NONE;
     return info;
   }
 
@@ -84,13 +86,7 @@ class DualBadgeMapTest : public ExtensionServiceTestBase {
   }
 
   scoped_refptr<Extension> CreateExtension(const std::string& id) {
-    return ExtensionBuilder()
-        .SetManifest(DictionaryBuilder()
-                         .Set("name", "test")
-                         .Set("version", "0.1")
-                         .Build())
-        .SetID(id)
-        .Build();
+    return ExtensionBuilder("test").SetID(id).Build();
   }
 
   void AddExtension(const Extension* extension) {

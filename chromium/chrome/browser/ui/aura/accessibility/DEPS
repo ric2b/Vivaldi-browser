@@ -1,4 +1,7 @@
-include_rules = [
-  # TODO(mash): Remove. http://crbug.com/678705
-  "+ash",
-]
+specific_include_rules = {
+  "automation_manager_aura\.cc": [
+    # TODO(mash): Fix. https://crbug.com/756054
+    "+ash/shell.h",
+    "+ash/wm/window_util.h",
+  ],
+}

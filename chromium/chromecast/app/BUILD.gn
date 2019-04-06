@@ -15,7 +15,7 @@ cast_source_set("app") {
   deps = [
     ":cast_crash_client",
     "//base",
-    "//chromecast:chromecast_features",
+    "//chromecast:chromecast_buildflags",
     "//chromecast/base",
     "//chromecast/browser",
     "//chromecast/common",
@@ -81,7 +81,7 @@ cast_source_set("test_support") {
     "//chromecast/base",
     "//content/test:test_support",
     "//ipc",
-    "//mojo/edk/embedder:headers",
+    "//mojo/core/embedder",
   ]
 }
 

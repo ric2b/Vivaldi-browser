@@ -39,12 +39,17 @@ CGFloat CurrentScreenWidth();
 // Returns true if the device is an iPhone X.
 bool IsIPhoneX();
 
-// Returns whether the feature to display the adaptive toolbar is enabled.
-bool IsAdaptiveToolbarEnabled();
+// Returns whether the UI Refresh Infobar will be used.
+bool IsRefreshInfobarEnabled();
 
-// Returns whether the feature to force the toolbar to respect the safe area is
-// enabled.
-bool IsSafeAreaCompatibleToolbarEnabled();
+// Returns whether the UI Refresh Location Bar will be used.
+bool IsRefreshLocationBarEnabled();
+
+// Returns whether the UI Refresh Omnibox Popup presentation will be used.
+bool IsRefreshPopupPresentationEnabled();
+
+// Returns whether the first phase of the UI refresh will be displayed.
+bool IsUIRefreshPhase1Enabled();
 
 // Returns the height of the status bar, accounting for orientation.
 CGFloat StatusBarHeight();

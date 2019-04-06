@@ -5,8 +5,9 @@
 mojom = "//content/common/native_types.mojom"
 os_whitelist = [ "mac" ]
 public_headers = [
-  "//third_party/WebKit/public/platform/WebScrollbarButtonsPlacement.h",
-  "//third_party/WebKit/public/platform/mac/WebScrollbarTheme.h",
+  "//content/common/mac/attributed_string_coder.h",
+  "//third_party/blink/public/platform/web_scrollbar_buttons_placement.h",
+  "//third_party/blink/public/platform/mac/web_scrollbar_theme.h",
 ]
 traits_headers = [ "//content/common/view_messages.h" ]
 deps = [
@@ -16,11 +17,10 @@ deps = [
   # includes from //content/common and //content/public/common, this isn't a
   # transitive allowance, so those targets' own public_deps aren't included in
   # the set of implied dependencies.
-  "//cc/ipc",
   "//media",
   "//media/base/ipc",
   "//net",
-  "//third_party/WebKit/public:blink_headers",
+  "//third_party/blink/public:blink_headers",
   "//ui/accessibility",
   "//ui/base/ime:text_input_types",
   "//ui/gfx/ipc",
@@ -30,6 +30,7 @@ deps = [
   "//url/ipc:url_ipc",
 ]
 type_mappings = [
+  "content.mojom.EncodedAttributedString=::mac::AttributedStringCoder::EncodedString",
   "content.mojom.ScrollerStyle=::blink::ScrollerStyle",
   "content.mojom.ScrollbarButtonsPlacement=::blink::WebScrollbarButtonsPlacement",
 ]

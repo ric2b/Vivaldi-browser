@@ -44,11 +44,17 @@ class MEDIA_EXPORT SourceBufferState {
 
   ~SourceBufferState();
 
-  void Init(const StreamParser::InitCB& init_cb,
+  void Init(StreamParser::InitCB init_cb,
             const std::string& expected_codecs,
             const StreamParser::EncryptedMediaInitDataCB&
                 encrypted_media_init_data_cb,
             const NewTextTrackCB& new_text_track_cb);
+
+  // Reconfigures this source buffer to use |new_stream_parser|. Caller must
+  // first ensure that ResetParserState() was done to flush any pending frames
+  // from the old stream parser.
+  void ChangeType(std::unique_ptr<StreamParser> new_stream_parser,
+                  const std::string& new_expected_codecs);
 
   // Appends new data to the StreamParser.
   // Returns true if the data was successfully appended. Returns false if an
@@ -90,6 +96,12 @@ class MEDIA_EXPORT SourceBufferState {
 
   // Returns true if currently parsing a media segment, or false otherwise.
   bool parsing_media_segment() const { return parsing_media_segment_; }
+
+  // Returns the 'Generate Timestamps Flag' for this SourceBuffer's byte stream
+  // format parser as described in the MSE Byte Stream Format Registry.
+  bool generate_timestamps_flag() const {
+    return stream_parser_->GetGenerateTimestampsFlag();
+  }
 
   // Sets |frame_processor_|'s sequence mode to |sequence_mode|.
   void SetSequenceMode(bool sequence_mode);
@@ -139,15 +151,29 @@ class MEDIA_EXPORT SourceBufferState {
       const SourceBufferParseWarningCB& parse_warning_cb);
 
  private:
-  // State advances through this list. The intent is to ensure at least one
-  // config is received prior to parser calling initialization callback, and
-  // that such initialization callback occurs at most once per parser.
+  // State advances through this list to PARSER_INITIALIZED.
+  // The intent is to ensure at least one config is received prior to parser
+  // calling initialization callback, and that such initialization callback
+  // occurs at most once per parser.
+  // PENDING_PARSER_RECONFIG occurs if State had reached PARSER_INITIALIZED
+  // before changing to a new StreamParser in ChangeType(). In such case, State
+  // would then advance to PENDING_PARSER_REINIT, then PARSER_INITIALIZED upon
+  // the next initialization segment parsed, but would not run the
+  // initialization callback in this case (since such would already have
+  // occurred on the initial transition from PENDING_PARSER_INIT to
+  // PARSER_INITIALIZED.)
   enum State {
     UNINITIALIZED = 0,
     PENDING_PARSER_CONFIG,
     PENDING_PARSER_INIT,
-    PARSER_INITIALIZED
+    PARSER_INITIALIZED,
+    PENDING_PARSER_RECONFIG,
+    PENDING_PARSER_REINIT
   };
+
+  // Initializes |stream_parser_|. Also, updates |expected_audio_codecs| and
+  // |expected_video_codecs|.
+  void InitializeParser(const std::string& expected_codecs);
 
   // Called by the |stream_parser_| when a new initialization segment is
   // encountered.
@@ -236,12 +262,6 @@ class MEDIA_EXPORT SourceBufferState {
 
   std::vector<AudioCodec> expected_audio_codecs_;
   std::vector<VideoCodec> expected_video_codecs_;
-
-  // Indicates that timestampOffset should be updated automatically during
-  // OnNewBuffers() based on the earliest end timestamp of the buffers provided.
-  // TODO(wolenetz): Refactor this function while integrating April 29, 2014
-  // changes to MSE spec. See http://crbug.com/371499.
-  bool auto_update_timestamp_offset_;
 
   DISALLOW_COPY_AND_ASSIGN(SourceBufferState);
 };

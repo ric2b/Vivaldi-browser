@@ -19,9 +19,9 @@ struct CommitRequestData;
 struct CommitResponseData;
 struct UpdateResponseData;
 
-// This class is used by the SharedModelTypeProcessor to track the state of each
-// entity with its type. It can be considered a helper class internal to the
-// processor. It manages the metadata for its entity and caches entity data
+// This class is used by the ClientTagBasedModelTypeProcessor to track the state
+// of each entity with its type. It can be considered a helper class internal to
+// the processor. It manages the metadata for its entity and caches entity data
 // upon a local change until commit confirmation is received.
 class ProcessorEntityTracker {
  public:
@@ -58,6 +58,8 @@ class ProcessorEntityTracker {
   // Whether commit data is needed to be cached before a commit request can be
   // created. Note that deletions do not require cached data.
   bool RequiresCommitData() const;
+
+  bool FailedGettingCommitData() const;
 
   // Whether it's safe to clear the metadata for this entity. This means that
   // the entity is deleted and either knowledge of this entity has never left
@@ -111,6 +113,8 @@ class ProcessorEntityTracker {
   // without copying.
   void SetCommitData(EntityData* data);
 
+  void SetCommitDataRequested();
+
   // Caches the a copy of |data_ptr|, which doesn't copy the data itself.
   void CacheCommitData(const EntityDataPtr& data_ptr);
 
@@ -153,6 +157,8 @@ class ProcessorEntityTracker {
   // Sync data that exists for items being committed only.
   // The data is reset once commit confirmation is received.
   EntityDataPtr commit_data_;
+
+  bool commit_data_requested_;
 
   // The sequence number of the last item sent to the sync thread.
   int64_t commit_requested_sequence_number_;

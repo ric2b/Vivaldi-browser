@@ -20,19 +20,22 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/unified_consent_helper.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/signin_manager.h"
+#include "components/signin/core/browser/account_info.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/sync/base/model_type.h"
 #include "components/sync/base/pref_names.h"
 #include "components/sync/driver/about_sync_util.h"
+#include "components/sync/driver/sync_service_utils.h"
 #include "components/sync/engine/net/network_resources.h"
 #include "components/sync/syncable/read_transaction.h"
+#include "components/unified_consent/url_keyed_data_collection_consent_helper.h"
 #include "content/public/browser/browser_thread.h"
 #include "google/cacheinvalidation/types.pb.h"
 #include "google_apis/gaia/gaia_constants.h"
@@ -47,6 +50,7 @@ using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 using browser_sync::ProfileSyncService;
 using content::BrowserThread;
+using unified_consent::UrlKeyedDataCollectionConsentHelper;
 
 namespace {
 
@@ -98,8 +102,7 @@ ProfileSyncServiceAndroid::ProfileSyncServiceAndroid(JNIEnv* env, jobject obj)
 
   sync_prefs_ = std::make_unique<syncer::SyncPrefs>(profile_->GetPrefs());
 
-  sync_service_ =
-      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_);
+  sync_service_ = ProfileSyncServiceFactory::GetForProfile(profile_);
 }
 
 bool ProfileSyncServiceAndroid::Init() {
@@ -142,7 +145,9 @@ jboolean ProfileSyncServiceAndroid::IsSyncRequested(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return sync_service_->IsSyncRequested();
+  // Sync is considered requested if it's not explicitly disabled by the user.
+  return !sync_service_->HasDisableReason(
+      syncer::SyncService::DISABLE_REASON_USER_CHOICE);
 }
 
 void ProfileSyncServiceAndroid::RequestStart(JNIEnv* env,
@@ -331,15 +336,6 @@ void ProfileSyncServiceAndroid::FlushDirectory(JNIEnv* env,
   sync_service_->FlushDirectory();
 }
 
-ScopedJavaLocalRef<jstring> ProfileSyncServiceAndroid::QuerySyncStatusSummary(
-    JNIEnv* env,
-    const JavaParamRef<jobject>&) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(profile_);
-  std::string status(sync_service_->QuerySyncStatusSummaryString());
-  return ConvertUTF8ToJavaString(env, status);
-}
-
 void ProfileSyncServiceAndroid::GetAllNodes(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
@@ -363,6 +359,28 @@ jboolean ProfileSyncServiceAndroid::HasUnrecoverableError(
     const JavaParamRef<jobject>&) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return sync_service_->HasUnrecoverableError();
+}
+
+jboolean ProfileSyncServiceAndroid::IsUrlKeyedDataCollectionEnabled(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    jboolean personalized) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  bool is_unified_consent_enabled = IsUnifiedConsentEnabled(profile_);
+  std::unique_ptr<UrlKeyedDataCollectionConsentHelper>
+      unified_consent_url_helper;
+  if (personalized) {
+    unified_consent_url_helper = UrlKeyedDataCollectionConsentHelper::
+        NewPersonalizedDataCollectionConsentHelper(is_unified_consent_enabled,
+                                                   sync_service_);
+  } else {
+    PrefService* pref_service = profile_->GetPrefs();
+    unified_consent_url_helper = UrlKeyedDataCollectionConsentHelper::
+        NewAnonymizedDataCollectionConsentHelper(is_unified_consent_enabled,
+                                                 pref_service, sync_service_);
+  }
+
+  return unified_consent_url_helper->IsEnabled();
 }
 
 jint ProfileSyncServiceAndroid::GetProtocolErrorClientAction(
@@ -441,9 +459,7 @@ ProfileSyncServiceAndroid::GetCurrentSignedInAccountText(
     const JavaParamRef<jobject>&) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const std::string& sync_username =
-      SigninManagerFactory::GetForProfile(profile_)
-          ->GetAuthenticatedAccountInfo()
-          .email;
+      sync_service_->GetAuthenticatedAccountInfo().email;
   return base::android::ConvertUTF16ToJavaString(
       env, l10n_util::GetStringFUTF16(IDS_SYNC_ACCOUNT_INFO,
                                       base::ASCIIToUTF16(sync_username)));

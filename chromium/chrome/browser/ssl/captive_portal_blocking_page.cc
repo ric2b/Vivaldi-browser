@@ -17,11 +17,11 @@
 #include "chrome/browser/interstitials/chrome_metrics_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/cert_report_helper.h"
+#include "chrome/browser/ssl/certificate_error_reporter.h"
 #include "chrome/browser/ssl/ssl_cert_reporter.h"
 #include "chrome/browser/ssl/ssl_error_controller_client.h"
 #include "components/captive_portal/captive_portal_detector.h"
 #include "components/captive_portal/captive_portal_metrics.h"
-#include "components/certificate_reporting/error_reporter.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "components/security_interstitials/core/metrics_helper.h"
@@ -46,16 +46,16 @@
 
 namespace {
 
-const char kMetricsName[] = "captive_portal";
+const char kCaptivePortalMetricsName[] = "captive_portal";
 
-std::unique_ptr<ChromeMetricsHelper> CreateMetricsHelper(
+std::unique_ptr<ChromeMetricsHelper> CreateCaptivePortalMetricsHelper(
     content::WebContents* web_contents,
     const GURL& request_url) {
   security_interstitials::MetricsHelper::ReportDetails reporting_info;
-  reporting_info.metric_prefix = kMetricsName;
+  reporting_info.metric_prefix = kCaptivePortalMetricsName;
   std::unique_ptr<ChromeMetricsHelper> metrics_helper =
       std::make_unique<ChromeMetricsHelper>(web_contents, request_url,
-                                            reporting_info, kMetricsName);
+                                            reporting_info);
   metrics_helper.get()->StartRecordingCaptivePortalMetrics(false);
   return metrics_helper;
 }
@@ -72,10 +72,12 @@ CaptivePortalBlockingPage::CaptivePortalBlockingPage(
     const GURL& login_url,
     std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
     const net::SSLInfo& ssl_info,
+    int cert_error,
     const base::Callback<void(content::CertificateRequestResultType)>& callback)
     : SSLBlockingPageBase(
           web_contents,
-          certificate_reporting::ErrorReport::INTERSTITIAL_CAPTIVE_PORTAL,
+          cert_error,
+          CertificateErrorReport::INTERSTITIAL_CAPTIVE_PORTAL,
           ssl_info,
           request_url,
           std::move(ssl_cert_reporter),
@@ -84,8 +86,9 @@ CaptivePortalBlockingPage::CaptivePortalBlockingPage(
           std::make_unique<SSLErrorControllerClient>(
               web_contents,
               ssl_info,
+              cert_error,
               request_url,
-              CreateMetricsHelper(web_contents, request_url))),
+              CreateCaptivePortalMetricsHelper(web_contents, request_url))),
       login_url_(login_url),
       ssl_info_(ssl_info),
       callback_(callback) {
@@ -205,6 +208,8 @@ void CaptivePortalBlockingPage::PopulateInterstitialStrings(
   load_time_data->SetString("closeDetails", base::string16());
   load_time_data->SetString("explanationParagraph", base::string16());
   load_time_data->SetString("finalParagraph", base::string16());
+  load_time_data->SetString("recurrentErrorParagraph", base::string16());
+  load_time_data->SetBoolean("show_recurrent_error_paragraph", false);
 
   if (cert_report_helper())
     cert_report_helper()->PopulateExtendedReportingOption(load_time_data);

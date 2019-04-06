@@ -30,6 +30,7 @@ class POLICY_EXPORT PolicyMap {
     PolicyLevel level = POLICY_LEVEL_RECOMMENDED;
     PolicyScope scope = POLICY_SCOPE_USER;
     std::unique_ptr<base::Value> value;
+    std::string error;
     std::unique_ptr<ExternalDataFetcher> external_data_fetcher;
 
     // For debugging and displaying only. Set by provider delivering the policy.
@@ -38,8 +39,8 @@ class POLICY_EXPORT PolicyMap {
     Entry();
     ~Entry();
 
-    Entry(Entry&&);
-    Entry& operator=(Entry&&);
+    Entry(Entry&&) noexcept;
+    Entry& operator=(Entry&&) noexcept;
 
     // Returns a copy of |this|.
     Entry DeepCopy() const;
@@ -61,20 +62,30 @@ class POLICY_EXPORT PolicyMap {
   // Returns a weak reference to the entry currently stored for key |policy|,
   // or NULL if not found. Ownership is retained by the PolicyMap.
   const Entry* Get(const std::string& policy) const;
+  Entry* GetMutable(const std::string& policy);
 
-  // Returns a weak reference to the value currently stored for key |policy|,
-  // or NULL if not found. Ownership is retained by the PolicyMap.
+  // Returns a weak reference to the value currently stored for key
+  // |policy|, or NULL if not found. Ownership is retained by the PolicyMap.
   // This is equivalent to Get(policy)->value, when it doesn't return NULL.
   const base::Value* GetValue(const std::string& policy) const;
+  base::Value* GetMutableValue(const std::string& policy);
 
   // Overwrites any existing information stored in the map for the key |policy|.
+  // Resets the error for that policy to the empty string.
   void Set(const std::string& policy,
            PolicyLevel level,
            PolicyScope scope,
            PolicySource source,
            std::unique_ptr<base::Value> value,
            std::unique_ptr<ExternalDataFetcher> external_data_fetcher);
+
   void Set(const std::string& policy, Entry entry);
+
+  // Adds an |error| to the map for the key |policy| that should be shown to the
+  // user alongside the value in the policy UI. This is equivalent to calling
+  // |GetMutableValue(policy)->error = error|, so should only be called for
+  // policies that are already stored in this map.
+  void SetError(const std::string& policy, const std::string& error);
 
   // For all policies, overwrite the PolicySource with |source|.
   void SetSourceForAll(PolicySource source);

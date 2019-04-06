@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -123,10 +124,10 @@ void FileManagerPrivateInternalExecuteTaskFunction::OnTaskExecuted(
 }
 
 FileManagerPrivateInternalGetFileTasksFunction::
-    FileManagerPrivateInternalGetFileTasksFunction() {}
+    FileManagerPrivateInternalGetFileTasksFunction() = default;
 
 FileManagerPrivateInternalGetFileTasksFunction::
-    ~FileManagerPrivateInternalGetFileTasksFunction() {}
+    ~FileManagerPrivateInternalGetFileTasksFunction() = default;
 
 bool FileManagerPrivateInternalGetFileTasksFunction::RunAsync() {
   using extensions::api::file_manager_private_internal::GetFileTasks::Params;
@@ -151,8 +152,8 @@ bool FileManagerPrivateInternalGetFileTasksFunction::RunAsync() {
     local_paths_.push_back(file_system_url.path());
   }
 
-  mime_type_collector_.reset(
-      new app_file_handler_util::MimeTypeCollector(GetProfile()));
+  mime_type_collector_ =
+      std::make_unique<app_file_handler_util::MimeTypeCollector>(GetProfile());
   mime_type_collector_->CollectForLocalPaths(
       local_paths_,
       base::Bind(
@@ -164,8 +165,9 @@ bool FileManagerPrivateInternalGetFileTasksFunction::RunAsync() {
 
 void FileManagerPrivateInternalGetFileTasksFunction::OnMimeTypesCollected(
     std::unique_ptr<std::vector<std::string>> mime_types) {
-  is_directory_collector_.reset(
-      new app_file_handler_util::IsDirectoryCollector(GetProfile()));
+  is_directory_collector_ =
+      std::make_unique<app_file_handler_util::IsDirectoryCollector>(
+          GetProfile());
   is_directory_collector_->CollectForEntriesPaths(
       local_paths_, base::Bind(&FileManagerPrivateInternalGetFileTasksFunction::
                                    OnAreDirectoriesAndMimeTypesCollected,
@@ -178,9 +180,9 @@ void FileManagerPrivateInternalGetFileTasksFunction::
         std::unique_ptr<std::set<base::FilePath>> directory_paths) {
   std::vector<EntryInfo> entries;
   for (size_t i = 0; i < local_paths_.size(); ++i) {
-    entries.push_back(EntryInfo(
+    entries.emplace_back(
         local_paths_[i], (*mime_types)[i],
-        directory_paths->find(local_paths_[i]) != directory_paths->end()));
+        directory_paths->find(local_paths_[i]) != directory_paths->end());
   }
 
   file_manager::file_tasks::FindAllTypesOfTasks(

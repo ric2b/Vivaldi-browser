@@ -11,14 +11,15 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "content/common/content_export.h"
+#include "content/public/common/resource_type.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h"
-#include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/platform/web_client_hints_types.mojom.h"
-#include "third_party/WebKit/public/platform/web_feature.mojom.h"
-#include "third_party/WebKit/public/web/WebMeaningfulLayout.h"
+#include "third_party/blink/public/platform/web_client_hints_types.mojom.h"
+#include "third_party/blink/public/platform/web_feature.mojom.h"
+#include "third_party/blink/public/platform/web_loading_behavior_flag.h"
+#include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/public/web/web_meaningful_layout.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -29,6 +30,11 @@ class WebString;
 struct WebURLError;
 class WebWorkerFetchContext;
 }
+
+namespace network {
+struct ResourceResponseHead;
+struct URLLoaderCompletionStatus;
+}  // namespace network
 
 namespace content {
 
@@ -117,9 +123,30 @@ class CONTENT_EXPORT RenderFrameObserver : public IPC::Listener,
   virtual void DidObserveLoadingBehavior(
       blink::WebLoadingBehaviorFlag behavior) {}
 
-  // Notification when the renderer observes a new feature usage during a page
-  // load. This is used for UseCounter feature metrics.
+  // Notification when the renderer observes a new use counter usage during a
+  // page load. This is used for UseCounter metrics.
   virtual void DidObserveNewFeatureUsage(blink::mojom::WebFeature feature) {}
+  virtual void DidObserveNewCssPropertyUsage(int css_property,
+                                             bool is_animated) {}
+
+  // Notification when the renderer a response started, completed or canceled.
+  // Complete or Cancel is guaranteed to be called for a response that started.
+  // |request_id| uniquely identifies the request within this render frame.
+  virtual void DidStartResponse(
+      int request_id,
+      const network::ResourceResponseHead& response_head,
+      content::ResourceType resource_type) {}
+  virtual void DidCompleteResponse(
+      int request_id,
+      const network::URLLoaderCompletionStatus& status) {}
+  virtual void DidCancelResponse(int request_id) {}
+
+  // Notification when the renderer observes data used during the page load.
+  // This is used for page load metrics. |received_data_length| is the received
+  // network bytes. |resource_id| uniquely identifies the resource within this
+  // render frame.
+  virtual void DidReceiveTransferSizeUpdate(int resource_id,
+                                            int received_data_length) {}
 
   // Called when the focused node has changed to |node|.
   virtual void FocusedNodeChanged(const blink::WebNode& node) {}

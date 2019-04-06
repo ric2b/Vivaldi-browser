@@ -4,6 +4,9 @@
 
 #include "components/safe_browsing/db/v4_store.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/files/file_util.h"
@@ -11,6 +14,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "components/safe_browsing/db/prefix_iterator.h"
 #include "components/safe_browsing/db/v4_rice.h"
 #include "components/safe_browsing/db/v4_store.pb.h"
 #include "components/safe_browsing/proto/webui.pb.h"
@@ -33,7 +37,6 @@ const char kReadFromDisk[] = "SafeBrowsing.V4ReadFromDisk";
 const char kApplyUpdate[] = ".ApplyUpdate";
 const char kDecodeAdditions[] = ".DecodeAdditions";
 const char kDecodeRemovals[] = ".DecodeRemovals";
-const char kMergeUpdate[] = ".MergeUpdate";
 // Part 3: Represent the unit of value being measured and logged.
 const char kResult[] = ".Result";
 const char kTime[] = ".Time";
@@ -46,6 +49,10 @@ const char kTime[] = ".Time";
 
 const uint32_t kFileMagic = 0x600D71FE;
 const uint32_t kFileVersion = 9;
+
+// Set a common sense limit on the store file size we try to read.
+// The maximum store file size, as of today, is about 6MB.
+constexpr size_t kMaxStoreSizeBytes = 50 * 1000 * 1000;
 
 void RecordTimeWithAndWithoutSuffix(const std::string& metric,
                                     base::TimeDelta time,
@@ -96,10 +103,6 @@ void RecordEnumWithAndWithoutSuffix(const std::string& metric,
   }
 }
 
-void RecordAddUnlumpedHashesTime(base::TimeDelta time) {
-  UMA_HISTOGRAM_LONG_TIMES("SafeBrowsing.V4AddUnlumpedHashes.Time", time);
-}
-
 void RecordApplyUpdateResult(const std::string& base_metric,
                              ApplyUpdateResult result,
                              const base::FilePath& file_path) {
@@ -139,12 +142,6 @@ void RecordDecodeRemovalsTime(const std::string& base_metric,
                               const base::FilePath& file_path) {
   RecordTimeWithAndWithoutSuffix(base_metric + kDecodeRemovals, time,
                                  file_path);
-}
-
-void RecordMergeUpdateTime(const std::string& base_metric,
-                           base::TimeDelta time,
-                           const base::FilePath& file_path) {
-  RecordTimeWithAndWithoutSuffix(base_metric + kMergeUpdate, time, file_path);
 }
 
 void RecordStoreReadResult(StoreReadResult result) {
@@ -321,7 +318,6 @@ ApplyUpdateResult V4Store::ProcessUpdate(
     expected_checksum = response->checksum().sha256();
   }
 
-  TimeTicks before = TimeTicks::Now();
   if (delay_checksum_check) {
     DCHECK(hash_prefix_map_old.empty());
     DCHECK(!raw_removals);
@@ -342,7 +338,6 @@ ApplyUpdateResult V4Store::ProcessUpdate(
       return apply_update_result;
     }
   }
-  RecordMergeUpdateTime(metric, TimeTicks::Now() - before, store_path_);
 
   state_ = response->new_client_state();
   return APPLY_UPDATE_SUCCESS;
@@ -393,7 +388,7 @@ void V4Store::ApplyUpdate(
   // happens, the old store will get destoyed and can lead to use-after-free in
   // this function.
   callback_task_runner->PostTask(
-      FROM_HERE, base::Bind(callback, base::Passed(&new_store)));
+      FROM_HERE, base::BindOnce(callback, std::move(new_store)));
 }
 
 ApplyUpdateResult V4Store::UpdateHashPrefixMapFromAdditions(
@@ -475,11 +470,9 @@ ApplyUpdateResult V4Store::AddUnlumpedHashes(PrefixSize prefix_size,
     return ADDITIONS_SIZE_UNEXPECTED_FAILURE;
   }
 
-  TimeTicks before = TimeTicks::Now();
   // TODO(vakh): Figure out a way to avoid the following copy operation.
   (*additions_map)[prefix_size] =
       std::string(raw_hashes_begin, raw_hashes_begin + raw_hashes_length);
-  RecordAddUnlumpedHashesTime(TimeTicks::Now() - before);
   return APPLY_UPDATE_SUCCESS;
 }
 
@@ -685,8 +678,8 @@ StoreReadResult V4Store::ReadFromDisk() {
     // A temporary scope to make sure that |contents| get destroyed as soon as
     // we are doing using it.
     std::string contents;
-    bool read_success = base::ReadFileToString(store_path_, &contents);
-    if (!read_success) {
+    if (!base::ReadFileToStringWithMaxSize(store_path_, &contents,
+                                           kMaxStoreSizeBytes)) {
       return FILE_UNREADABLE_FAILURE;
     }
 
@@ -773,6 +766,10 @@ StoreWriteResult V4Store::WriteToDisk(const Checksum& checksum) {
 }
 
 HashPrefix V4Store::GetMatchingHashPrefix(const FullHash& full_hash) {
+  return GetMatchingHashPrefix(base::StringPiece(full_hash));
+}
+
+HashPrefix V4Store::GetMatchingHashPrefix(base::StringPiece full_hash) {
   // It should never be the case that more than one hash prefixes match a given
   // full hash. However, if that happens, this method returns any one of them.
   // It does not guarantee which one of those will be returned.
@@ -780,37 +777,19 @@ HashPrefix V4Store::GetMatchingHashPrefix(const FullHash& full_hash) {
   checks_attempted_++;
   for (const auto& pair : hash_prefix_map_) {
     const PrefixSize& prefix_size = pair.first;
-    const HashPrefixes& hash_prefixes = pair.second;
-    HashPrefix hash_prefix = full_hash.substr(0, prefix_size);
-    if (HashPrefixMatches(hash_prefix, hash_prefixes.begin(),
-                          hash_prefixes.end())) {
-      return hash_prefix;
-    }
+    base::StringPiece hash_prefix = full_hash.substr(0, prefix_size);
+    if (HashPrefixMatches(hash_prefix, pair.second, prefix_size))
+      return hash_prefix.as_string();
   }
   return HashPrefix();
 }
 
-// static
-bool V4Store::HashPrefixMatches(const HashPrefix& hash_prefix,
-                                const HashPrefixes::const_iterator& begin,
-                                const HashPrefixes::const_iterator& end) {
-  if (begin == end) {
-    return false;
-  }
-  size_t distance = std::distance(begin, end);
-  const PrefixSize prefix_size = hash_prefix.length();
-  DCHECK_EQ(0u, distance % prefix_size);
-  size_t mid_prefix_index = ((distance / prefix_size) / 2) * prefix_size;
-  HashPrefixes::const_iterator mid = begin + mid_prefix_index;
-  HashPrefix mid_prefix = HashPrefix(mid, mid + prefix_size);
-  int result = hash_prefix.compare(mid_prefix);
-  if (result == 0) {
-    return true;
-  } else if (result < 0) {
-    return HashPrefixMatches(hash_prefix, begin, mid);
-  } else {
-    return HashPrefixMatches(hash_prefix, mid + prefix_size, end);
-  }
+bool V4Store::HashPrefixMatches(base::StringPiece prefix,
+                                const HashPrefixes& prefixes,
+                                const PrefixSize& size) {
+  return std::binary_search(
+      PrefixIterator(prefixes, 0, size),
+      PrefixIterator(prefixes, prefixes.size() / size, size), prefix);
 }
 
 bool V4Store::VerifyChecksum() {

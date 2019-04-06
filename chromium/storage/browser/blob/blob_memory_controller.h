@@ -85,10 +85,14 @@ class STORAGE_EXPORT BlobMemoryController {
                      size_t length);
     ~MemoryAllocation();
 
+    size_t length() const { return length_; }
+
    private:
-    base::WeakPtr<BlobMemoryController> controller;
-    uint64_t item_id;
-    size_t length;
+    friend class BlobMemoryController;
+
+    base::WeakPtr<BlobMemoryController> controller_;
+    uint64_t item_id_;
+    size_t length_;
 
     DISALLOW_COPY_AND_ASSIGN(MemoryAllocation);
   };
@@ -104,11 +108,11 @@ class STORAGE_EXPORT BlobMemoryController {
   };
 
   // The bool argument is true if we successfully received memory quota.
-  using MemoryQuotaRequestCallback = base::Callback<void(bool)>;
+  using MemoryQuotaRequestCallback = base::OnceCallback<void(bool)>;
   // The bool argument is true if we successfully received file quota, and the
   // vector argument provides the file info.
   using FileQuotaRequestCallback =
-      base::Callback<void(std::vector<FileCreationInfo>, bool)>;
+      base::OnceCallback<void(std::vector<FileCreationInfo>, bool)>;
 
   // We enable file paging if |file_runner| isn't a nullptr.
   BlobMemoryController(const base::FilePath& storage_directory,
@@ -141,7 +145,7 @@ class STORAGE_EXPORT BlobMemoryController {
   //       CanReserveQuota before calling this.
   base::WeakPtr<QuotaAllocationTask> ReserveMemoryQuota(
       std::vector<scoped_refptr<ShareableBlobDataItem>> unreserved_memory_items,
-      const MemoryQuotaRequestCallback& done_callback);
+      MemoryQuotaRequestCallback done_callback);
 
   // Reserves quota for the given |unreserved_file_items|. The items must be
   // temporary file items (BlobDataBuilder::IsTemporaryFileItem returns true) in
@@ -153,7 +157,7 @@ class STORAGE_EXPORT BlobMemoryController {
   //       CanReserveQuota before calling this.
   base::WeakPtr<QuotaAllocationTask> ReserveFileQuota(
       std::vector<scoped_refptr<ShareableBlobDataItem>> unreserved_file_items,
-      const FileQuotaRequestCallback& done_callback);
+      FileQuotaRequestCallback done_callback);
 
   // Called when initially populated or upon later access.
   void NotifyMemoryItemsUsed(
@@ -166,15 +170,32 @@ class STORAGE_EXPORT BlobMemoryController {
 
   const BlobStorageLimits& limits() const { return limits_; }
   void set_limits_for_testing(const BlobStorageLimits& limits) {
+    OnStorageLimitsCalculated(limits);
     manual_limits_set_ = true;
-    limits_ = limits;
   }
+
+  void ShrinkMemoryAllocation(ShareableBlobDataItem* item);
+  void ShrinkFileAllocation(ShareableFileReference* file_reference,
+                            uint64_t old_length,
+                            uint64_t new_length);
+  void GrowFileAllocation(ShareableFileReference* file_reference,
+                          uint64_t delta);
 
   using DiskSpaceFuncPtr = int64_t (*)(const base::FilePath&);
 
   void set_testing_disk_space(DiskSpaceFuncPtr disk_space_function) {
     disk_space_function_ = disk_space_function;
   }
+
+  size_t GetAvailableMemoryForBlobs() const;
+  uint64_t GetAvailableFileSpaceForBlobs() const;
+
+  // The given callback will be called when we've finished calculating blob
+  // storage limits. Usually limits are calculated at some point after startup,
+  // but calling this method may cause them to be calculated sooner.
+  // If limits have already been calculated |callback| will be called
+  // synchronously.
+  void CallWhenStorageLimitsAreKnown(base::OnceClosure callback);
 
  private:
   class FileQuotaAllocationTask;
@@ -203,7 +224,7 @@ class STORAGE_EXPORT BlobMemoryController {
   base::WeakPtr<QuotaAllocationTask> AppendMemoryTask(
       uint64_t total_bytes_needed,
       std::vector<scoped_refptr<ShareableBlobDataItem>> unreserved_memory_items,
-      const MemoryQuotaRequestCallback& done_callback);
+      MemoryQuotaRequestCallback done_callback);
 
   void MaybeGrantPendingMemoryRequests();
 
@@ -228,9 +249,6 @@ class STORAGE_EXPORT BlobMemoryController {
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
 
-  size_t GetAvailableMemoryForBlobs() const;
-  uint64_t GetAvailableFileSpaceForBlobs() const;
-
   void GrantMemoryAllocations(
       std::vector<scoped_refptr<ShareableBlobDataItem>>* items,
       size_t total_bytes);
@@ -239,6 +257,8 @@ class STORAGE_EXPORT BlobMemoryController {
   // This is registered as a callback for file deletions on the file reference
   // of our paging files. We decrement the disk space used.
   void OnBlobFileDelete(uint64_t size, const base::FilePath& path);
+  void OnShrunkenBlobFileDelete(uint64_t shrink_delta,
+                                const base::FilePath& path);
 
   base::FilePath GenerateNextPageFileName();
 
@@ -250,6 +270,9 @@ class STORAGE_EXPORT BlobMemoryController {
   // our configuration task.
   bool manual_limits_set_ = false;
   BlobStorageLimits limits_;
+  bool did_schedule_limit_calculation_ = false;
+  bool did_calculate_storage_limits_ = false;
+  std::vector<base::OnceClosure> on_calculate_limits_callbacks_;
 
   // Memory bookkeeping. These numbers are all disjoint.
   // This is the amount of memory we're using for blobs in RAM, including the

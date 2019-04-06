@@ -65,10 +65,6 @@ bool HasControlAndAlt(int flags) {
   return (flags & kControlAndAltFlags) == kControlAndAltFlags;
 }
 
-int SetControlAndAltToAltGraph(int flags) {
-  return (flags & ~kControlAndAltFlags) | EF_ALTGR_DOWN;
-}
-
 int ReplaceAltGraphWithControlAndAlt(int flags) {
   return (flags & EF_ALTGR_DOWN)
              ? ((flags & ~EF_ALTGR_DOWN) | kControlAndAltFlags)
@@ -281,10 +277,6 @@ base::LazyInstance<base::ThreadLocalStorage::Slot,
                    PlatformKeyMapInstanceTlsTraits>
     g_platform_key_map_tls_lazy = LAZY_INSTANCE_INITIALIZER;
 
-// TODO(crbug.com/25503): Controls Control+Alt vs AltGraph disambiguation.
-const base::Feature kFixAltGraphModifier{"FixAltGraph",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
-
 }  // anonymous namespace
 
 PlatformKeyMap::PlatformKeyMap() {}
@@ -322,12 +314,10 @@ DomKey PlatformKeyMap::DomKeyFromKeyboardCodeImpl(KeyboardCode key_code,
     if (it != printable_keycode_to_key_.end()) {
       key = it->second;
       if (key != DomKey::NONE) {
-        // TODO(25503): Map Ctrl+Alt to AltGraph if new behaviour is enabled.
-        if (HasControlAndAlt(try_flags) &&
-            base::FeatureList::IsEnabled(kFixAltGraphModifier)) {
-          // Printable character generated via Control+Alt means AltGraph.
-          *flags = SetControlAndAltToAltGraph(*flags);
-        }
+        // If we find a character with |try_flags| including Control and Alt
+        // then this is an AltGraph-shifted event.
+        if (HasControlAndAlt(try_flags))
+          *flags = ReplaceControlAndAltWithAltGraph(*flags);
         return key;
       }
     }
@@ -362,6 +352,13 @@ DomKey PlatformKeyMap::DomKeyFromKeyboardCode(KeyboardCode key_code,
 }
 
 // static
+int PlatformKeyMap::ReplaceControlAndAltWithAltGraph(int flags) {
+  if (!HasControlAndAlt(flags))
+    return flags;
+  return (flags & ~kControlAndAltFlags) | EF_ALTGR_DOWN;
+}
+
+// static
 bool PlatformKeyMap::UsesAltGraph() {
   base::ThreadLocalStorage::Slot* platform_key_map_tls =
       g_platform_key_map_tls_lazy.Pointer();
@@ -375,11 +372,6 @@ bool PlatformKeyMap::UsesAltGraph() {
   HKL current_layout = ::GetKeyboardLayout(0);
   platform_key_map->UpdateLayout(current_layout);
   return platform_key_map->has_alt_graph_;
-}
-
-// static
-bool PlatformKeyMap::IsFixAltGraphEnabled() {
-  return base::FeatureList::IsEnabled(kFixAltGraphModifier);
 }
 
 void PlatformKeyMap::UpdateLayout(HKL layout) {

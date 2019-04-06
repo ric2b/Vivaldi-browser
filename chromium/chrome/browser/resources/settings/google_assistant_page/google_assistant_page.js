@@ -11,6 +11,16 @@ Polymer({
 
   behaviors: [I18nBehavior, PrefsBehavior],
 
+  properties: {
+    /** @private */
+    assistantFeatureEnabled_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableAssistant');
+      },
+    },
+  },
+
   /** @private {?settings.GoogleAssistantBrowserProxy} */
   browserProxy_: null,
 

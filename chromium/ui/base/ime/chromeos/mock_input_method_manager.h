@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/base/ime/input_method_keyboard_controller.h"
 
 namespace chromeos {
 namespace input_method {
@@ -14,7 +15,9 @@ class InputMethodUtil;
 class ImeKeyboard;
 
 // The mock InputMethodManager for testing.
-class UI_BASE_IME_EXPORT MockInputMethodManager : public InputMethodManager {
+class UI_BASE_IME_EXPORT MockInputMethodManager
+    : public InputMethodManager,
+      public ui::InputMethodKeyboardController {
  public:
  public:
   class State : public InputMethodManager::State {
@@ -29,6 +32,9 @@ class UI_BASE_IME_EXPORT MockInputMethodManager : public InputMethodManager {
     void RemoveInputMethodExtension(const std::string& extension_id) override;
     void ChangeInputMethod(const std::string& input_method_id,
                            bool show_message) override;
+    void ChangeInputMethodToJpKeyboard() override;
+    void ChangeInputMethodToJpIme() override;
+    void ToggleInputMethodForJpIme() override;
     bool EnableInputMethod(
         const std::string& new_active_input_method_id) override;
     void EnableLoginLayouts(
@@ -52,8 +58,12 @@ class UI_BASE_IME_EXPORT MockInputMethodManager : public InputMethodManager {
     bool ReplaceEnabledInputMethods(
         const std::vector<std::string>& new_active_input_method_ids) override;
     bool SetAllowedInputMethods(
-        const std::vector<std::string>& new_allowed_input_method_ids) override;
+        const std::vector<std::string>& new_allowed_input_method_ids,
+        bool enable_allowed_input_methods) override;
     const std::vector<std::string>& GetAllowedInputMethods() override;
+    void EnableInputView() override;
+    void DisableInputView() override;
+    const GURL& GetInputViewUrl() const override;
 
     // The active input method ids cache (actually default only)
     std::vector<std::string> active_input_method_ids;
@@ -103,10 +113,21 @@ class UI_BASE_IME_EXPORT MockInputMethodManager : public InputMethodManager {
       const std::string& engine_id,
       const std::vector<InputMethodManager::MenuItem>& items) override;
   void MaybeNotifyImeMenuActivationChanged() override;
-  void OverrideKeyboardUrlRef(const std::string& keyset) override;
+  void OverrideKeyboardKeyset(mojom::ImeKeyset keyset) override;
   void SetImeMenuFeatureEnabled(ImeMenuFeature feature, bool enabled) override;
   bool GetImeMenuFeatureEnabled(ImeMenuFeature feature) const override;
   void NotifyObserversImeExtraInputStateChange() override;
+  ui::InputMethodKeyboardController* GetInputMethodKeyboardController()
+      override;
+
+  // ui::InputMethodKeyboardController overrides.
+  bool DisplayVirtualKeyboard() override;
+  void DismissVirtualKeyboard() override;
+  void AddObserver(
+      ui::InputMethodKeyboardControllerObserver* observer) override;
+  void RemoveObserver(
+      ui::InputMethodKeyboardControllerObserver* observer) override;
+  bool IsKeyboardVisible() override;
 
  private:
   uint32_t features_enabled_state_;

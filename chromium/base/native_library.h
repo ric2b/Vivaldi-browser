@@ -46,7 +46,7 @@ struct NativeLibraryStruct {
   };
 };
 using NativeLibrary = NativeLibraryStruct*;
-#elif defined(OS_POSIX)
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 using NativeLibrary = void*;
 #endif  // OS_*
 
@@ -60,7 +60,7 @@ struct BASE_EXPORT NativeLibraryLoadError {
 
 #if defined(OS_WIN)
   DWORD code;
-#else
+#elif defined(OS_POSIX) || defined(OS_FUCHSIA)
   std::string message;
 #endif  // OS_WIN
 };
@@ -98,12 +98,20 @@ BASE_EXPORT void UnloadNativeLibrary(NativeLibrary library);
 BASE_EXPORT void* GetFunctionPointerFromNativeLibrary(NativeLibrary library,
                                                       StringPiece name);
 
-// Returns the full platform specific name for a native library.
-// |name| must be ASCII.
-// For example:
-// "mylib" returns "mylib.dll" on Windows, "libmylib.so" on Linux,
-// "libmylib.dylib" on Mac.
+// Returns the full platform-specific name for a native library. |name| must be
+// ASCII. This is also the default name for the output of a gn |shared_library|
+// target. See tools/gn/docs/reference.md#shared_library.
+// For example for "mylib", it returns:
+// - "mylib.dll" on Windows
+// - "libmylib.so" on Linux
+// - "libmylib.dylib" on Mac
 BASE_EXPORT std::string GetNativeLibraryName(StringPiece name);
+
+// Returns the full platform-specific name for a gn |loadable_module| target.
+// See tools/gn/docs/reference.md#loadable_module
+// The returned name is the same as GetNativeLibraryName() on all platforms
+// except for Mac where for "mylib" it returns "mylib.so".
+BASE_EXPORT std::string GetLoadableModuleName(StringPiece name);
 
 }  // namespace base
 

@@ -4,12 +4,12 @@
 
 #include "chromecast/browser/url_request_context_factory.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "chromecast/base/cast_features.h"
@@ -17,6 +17,7 @@
 #include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/cast_http_user_agent_settings.h"
 #include "chromecast/browser/cast_network_delegate.h"
+#include "chromecast/chromecast_buildflags.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -26,7 +27,7 @@
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_policy_status.h"
-#include "net/cert/do_nothing_ct_verifier.h"
+#include "net/cert/multi_log_ct_verifier.h"
 #include "net/cert_net/nss_ocsp.h"
 #include "net/cookies/cookie_store.h"
 #include "net/dns/host_resolver.h"
@@ -34,7 +35,7 @@
 #include "net/http/http_network_layer.h"
 #include "net/http/http_server_properties_impl.h"
 #include "net/http/http_stream_factory.h"
-#include "net/proxy/proxy_service.h"
+#include "net/proxy_resolution/proxy_resolution_service.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
 #include "net/ssl/ssl_config_service_defaults.h"
@@ -46,26 +47,19 @@
 #include "net/url_request/url_request_intercepting_job_factory.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+#include "chromecast/browser/extension_request_protocol_handler.h"
+#include "extensions/browser/extension_protocols.h"  // nogncheck
+#include "extensions/browser/extension_system.h"     // nogncheck
+#include "extensions/common/constants.h"             // nogncheck
+#endif
+
 namespace chromecast {
 namespace shell {
 
 namespace {
 
 const char kCookieStoreFile[] = "Cookies";
-
-// A CTPolicyEnforcer that accepts all certificates.
-class IgnoresCTPolicyEnforcer : public net::CTPolicyEnforcer {
- public:
-  IgnoresCTPolicyEnforcer() = default;
-  ~IgnoresCTPolicyEnforcer() override = default;
-
-  net::ct::CTPolicyCompliance CheckCompliance(
-      net::X509Certificate* cert,
-      const net::SCTList& verified_scts,
-      const net::NetLogWithSource& net_log) override {
-    return net::ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS;
-  }
-};
 
 bool IgnoreCertificateErrors() {
   base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
@@ -182,11 +176,10 @@ void URLRequestContextFactory::InitializeOnUIThread(net::NetLog* net_log) {
   // Proxy config service should be initialized in UI thread, since
   // ProxyConfigServiceDelegate on Android expects UI thread.
   pref_proxy_config_tracker_impl_ =
-      base::WrapUnique<PrefProxyConfigTrackerImpl>(
-          new PrefProxyConfigTrackerImpl(
-              CastBrowserProcess::GetInstance()->pref_service(),
-              content::BrowserThread::GetTaskRunnerForThread(
-                  content::BrowserThread::IO)));
+      std::make_unique<PrefProxyConfigTrackerImpl>(
+          CastBrowserProcess::GetInstance()->pref_service(),
+          content::BrowserThread::GetTaskRunnerForThread(
+              content::BrowserThread::IO));
 
   proxy_config_service_ =
       pref_proxy_config_tracker_impl_->CreateTrackingProxyConfigService(
@@ -201,6 +194,10 @@ net::URLRequestContextGetter* URLRequestContextFactory::CreateMainGetter(
     content::URLRequestInterceptorScopedVector request_interceptors) {
   DCHECK(!main_getter_.get())
       << "Main URLRequestContextGetter already initialized";
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+  (*protocol_handlers)[extensions::kExtensionScheme] =
+      std::make_unique<ExtensionRequestProtocolHandler>(browser_context);
+#endif
   main_getter_ =
       new MainURLRequestContextGetter(this, browser_context, protocol_handlers,
                                       std::move(request_interceptors));
@@ -232,11 +229,10 @@ void URLRequestContextFactory::InitializeSystemContextDependencies() {
 
   host_resolver_ = net::HostResolver::CreateDefaultResolver(NULL);
   cert_verifier_ = net::CertVerifier::CreateDefault();
-  ssl_config_service_ = new net::SSLConfigServiceDefaults;
+  ssl_config_service_.reset(new net::SSLConfigServiceDefaults);
   transport_security_state_.reset(new net::TransportSecurityState());
-  // Certificate transparency is current disabled for Chromecast.
-  cert_transparency_verifier_.reset(new net::DoNothingCTVerifier());
-  ct_policy_enforcer_.reset(new IgnoresCTPolicyEnforcer());
+  cert_transparency_verifier_.reset(new net::MultiLogCTVerifier());
+  ct_policy_enforcer_.reset(new net::DefaultCTPolicyEnforcer());
 
   http_auth_handler_factory_ =
       net::HttpAuthHandlerFactory::CreateDefault(host_resolver_.get());
@@ -246,8 +242,9 @@ void URLRequestContextFactory::InitializeSystemContextDependencies() {
   http_server_properties_.reset(new net::HttpServerPropertiesImpl);
 
   DCHECK(proxy_config_service_);
-  proxy_service_ = net::ProxyService::CreateUsingSystemProxyResolver(
-      std::move(proxy_config_service_), NULL);
+  proxy_resolution_service_ =
+      net::ProxyResolutionService::CreateUsingSystemProxyResolver(
+          std::move(proxy_config_service_), nullptr);
   system_dependencies_initialized_ = true;
 }
 
@@ -265,12 +262,12 @@ void URLRequestContextFactory::InitializeMainContextDependencies(
   for (content::ProtocolHandlerMap::iterator it = protocol_handlers->begin();
        it != protocol_handlers->end();
        ++it) {
-    set_protocol = job_factory->SetProtocolHandler(
-        it->first, base::WrapUnique(it->second.release()));
+    set_protocol =
+        job_factory->SetProtocolHandler(it->first, std::move(it->second));
     DCHECK(set_protocol);
   }
   set_protocol = job_factory->SetProtocolHandler(
-      url::kDataScheme, base::WrapUnique(new net::DataProtocolHandler));
+      url::kDataScheme, std::make_unique<net::DataProtocolHandler>());
   DCHECK(set_protocol);
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -317,13 +314,21 @@ void URLRequestContextFactory::PopulateNetworkSessionParams(
 
   // Enable QUIC if instructed by DCS. This remains constant for the lifetime of
   // the process.
-  session_params->enable_quic = base::FeatureList::IsEnabled(kEnableQuic);
+  session_params->enable_quic = chromecast::IsFeatureEnabled(kEnableQuic);
   LOG(INFO) << "Set HttpNetworkSessionParams.enable_quic = "
             << session_params->enable_quic;
 
-  // Do not close idle sockets on memory pressure, otherwise it will open too
-  // much connections to the server.
-  session_params->disable_idle_sockets_close_on_memory_pressure = true;
+  // Disable idle sockets close on memory pressure, if instructed by DCS. On
+  // memory constrained devices:
+  // 1. if idle sockets are closed when memory pressure happens, cast_shell will
+  // close and re-open lots of connections to server.
+  // 2. if idle sockets are kept alive when memory pressure happens, this may
+  // cause JS engine gc frequently, leading to JS suspending.
+  session_params->disable_idle_sockets_close_on_memory_pressure =
+      chromecast::IsFeatureEnabled(kDisableIdleSocketsCloseOnMemoryPressure);
+  LOG(INFO) << "Set HttpNetworkSessionParams."
+            << "disable_idle_sockets_close_on_memory_pressure = "
+            << session_params->disable_idle_sockets_close_on_memory_pressure;
 }
 
 net::URLRequestContext* URLRequestContextFactory::CreateSystemRequestContext() {
@@ -342,7 +347,7 @@ net::URLRequestContext* URLRequestContextFactory::CreateSystemRequestContext() {
   system_context->set_cert_transparency_verifier(
       cert_transparency_verifier_.get());
   system_context->set_ct_policy_enforcer(ct_policy_enforcer_.get());
-  system_context->set_proxy_service(proxy_service_.get());
+  system_context->set_proxy_resolution_service(proxy_resolution_service_.get());
   system_context->set_ssl_config_service(ssl_config_service_.get());
   system_context->set_transport_security_state(
       transport_security_state_.get());
@@ -409,7 +414,7 @@ net::URLRequestContext* URLRequestContextFactory::CreateMainRequestContext(
   main_context->set_cert_transparency_verifier(
       cert_transparency_verifier_.get());
   main_context->set_ct_policy_enforcer(ct_policy_enforcer_.get());
-  main_context->set_proxy_service(proxy_service_.get());
+  main_context->set_proxy_resolution_service(proxy_resolution_service_.get());
   main_context->set_ssl_config_service(ssl_config_service_.get());
   main_context->set_transport_security_state(transport_security_state_.get());
   main_context->set_http_auth_handler_factory(

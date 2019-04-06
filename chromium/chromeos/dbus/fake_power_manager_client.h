@@ -5,9 +5,12 @@
 #ifndef CHROMEOS_DBUS_FAKE_POWER_MANAGER_CLIENT_H_
 #define CHROMEOS_DBUS_FAKE_POWER_MANAGER_CLIENT_H_
 
+#include <map>
+#include <memory>
 #include <queue>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/containers/circular_deque.h"
@@ -15,7 +18,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
+#include "base/time/time.h"
 #include "chromeos/chromeos_export.h"
+#include "chromeos/dbus/power_manager/backlight.pb.h"
 #include "chromeos/dbus/power_manager/policy.pb.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
 #include "chromeos/dbus/power_manager/suspend.pb.h"
@@ -32,13 +37,13 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   ~FakePowerManagerClient() override;
 
   const power_manager::PowerManagementPolicy& policy() { return policy_; }
-  const power_manager::PowerSupplyProperties& props() const { return props_; }
   int num_request_restart_calls() const { return num_request_restart_calls_; }
   int num_request_shutdown_calls() const { return num_request_shutdown_calls_; }
   int num_set_policy_calls() const { return num_set_policy_calls_; }
   int num_set_is_projecting_calls() const {
     return num_set_is_projecting_calls_;
   }
+  int num_defer_screen_dim_calls() const { return num_defer_screen_dim_calls_; }
   double screen_brightness_percent() const {
     return screen_brightness_percent_.value();
   }
@@ -53,8 +58,9 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   void set_enqueue_brightness_changes_on_backlights_forced_off(bool enqueue) {
     enqueue_brightness_changes_on_backlights_forced_off_ = enqueue;
   }
-  const std::queue<double>& pending_brightness_changes() const {
-    return pending_brightness_changes_;
+  const std::queue<power_manager::BacklightBrightnessChange>&
+  pending_screen_brightness_changes() const {
+    return pending_screen_brightness_changes_;
   }
   void set_user_activity_callback(base::RepeatingClosure callback) {
     user_activity_callback_ = std::move(callback);
@@ -73,6 +79,10 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   void GetScreenBrightnessPercent(DBusMethodCallback<double> callback) override;
   void DecreaseKeyboardBrightness() override;
   void IncreaseKeyboardBrightness() override;
+  void GetKeyboardBrightnessPercent(
+      DBusMethodCallback<double> callback) override;
+  const base::Optional<power_manager::PowerSupplyProperties>& GetLastStatus()
+      override;
   void RequestStatusUpdate() override;
   void RequestSuspend() override;
   void RequestRestart(power_manager::RequestRestartReason reason,
@@ -90,8 +100,19 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   void GetInactivityDelays(
       DBusMethodCallback<power_manager::PowerManagementPolicy::Delays> callback)
       override;
-  base::Closure GetSuspendReadinessCallback() override;
+  base::Closure GetSuspendReadinessCallback(
+      const base::Location& from_where) override;
   int GetNumPendingSuspendReadinessCallbacks() override;
+  void CreateArcTimers(
+      const std::string& tag,
+      std::vector<std::pair<clockid_t, base::ScopedFD>> arc_timer_requests,
+      DBusMethodCallback<std::vector<TimerId>> callback) override;
+  void StartArcTimer(TimerId timer_id,
+                     base::TimeTicks absolute_expiration_time,
+                     VoidDBusMethodCallback callback) override;
+  void DeleteArcTimers(const std::string& tag,
+                       VoidDBusMethodCallback callback) override;
+  void DeferScreenDim() override;
 
   // Pops the first report from |video_activity_reports_|, returning whether the
   // activity was fullscreen or not. There must be at least one report.
@@ -100,22 +121,24 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   // Emulates the power manager announcing that the system is starting or
   // completing a suspend attempt.
   void SendSuspendImminent(power_manager::SuspendImminent::Reason reason);
-  void SendSuspendDone();
+  void SendSuspendDone(base::TimeDelta sleep_duration = base::TimeDelta());
   void SendDarkSuspendImminent();
 
-  // Emulates the power manager announcing that the system is changing
-  // display brightness to |level|.
-  void SendBrightnessChanged(int level, bool user_initiated);
-
-  // Emulates the power manager announcing that the system is changing
-  // keyboard brightness to |level|.
-  void SendKeyboardBrightnessChanged(int level, bool user_initiated);
+  // Emulates the power manager announcing that the system is changing the
+  // screen or keyboard brightness.
+  void SendScreenBrightnessChanged(
+      const power_manager::BacklightBrightnessChange& proto);
+  void SendKeyboardBrightnessChanged(
+      const power_manager::BacklightBrightnessChange& proto);
 
   // Notifies observers about the screen idle state changing.
   void SendScreenIdleStateChanged(const power_manager::ScreenIdleState& proto);
 
   // Notifies observers that the power button has been pressed or released.
   void SendPowerButtonEvent(bool down, const base::TimeTicks& timestamp);
+
+  // Notifies observers that the screen is about to be dimmed.
+  void SendScreenDimImminent();
 
   // Sets |lid_state_| or |tablet_mode_| and notifies |observers_| about the
   // change.
@@ -136,16 +159,20 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   void SetPowerPolicyQuitClosure(base::OnceClosure quit_closure);
 
   // Updates screen brightness to the first pending value in
-  // |pending_brightness_changes_|.
+  // |pending_screen_brightness_changes_|.
   // Returns whether the screen brightness change was applied - this will
   // return false if there are no pending brightness changes.
-  bool ApplyPendingBrightnessChange();
+  bool ApplyPendingScreenBrightnessChange();
 
   // Sets the screen brightness percent to be returned.
   // The nullopt |percent| means an error. In case of success,
   // |percent| must be in the range of [0, 100].
   void set_screen_brightness_percent(const base::Optional<double>& percent) {
     screen_brightness_percent_ = percent;
+  }
+
+  void set_keyboard_brightness_percent(const base::Optional<double>& percent) {
+    keyboard_brightness_percent_ = percent;
   }
 
  private:
@@ -162,7 +189,7 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   power_manager::PowerManagementPolicy policy_;
 
   // Power status received from the power manager.
-  power_manager::PowerSupplyProperties props_;
+  base::Optional<power_manager::PowerSupplyProperties> props_;
 
   // Number of times that various methods have been called.
   int num_request_restart_calls_ = 0;
@@ -170,12 +197,16 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   int num_set_policy_calls_ = 0;
   int num_set_is_projecting_calls_ = 0;
   int num_set_backlights_forced_off_calls_ = 0;
+  int num_defer_screen_dim_calls_ = 0;
 
   // Number of pending suspend readiness callbacks.
   int num_pending_suspend_readiness_callbacks_ = 0;
 
   // Current screen brightness in the range [0.0, 100.0].
   base::Optional<double> screen_brightness_percent_;
+
+  // Current keyboard brightness in the range [0.0, 100.0].
+  base::Optional<double> keyboard_brightness_percent_;
 
   // Last screen brightness requested via SetScreenBrightnessPercent().
   // Unlike |screen_brightness_percent_|, this value will not be changed by
@@ -197,13 +228,14 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   // brightness and send a brightness change event (provided undimmed
   // brightness percent is set).
   // If set, brightness changes will be enqueued to
-  // pending_brightness_changes_, and will have to be applied explicitly by
-  // calling ApplyPendingBrightnessChange().
+  // |pending_screen_brightness_changes_|, and will have to be applied
+  // explicitly by calling ApplyPendingScreenBrightnessChange().
   bool enqueue_brightness_changes_on_backlights_forced_off_ = false;
 
-  // Pending brightness changes caused by SetBacklightsForcedOff().
-  // ApplyPendingBrightnessChange() applies the first pending change.
-  std::queue<double> pending_brightness_changes_;
+  // Pending screen brightness changes caused by SetBacklightsForcedOff().
+  // ApplyPendingScreenBrightnessChange() applies the first pending change.
+  std::queue<power_manager::BacklightBrightnessChange>
+      pending_screen_brightness_changes_;
 
   // Delays returned by GetInactivityDelays().
   power_manager::PowerManagementPolicy::Delays inactivity_delays_;
@@ -211,6 +243,17 @@ class CHROMEOS_EXPORT FakePowerManagerClient : public PowerManagerClient {
   // States returned by GetSwitchStates().
   LidState lid_state_ = LidState::OPEN;
   TabletMode tablet_mode_ = TabletMode::UNSUPPORTED;
+
+  // Monotonically increasing timer id assigned to created timers.
+  TimerId next_timer_id_ = 1;
+
+  // Represents the timer expiration fd associated with a timer id stored as
+  // the key. The fd is written to when the timer associated with the clock
+  // expires.
+  std::map<TimerId, base::ScopedFD> timer_expiration_fds_;
+
+  // Maps a client's tag to its list of timer ids.
+  std::map<std::string, std::vector<TimerId>> client_timer_ids_;
 
   // Video activity reports that we were requested to send, in the order they
   // were requested. True if fullscreen.

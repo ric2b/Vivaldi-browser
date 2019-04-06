@@ -11,7 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -147,7 +147,7 @@ void DeviceLocalAccountExternalPolicyLoaderTest::SetUp() {
       new net::TestURLRequestContextGetter(base::ThreadTaskRunnerHandle::Get());
   TestingBrowserProcess::GetGlobal()->SetSystemRequestContext(
       request_context_getter_.get());
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_dir_));
+  ASSERT_TRUE(base::PathService::Get(chrome::DIR_TEST_DATA, &test_dir_));
 
   loader_ = new DeviceLocalAccountExternalPolicyLoader(&store_, cache_dir_);
   provider_.reset(new extensions::ExternalProviderImpl(
@@ -224,7 +224,7 @@ TEST_F(DeviceLocalAccountExternalPolicyLoaderTest, ForceInstallListEmpty) {
   // Spin the loop until the cache shutdown callback is invoked. Verify that at
   // that point, no further file I/O tasks are pending.
   run_loop.Run();
-  EXPECT_TRUE(base::MessageLoop::current()->IsIdleForTesting());
+  EXPECT_TRUE(base::MessageLoopCurrent::Get()->IsIdleForTesting());
 }
 
 // Verifies that when a force-install list policy referencing an extension is
@@ -314,7 +314,7 @@ TEST_F(DeviceLocalAccountExternalPolicyLoaderTest, ForceInstallListSet) {
   // Spin the loop until the cache shutdown callback is invoked. Verify that at
   // that point, no further file I/O tasks are pending.
   shutdown_run_loop.Run();
-  EXPECT_TRUE(base::MessageLoop::current()->IsIdleForTesting());
+  EXPECT_TRUE(base::MessageLoopCurrent::Get()->IsIdleForTesting());
 }
 
 }  // namespace chromeos

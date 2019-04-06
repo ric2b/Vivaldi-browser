@@ -11,27 +11,31 @@
 #include <string>
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/sys_info.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/bind_test_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_page_load_timing.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/proto/client_config.pb.h"
 #include "components/data_reduction_proxy/proto/pageload_metrics.pb.h"
 #include "content/public/common/child_process_host.h"
 #include "net/base/net_errors.h"
+#include "net/base/network_change_notifier.h"
 #include "net/nqe/effective_connection_type.h"
-#include "net/url_request/test_url_fetcher_factory.h"
-#include "net/url_request/url_request_context_getter.h"
-#include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
+#include "services/network/test/test_url_loader_factory.h"
+#include "services/network/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -47,8 +51,23 @@ static const char kSessionKey[] = "fake-session";
 static const char kFakeURL[] = "http://www.google.com/";
 static const int64_t kBytes = 10000;
 static const int64_t kBytesOriginal = 1000000;
+static const int64_t kTotalPageSizeBytes = 20000;
+static const float kCachedFraction = 0.5;
 static const int kCrashProcessId = 1;
 static const int64_t kRendererMemory = 1024;
+static const int kNumRequestInfo = 2;
+static const DataReductionProxyData::RequestInfo first_request_info(
+    DataReductionProxyData::RequestInfo::Protocol::HTTP,
+    false,
+    base::TimeDelta::FromMilliseconds(1000),
+    base::TimeDelta::FromMilliseconds(1100),
+    base::TimeDelta::FromMilliseconds(1200));
+static const DataReductionProxyData::RequestInfo second_request_info(
+    DataReductionProxyData::RequestInfo::Protocol::HTTPS,
+    true,
+    base::TimeDelta::FromMilliseconds(1300),
+    base::TimeDelta::FromMilliseconds(1400),
+    base::TimeDelta::FromMilliseconds(1500));
 
 }  // namespace
 
@@ -57,9 +76,9 @@ class TestDataReductionProxyPingbackClientImpl
     : public DataReductionProxyPingbackClientImpl {
  public:
   TestDataReductionProxyPingbackClientImpl(
-      net::URLRequestContextGetter* url_request_context_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       scoped_refptr<base::SingleThreadTaskRunner> thread_task_runner)
-      : DataReductionProxyPingbackClientImpl(url_request_context_getter,
+      : DataReductionProxyPingbackClientImpl(url_loader_factory,
                                              std::move(thread_task_runner)),
         should_override_random_(false),
         override_value_(0.0f),
@@ -105,12 +124,24 @@ class DataReductionProxyPingbackClientImplTest : public testing::Test {
     return pingback_client_.get();
   }
 
+  GURL pingback_url() { return util::AddApiKeyToUrl(params::GetPingbackURL()); }
+
   void Init() {
-    request_context_getter_ = new net::TestURLRequestContextGetter(
-        scoped_task_environment_.GetMainThreadTaskRunner());
+    factory()->AddResponse(pingback_url().spec(), "");
+    num_network_requests_ = 0;
+    factory()->SetInterceptor(base::BindLambdaForTesting(
+        [&](const network::ResourceRequest& request) {
+          intercepted_url_ = request.url;
+          intercepted_headers_ = request.headers;
+          intercepted_body_ = network::GetUploadData(request);
+          ++num_network_requests_;
+        }));
+    test_shared_loader_factory_ =
+        base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+            &test_url_loader_factory_);
     pingback_client_ =
         std::make_unique<TestDataReductionProxyPingbackClientImpl>(
-            request_context_getter_.get(),
+            test_shared_loader_factory_,
             scoped_task_environment_.GetMainThreadTaskRunner());
     page_id_ = 0u;
   }
@@ -120,7 +151,8 @@ class DataReductionProxyPingbackClientImplTest : public testing::Test {
                              bool lite_page_received,
                              bool app_background_occurred,
                              bool opt_out_occurred,
-                             bool crash) {
+                             bool crash,
+                             bool black_listed) {
     timing_ = std::make_unique<DataReductionProxyPageLoadTiming>(
         base::Time::FromJsTime(1500) /* navigation_start */,
         base::Optional<base::TimeDelta>(
@@ -133,12 +165,16 @@ class DataReductionProxyPingbackClientImplTest : public testing::Test {
             1900)) /* first_contentful_paint */,
         base::Optional<base::TimeDelta>(base::TimeDelta::FromMilliseconds(
             2000)) /* experimental_first_meaningful_paint */,
+        base::Optional<base::TimeDelta>(
+            base::TimeDelta::FromMilliseconds(3000)) /* first_input_delay */,
         base::Optional<base::TimeDelta>(base::TimeDelta::FromMilliseconds(
             100)) /* parse_blocked_on_script_load_duration */,
         base::Optional<base::TimeDelta>(
             base::TimeDelta::FromMilliseconds(2000)) /* parse_stop */,
         kBytes /* network_bytes */, kBytesOriginal /* original_network_bytes */,
-        app_background_occurred, opt_out_occurred, kRendererMemory,
+        kTotalPageSizeBytes /* total_page_size_bytes */,
+        kCachedFraction /* cached_fraction */, app_background_occurred,
+        opt_out_occurred, kRendererMemory,
         crash ? kCrashProcessId : content::ChildProcessHost::kInvalidUniqueID);
 
     DataReductionProxyData request_data;
@@ -146,31 +182,41 @@ class DataReductionProxyPingbackClientImplTest : public testing::Test {
     request_data.set_request_url(GURL(kFakeURL));
     request_data.set_effective_connection_type(
         net::EFFECTIVE_CONNECTION_TYPE_OFFLINE);
+    request_data.set_connection_type(
+        net::NetworkChangeNotifier::CONNECTION_UNKNOWN);
     request_data.set_lofi_received(lofi_received);
+    request_data.set_black_listed(black_listed);
     request_data.set_client_lofi_requested(client_lofi_requested);
     request_data.set_lite_page_received(lite_page_received);
     request_data.set_page_id(page_id_);
-    factory()->set_remove_fetcher_on_delete(true);
+    request_data.add_request_info(first_request_info);
+    request_data.add_request_info(second_request_info);
     static_cast<DataReductionProxyPingbackClient*>(pingback_client())
         ->SendPingback(request_data, *timing_);
     page_id_++;
   }
 
-  // Send a fake crash report frome breakpad.
+  void WaitForPingbackResponse() {
+    base::RunLoop run_loop;
+    run_loop.RunUntilIdle();
+  }
+
+  // Send a fake crash report from crash_reporter.
   void ReportCrash(bool oom) {
 #if defined(OS_ANDROID)
-    breakpad::CrashDumpManager::CrashDumpDetails details = {
-        kCrashProcessId, content::PROCESS_TYPE_RENDERER,
-        oom ? base::TERMINATION_STATUS_OOM_PROTECTED
-            : base::TERMINATION_STATUS_ABNORMAL_TERMINATION,
-        base::android::APPLICATION_STATE_HAS_RUNNING_ACTIVITIES};
-    details.file_size = oom ? 0 : 1;
-    static_cast<breakpad::CrashDumpManager::Observer*>(pingback_client_.get())
-        ->OnCrashDumpProcessed(details);
+    crash_reporter::ChildExitObserver::TerminationInfo info;
+    crash_reporter::CrashMetricsReporter::ReportedCrashTypeSet types(
+        {oom ? crash_reporter::CrashMetricsReporter::ProcessedCrashCounts::
+                   kRendererForegroundVisibleOom
+             : crash_reporter::CrashMetricsReporter::ProcessedCrashCounts::
+                   kRendererForegroundVisibleCrash});
+    static_cast<crash_reporter::CrashMetricsReporter::Observer*>(
+        pingback_client_.get())
+        ->OnCrashDumpProcessed(kCrashProcessId, types);
 #endif
   }
 
-  net::TestURLFetcherFactory* factory() { return &factory_; }
+  network::TestURLLoaderFactory* factory() { return &test_url_loader_factory_; }
 
   const DataReductionProxyPageLoadTiming& timing() { return *timing_; }
 
@@ -178,21 +224,38 @@ class DataReductionProxyPingbackClientImplTest : public testing::Test {
 
   uint64_t page_id() const { return page_id_; }
 
+  GURL intercepted_url() { return intercepted_url_; }
+
+  std::string upload_content_type() {
+    std::string content_type;
+    intercepted_headers_.GetHeader(net::HttpRequestHeaders::kContentType,
+                                   &content_type);
+    return content_type;
+  }
+
+  std::string upload_data() { return intercepted_body_; }
+
+  int num_network_requests() { return num_network_requests_; }
+
  protected:
   base::test::ScopedTaskEnvironment scoped_task_environment_;
 
  private:
-  scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
+  network::TestURLLoaderFactory test_url_loader_factory_;
+  scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
   std::unique_ptr<TestDataReductionProxyPingbackClientImpl> pingback_client_;
-  net::TestURLFetcherFactory factory_;
   std::unique_ptr<DataReductionProxyPageLoadTiming> timing_;
   base::HistogramTester histogram_tester_;
   uint64_t page_id_;
+  GURL intercepted_url_;
+  net::HttpRequestHeaders intercepted_headers_;
+  std::string intercepted_body_;
+  int num_network_requests_;
 };
 
 TEST_F(DataReductionProxyPingbackClientImplTest, VerifyPingbackContent) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
@@ -202,13 +265,13 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyPingbackContent) {
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
+  EXPECT_EQ(num_network_requests(), 1);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 1);
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  EXPECT_EQ(test_fetcher->upload_content_type(), "application/x-protobuf");
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
   RecordPageloadMetricsRequest batched_request;
-  batched_request.ParseFromString(test_fetcher->upload_data());
+  batched_request.ParseFromString(upload_data());
   EXPECT_EQ(batched_request.pageloads_size(), 1);
   EXPECT_EQ(current_time, protobuf_parser::TimestampToTime(
                               batched_request.metrics_sent_time()));
@@ -232,6 +295,9 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyPingbackContent) {
       timing().experimental_first_meaningful_paint.value(),
       protobuf_parser::DurationToTimeDelta(
           pageload_metrics.experimental_time_to_first_meaningful_paint()));
+  EXPECT_EQ(timing().first_input_delay.value(),
+            protobuf_parser::DurationToTimeDelta(
+                pageload_metrics.first_input_delay()));
   EXPECT_EQ(timing().parse_blocked_on_script_load_duration.value(),
             protobuf_parser::DurationToTimeDelta(
                 pageload_metrics.parse_blocked_on_script_load_duration()));
@@ -242,7 +308,40 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyPingbackContent) {
   EXPECT_EQ(kFakeURL, pageload_metrics.first_request_url());
   EXPECT_EQ(kBytes, pageload_metrics.compressed_page_size_bytes());
   EXPECT_EQ(kBytesOriginal, pageload_metrics.original_page_size_bytes());
+  EXPECT_EQ(kTotalPageSizeBytes, pageload_metrics.total_page_size_bytes());
+  EXPECT_EQ(kCachedFraction, pageload_metrics.cached_fraction());
   EXPECT_EQ(data_page_id, pageload_metrics.page_id());
+  EXPECT_EQ(kNumRequestInfo,
+            pageload_metrics.main_frame_network_request_size());
+  EXPECT_EQ(protobuf_parser::ProtoRequestInfoProtocolFromRequestInfoProtocol(
+                first_request_info.protocol),
+            pageload_metrics.main_frame_network_request(0).protocol());
+  EXPECT_EQ(first_request_info.proxy_bypass,
+            pageload_metrics.main_frame_network_request(0).proxy_bypass());
+  EXPECT_EQ(first_request_info.dns_time,
+            protobuf_parser::DurationToTimeDelta(
+                pageload_metrics.main_frame_network_request(0).dns_time()));
+  EXPECT_EQ(first_request_info.connect_time,
+            protobuf_parser::DurationToTimeDelta(
+                pageload_metrics.main_frame_network_request(0).connect_time()));
+  EXPECT_EQ(first_request_info.http_time,
+            protobuf_parser::DurationToTimeDelta(
+                pageload_metrics.main_frame_network_request(0).http_time()));
+
+  EXPECT_EQ(protobuf_parser::ProtoRequestInfoProtocolFromRequestInfoProtocol(
+                second_request_info.protocol),
+            pageload_metrics.main_frame_network_request(1).protocol());
+  EXPECT_EQ(second_request_info.proxy_bypass,
+            pageload_metrics.main_frame_network_request(1).proxy_bypass());
+  EXPECT_EQ(second_request_info.dns_time,
+            protobuf_parser::DurationToTimeDelta(
+                pageload_metrics.main_frame_network_request(1).dns_time()));
+  EXPECT_EQ(second_request_info.connect_time,
+            protobuf_parser::DurationToTimeDelta(
+                pageload_metrics.main_frame_network_request(1).connect_time()));
+  EXPECT_EQ(second_request_info.http_time,
+            protobuf_parser::DurationToTimeDelta(
+                pageload_metrics.main_frame_network_request(1).http_time()));
 
   EXPECT_EQ(PageloadMetrics_PreviewsType_NONE,
             pageload_metrics.previews_type());
@@ -252,6 +351,8 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyPingbackContent) {
   EXPECT_EQ(
       PageloadMetrics_EffectiveConnectionType_EFFECTIVE_CONNECTION_TYPE_OFFLINE,
       pageload_metrics.effective_connection_type());
+  EXPECT_EQ(PageloadMetrics_ConnectionType_CONNECTION_UNKNOWN,
+            pageload_metrics.connection_type());
   EXPECT_EQ(kRendererMemory, pageload_metrics.renderer_memory_usage_kb());
   EXPECT_EQ(std::string(), pageload_metrics.holdback_group());
   EXPECT_EQ(PageloadMetrics_RendererCrashType_NO_CRASH,
@@ -259,9 +360,8 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyPingbackContent) {
   EXPECT_EQ(base::SysInfo::AmountOfPhysicalMemory() / 1024,
             batched_request.device_info().total_device_memory_kb());
 
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
+  WaitForPingbackResponse();
   histogram_tester().ExpectUniqueSample(kHistogramSucceeded, true, 1);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest, VerifyHoldback) {
@@ -269,32 +369,31 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyHoldback) {
   ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
       "DataCompressionProxyHoldback", "Enabled"));
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
+  EXPECT_EQ(num_network_requests(), 1);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 1);
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  EXPECT_EQ(test_fetcher->upload_content_type(), "application/x-protobuf");
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
   RecordPageloadMetricsRequest batched_request;
-  batched_request.ParseFromString(test_fetcher->upload_data());
+  batched_request.ParseFromString(upload_data());
   EXPECT_EQ(batched_request.pageloads_size(), 1);
   PageloadMetrics pageload_metrics = batched_request.pageloads(0);
   EXPECT_EQ("Enabled", pageload_metrics.holdback_group());
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
+  WaitForPingbackResponse();
   histogram_tester().ExpectUniqueSample(kHistogramSucceeded, true, 1);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest,
        VerifyTwoPingbacksBatchedContent) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
@@ -304,7 +403,8 @@ TEST_F(DataReductionProxyPingbackClientImplTest,
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
 
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 1);
   // Two more pingbacks batched together.
@@ -313,26 +413,24 @@ TEST_F(DataReductionProxyPingbackClientImplTest,
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 2);
   page_ids.push_back(page_id());
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 3);
+  EXPECT_EQ(num_network_requests(), 1);
 
-  // Ignore the first pingback.
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
-  histogram_tester().ExpectUniqueSample(kHistogramSucceeded, true, 1);
+  WaitForPingbackResponse();
 
   // Check the state of the second pingback.
-  test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  EXPECT_EQ(test_fetcher->upload_content_type(), "application/x-protobuf");
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
   RecordPageloadMetricsRequest batched_request;
-  batched_request.ParseFromString(test_fetcher->upload_data());
+  batched_request.ParseFromString(upload_data());
   EXPECT_EQ(batched_request.pageloads_size(), 2);
   EXPECT_EQ(current_time, protobuf_parser::TimestampToTime(
                               batched_request.metrics_sent_time()));
@@ -361,6 +459,9 @@ TEST_F(DataReductionProxyPingbackClientImplTest,
         timing().experimental_first_meaningful_paint.value(),
         protobuf_parser::DurationToTimeDelta(
             pageload_metrics.experimental_time_to_first_meaningful_paint()));
+    EXPECT_EQ(timing().first_input_delay.value(),
+              protobuf_parser::DurationToTimeDelta(
+                  pageload_metrics.first_input_delay()));
     EXPECT_EQ(timing().parse_blocked_on_script_load_duration.value(),
               protobuf_parser::DurationToTimeDelta(
                   pageload_metrics.parse_blocked_on_script_load_duration()));
@@ -371,65 +472,99 @@ TEST_F(DataReductionProxyPingbackClientImplTest,
     EXPECT_EQ(kFakeURL, pageload_metrics.first_request_url());
     EXPECT_EQ(kBytes, pageload_metrics.compressed_page_size_bytes());
     EXPECT_EQ(kBytesOriginal, pageload_metrics.original_page_size_bytes());
+    EXPECT_EQ(kTotalPageSizeBytes, pageload_metrics.total_page_size_bytes());
+    EXPECT_EQ(kCachedFraction, pageload_metrics.cached_fraction());
+    EXPECT_EQ(kNumRequestInfo,
+              pageload_metrics.main_frame_network_request_size());
+    EXPECT_EQ(protobuf_parser::ProtoRequestInfoProtocolFromRequestInfoProtocol(
+                  first_request_info.protocol),
+              pageload_metrics.main_frame_network_request(0).protocol());
+    EXPECT_EQ(first_request_info.proxy_bypass,
+              pageload_metrics.main_frame_network_request(0).proxy_bypass());
+    EXPECT_EQ(first_request_info.dns_time,
+              protobuf_parser::DurationToTimeDelta(
+                  pageload_metrics.main_frame_network_request(0).dns_time()));
+    EXPECT_EQ(
+        first_request_info.connect_time,
+        protobuf_parser::DurationToTimeDelta(
+            pageload_metrics.main_frame_network_request(0).connect_time()));
+    EXPECT_EQ(first_request_info.http_time,
+              protobuf_parser::DurationToTimeDelta(
+                  pageload_metrics.main_frame_network_request(0).http_time()));
+
+    EXPECT_EQ(protobuf_parser::ProtoRequestInfoProtocolFromRequestInfoProtocol(
+                  second_request_info.protocol),
+              pageload_metrics.main_frame_network_request(1).protocol());
+    EXPECT_EQ(second_request_info.proxy_bypass,
+              pageload_metrics.main_frame_network_request(1).proxy_bypass());
+    EXPECT_EQ(second_request_info.dns_time,
+              protobuf_parser::DurationToTimeDelta(
+                  pageload_metrics.main_frame_network_request(1).dns_time()));
+    EXPECT_EQ(
+        second_request_info.connect_time,
+        protobuf_parser::DurationToTimeDelta(
+            pageload_metrics.main_frame_network_request(1).connect_time()));
+    EXPECT_EQ(second_request_info.http_time,
+              protobuf_parser::DurationToTimeDelta(
+                  pageload_metrics.main_frame_network_request(1).http_time()));
+
     EXPECT_EQ(page_ids.front(), pageload_metrics.page_id());
     page_ids.pop_front();
     EXPECT_EQ(
         PageloadMetrics_EffectiveConnectionType_EFFECTIVE_CONNECTION_TYPE_OFFLINE,
         pageload_metrics.effective_connection_type());
+    EXPECT_EQ(PageloadMetrics_ConnectionType_CONNECTION_UNKNOWN,
+              pageload_metrics.connection_type());
     EXPECT_EQ(kRendererMemory, pageload_metrics.renderer_memory_usage_kb());
   }
 
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
   histogram_tester().ExpectUniqueSample(kHistogramSucceeded, true, 3);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest, SendTwoPingbacks) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 1);
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 2);
+  EXPECT_EQ(num_network_requests(), 1);
 
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
-  histogram_tester().ExpectUniqueSample(kHistogramSucceeded, true, 1);
-  EXPECT_TRUE(factory()->GetFetcherByID(0));
-  test_fetcher = factory()->GetFetcherByID(0);
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
+  WaitForPingbackResponse();
   histogram_tester().ExpectUniqueSample(kHistogramSucceeded, true, 2);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
   histogram_tester().ExpectTotalCount(kHistogramAttempted, 2);
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest, NoPingbackSent) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(0.0f);
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, false, 1);
   histogram_tester().ExpectTotalCount(kHistogramSucceeded, 0);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest, VerifyReportingBehvaior) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
 
   // Verify that if the random number is less than the reporting fraction, the
   // pingback is created.
@@ -439,11 +574,11 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyReportingBehvaior) {
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 1);
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
+  EXPECT_EQ(num_network_requests(), 1);
+  WaitForPingbackResponse();
   histogram_tester().ExpectUniqueSample(kHistogramSucceeded, true, 1);
 
   // Verify that if the random number is greater than the reporting fraction,
@@ -452,10 +587,10 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyReportingBehvaior) {
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
   histogram_tester().ExpectBucketCount(kHistogramAttempted, false, 1);
-  test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_FALSE(test_fetcher);
+  EXPECT_EQ(num_network_requests(), 1);
 
   // Verify that if the random number is equal to the reporting fraction, the
   // pingback is not created. Specifically, if the reporting fraction is zero,
@@ -466,10 +601,10 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyReportingBehvaior) {
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
   histogram_tester().ExpectBucketCount(kHistogramAttempted, false, 2);
-  test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_FALSE(test_fetcher);
+  EXPECT_EQ(num_network_requests(), 1);
 
   // Verify that the command line flag forces a pingback.
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
@@ -480,37 +615,37 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyReportingBehvaior) {
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
   histogram_tester().ExpectBucketCount(kHistogramAttempted, true, 2);
-  test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
+  EXPECT_EQ(num_network_requests(), 2);
+  WaitForPingbackResponse();
   histogram_tester().ExpectUniqueSample(kHistogramSucceeded, true, 2);
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest, FailedPingback) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
+  // Simulate a network error.
+  factory()->ClearResponses();
+  factory()->AddResponse(pingback_url().spec(), "", net::HTTP_UNAUTHORIZED);
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 1);
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  // Simulate a network error.
-  test_fetcher->set_status(net::URLRequestStatus(
-      net::URLRequestStatus::FAILED, net::ERR_INVALID_AUTH_CREDENTIALS));
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
+  EXPECT_EQ(num_network_requests(), 1);
+  WaitForPingbackResponse();
   histogram_tester().ExpectUniqueSample(kHistogramSucceeded, false, 1);
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest, VerifyLoFiContentNoOptOut) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
@@ -519,27 +654,24 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyLoFiContentNoOptOut) {
   CreateAndSendPingback(
       true /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, false /* renderer_crash */);
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
+  EXPECT_EQ(num_network_requests(), 1);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 1);
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  EXPECT_EQ(test_fetcher->upload_content_type(), "application/x-protobuf");
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
   RecordPageloadMetricsRequest batched_request;
-  batched_request.ParseFromString(test_fetcher->upload_data());
+  batched_request.ParseFromString(upload_data());
   EXPECT_EQ(batched_request.pageloads_size(), 1);
   PageloadMetrics pageload_metrics = batched_request.pageloads(0);
   EXPECT_EQ(PageloadMetrics_PreviewsType_LOFI,
             pageload_metrics.previews_type());
   EXPECT_EQ(PageloadMetrics_PreviewsOptOut_NON_OPT_OUT,
             pageload_metrics.previews_opt_out());
-
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest, VerifyLoFiContentOptOut) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
@@ -548,28 +680,25 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyLoFiContentOptOut) {
   CreateAndSendPingback(
       true /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      true /* opt_out_occurred */, false /* renderer_crash */);
+      true /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
+  EXPECT_EQ(num_network_requests(), 1);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 1);
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  EXPECT_EQ(test_fetcher->upload_content_type(), "application/x-protobuf");
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
   RecordPageloadMetricsRequest batched_request;
-  batched_request.ParseFromString(test_fetcher->upload_data());
+  batched_request.ParseFromString(upload_data());
   EXPECT_EQ(batched_request.pageloads_size(), 1);
   PageloadMetrics pageload_metrics = batched_request.pageloads(0);
   EXPECT_EQ(PageloadMetrics_PreviewsType_LOFI,
             pageload_metrics.previews_type());
   EXPECT_EQ(PageloadMetrics_PreviewsOptOut_OPT_OUT,
             pageload_metrics.previews_opt_out());
-
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest,
        VerifyClientLoFiContentOptOut) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
@@ -578,27 +707,24 @@ TEST_F(DataReductionProxyPingbackClientImplTest,
   CreateAndSendPingback(
       false /* lofi_received */, true /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      true /* opt_out_occurred */, false /* renderer_crash */);
+      true /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
+  EXPECT_EQ(num_network_requests(), 1);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 1);
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  EXPECT_EQ(test_fetcher->upload_content_type(), "application/x-protobuf");
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
   RecordPageloadMetricsRequest batched_request;
-  batched_request.ParseFromString(test_fetcher->upload_data());
+  batched_request.ParseFromString(upload_data());
   EXPECT_EQ(batched_request.pageloads_size(), 1);
   PageloadMetrics pageload_metrics = batched_request.pageloads(0);
   EXPECT_EQ(PageloadMetrics_PreviewsType_LOFI,
             pageload_metrics.previews_type());
   EXPECT_EQ(PageloadMetrics_PreviewsOptOut_OPT_OUT,
             pageload_metrics.previews_opt_out());
-
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest, VerifyLoFiContentBackground) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
@@ -607,27 +733,50 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyLoFiContentBackground) {
   CreateAndSendPingback(
       true /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, true /* app_background_occurred */,
-      true /* opt_out_occurred */, false /* renderer_crash */);
+      true /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
+  EXPECT_EQ(num_network_requests(), 1);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 1);
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  EXPECT_EQ(test_fetcher->upload_content_type(), "application/x-protobuf");
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
   RecordPageloadMetricsRequest batched_request;
-  batched_request.ParseFromString(test_fetcher->upload_data());
+  batched_request.ParseFromString(upload_data());
   EXPECT_EQ(batched_request.pageloads_size(), 1);
   PageloadMetrics pageload_metrics = batched_request.pageloads(0);
   EXPECT_EQ(PageloadMetrics_PreviewsType_LOFI,
             pageload_metrics.previews_type());
   EXPECT_EQ(PageloadMetrics_PreviewsOptOut_UNKNOWN,
             pageload_metrics.previews_opt_out());
+}
 
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+TEST_F(DataReductionProxyPingbackClientImplTest, VerifyBlackListContent) {
+  Init();
+  EXPECT_EQ(num_network_requests(), 0);
+  pingback_client()->OverrideRandom(true, 0.5f);
+  static_cast<DataReductionProxyPingbackClient*>(pingback_client())
+      ->SetPingbackReportingFraction(1.0f);
+  base::Time current_time = base::Time::UnixEpoch();
+  pingback_client()->set_current_time(current_time);
+  CreateAndSendPingback(
+      false /* lofi_received */, false /* client_lofi_requested */,
+      false /* lite_page_received */, false /* app_background_occurred */,
+      false /* opt_out_occurred */, false /* renderer_crash */,
+      true /* black_listed */);
+  EXPECT_EQ(num_network_requests(), 1);
+  histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 1);
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
+  RecordPageloadMetricsRequest batched_request;
+  batched_request.ParseFromString(upload_data());
+  EXPECT_EQ(batched_request.pageloads_size(), 1);
+  PageloadMetrics pageload_metrics = batched_request.pageloads(0);
+  EXPECT_EQ(PageloadMetrics_PreviewsType_CLIENT_BLACKLIST_PREVENTED_PREVIEW,
+            pageload_metrics.previews_type());
+  EXPECT_EQ(PageloadMetrics_PreviewsOptOut_UNKNOWN,
+            pageload_metrics.previews_opt_out());
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest, VerifyLitePageContent) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
@@ -636,27 +785,24 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyLitePageContent) {
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       true /* lite_page_received */, false /* app_background_occurred */,
-      true /* opt_out_occurred */, false /* renderer_crash */);
+      true /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
+  EXPECT_EQ(num_network_requests(), 1);
   histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 1);
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  EXPECT_EQ(test_fetcher->upload_content_type(), "application/x-protobuf");
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
   RecordPageloadMetricsRequest batched_request;
-  batched_request.ParseFromString(test_fetcher->upload_data());
+  batched_request.ParseFromString(upload_data());
   EXPECT_EQ(batched_request.pageloads_size(), 1);
   PageloadMetrics pageload_metrics = batched_request.pageloads(0);
   EXPECT_EQ(PageloadMetrics_PreviewsType_LITE_PAGE,
             pageload_metrics.previews_type());
   EXPECT_EQ(PageloadMetrics_PreviewsOptOut_OPT_OUT,
             pageload_metrics.previews_opt_out());
-
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest, VerifyTwoLitePagePingbacks) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
@@ -665,41 +811,37 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyTwoLitePagePingbacks) {
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       true /* lite_page_received */, false /* app_background_occurred */,
-      true /* opt_out_occurred */, false /* renderer_crash */);
-  CreateAndSendPingback(
-      false /* lofi_received */, false /* client_lofi_requested */,
-      true /* lite_page_received */, false /* app_background_occurred */,
-      true /* opt_out_occurred */, false /* renderer_crash */);
-  histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 2);
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  EXPECT_EQ(test_fetcher->upload_content_type(), "application/x-protobuf");
+      true /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
+  EXPECT_EQ(num_network_requests(), 1);
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
   RecordPageloadMetricsRequest batched_request;
-  batched_request.ParseFromString(test_fetcher->upload_data());
+  batched_request.ParseFromString(upload_data());
   EXPECT_EQ(batched_request.pageloads_size(), 1);
   PageloadMetrics pageload_metrics = batched_request.pageloads(0);
   EXPECT_EQ(PageloadMetrics_PreviewsType_LITE_PAGE,
             pageload_metrics.previews_type());
   EXPECT_EQ(PageloadMetrics_PreviewsOptOut_OPT_OUT,
             pageload_metrics.previews_opt_out());
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
-  test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  EXPECT_EQ(test_fetcher->upload_content_type(), "application/x-protobuf");
-  batched_request.ParseFromString(test_fetcher->upload_data());
+  CreateAndSendPingback(
+      false /* lofi_received */, false /* client_lofi_requested */,
+      true /* lite_page_received */, false /* app_background_occurred */,
+      true /* opt_out_occurred */, false /* renderer_crash */,
+      false /* black_listed */);
+  histogram_tester().ExpectUniqueSample(kHistogramAttempted, true, 2);
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
+  batched_request.ParseFromString(upload_data());
   EXPECT_EQ(batched_request.pageloads_size(), 1);
   pageload_metrics = batched_request.pageloads(0);
   EXPECT_EQ(PageloadMetrics_PreviewsType_LITE_PAGE,
             pageload_metrics.previews_type());
   EXPECT_EQ(PageloadMetrics_PreviewsOptOut_OPT_OUT,
             pageload_metrics.previews_opt_out());
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest, VerifyCrashOomBehavior) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
@@ -707,15 +849,14 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyCrashOomBehavior) {
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, true /* renderer_crash */);
+      false /* opt_out_occurred */, true /* renderer_crash */,
+      false /* black_listed */);
 
   ReportCrash(true /* oom */);
 
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  EXPECT_EQ(test_fetcher->upload_content_type(), "application/x-protobuf");
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
   RecordPageloadMetricsRequest batched_request;
-  batched_request.ParseFromString(test_fetcher->upload_data());
+  batched_request.ParseFromString(upload_data());
   EXPECT_EQ(batched_request.pageloads_size(), 1);
   PageloadMetrics pageload_metrics = batched_request.pageloads(0);
 #if defined(OS_ANDROID)
@@ -725,14 +866,13 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyCrashOomBehavior) {
   EXPECT_EQ(PageloadMetrics_RendererCrashType_NOT_ANALYZED,
             pageload_metrics.renderer_crash_type());
 #endif
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
+  WaitForPingbackResponse();
   histogram_tester().ExpectUniqueSample(kHistogramSucceeded, true, 1);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest, VerifyCrashNotOomBehavior) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
@@ -740,15 +880,14 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyCrashNotOomBehavior) {
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, true /* renderer_crash */);
+      false /* opt_out_occurred */, true /* renderer_crash */,
+      false /* black_listed */);
 
   ReportCrash(false /* oom */);
 
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  EXPECT_EQ(test_fetcher->upload_content_type(), "application/x-protobuf");
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
   RecordPageloadMetricsRequest batched_request;
-  batched_request.ParseFromString(test_fetcher->upload_data());
+  batched_request.ParseFromString(upload_data());
   EXPECT_EQ(batched_request.pageloads_size(), 1);
   PageloadMetrics pageload_metrics = batched_request.pageloads(0);
 #if defined(OS_ANDROID)
@@ -758,15 +897,14 @@ TEST_F(DataReductionProxyPingbackClientImplTest, VerifyCrashNotOomBehavior) {
   EXPECT_EQ(PageloadMetrics_RendererCrashType_NOT_ANALYZED,
             pageload_metrics.renderer_crash_type());
 #endif
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
+  WaitForPingbackResponse();
   histogram_tester().ExpectUniqueSample(kHistogramSucceeded, true, 1);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
 }
 
 TEST_F(DataReductionProxyPingbackClientImplTest,
        VerifyCrashNotAnalyzedBehavior) {
   Init();
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
+  EXPECT_EQ(num_network_requests(), 0);
   pingback_client()->OverrideRandom(true, 0.5f);
   static_cast<DataReductionProxyPingbackClient*>(pingback_client())
       ->SetPingbackReportingFraction(1.0f);
@@ -774,23 +912,21 @@ TEST_F(DataReductionProxyPingbackClientImplTest,
   CreateAndSendPingback(
       false /* lofi_received */, false /* client_lofi_requested */,
       false /* lite_page_received */, false /* app_background_occurred */,
-      false /* opt_out_occurred */, true /* renderer_crash */);
+      false /* opt_out_occurred */, true /* renderer_crash */,
+      false /* black_listed */);
 
   // Don't report the crash dump details.
   scoped_task_environment_.FastForwardBy(base::TimeDelta::FromSeconds(5));
 
-  net::TestURLFetcher* test_fetcher = factory()->GetFetcherByID(0);
-  EXPECT_TRUE(test_fetcher);
-  EXPECT_EQ(test_fetcher->upload_content_type(), "application/x-protobuf");
+  EXPECT_EQ(upload_content_type(), "application/x-protobuf");
   RecordPageloadMetricsRequest batched_request;
-  batched_request.ParseFromString(test_fetcher->upload_data());
+  batched_request.ParseFromString(upload_data());
   EXPECT_EQ(batched_request.pageloads_size(), 1);
   PageloadMetrics pageload_metrics = batched_request.pageloads(0);
   EXPECT_EQ(PageloadMetrics_RendererCrashType_NOT_ANALYZED,
             pageload_metrics.renderer_crash_type());
-  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
+  WaitForPingbackResponse();
   histogram_tester().ExpectUniqueSample(kHistogramSucceeded, true, 1);
-  EXPECT_FALSE(factory()->GetFetcherByID(0));
 }
 
 }  // namespace data_reduction_proxy

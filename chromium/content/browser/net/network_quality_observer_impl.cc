@@ -4,7 +4,6 @@
 
 #include "content/browser/net/network_quality_observer_impl.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/common/view_messages.h"
@@ -92,10 +91,12 @@ class NetworkQualityObserverImpl::UiThreadObserver
     // Notify all the existing renderers of the change in the network quality.
     for (RenderProcessHost::iterator it(RenderProcessHost::AllHostsIterator());
          !it.IsAtEnd(); it.Advance()) {
-      it.GetCurrentValue()->GetRendererInterface()->OnNetworkQualityChanged(
-          last_notified_type_, last_notified_network_quality_.http_rtt(),
-          last_notified_network_quality_.transport_rtt(),
-          last_notified_network_quality_.downstream_throughput_kbps());
+      if (it.GetCurrentValue()->IsInitializedAndNotDead()) {
+        it.GetCurrentValue()->GetRendererInterface()->OnNetworkQualityChanged(
+            last_notified_type_, last_notified_network_quality_.http_rtt(),
+            last_notified_network_quality_.transport_rtt(),
+            last_notified_network_quality_.downstream_throughput_kbps());
+      }
     }
   }
 
@@ -108,10 +109,12 @@ class NetworkQualityObserverImpl::UiThreadObserver
     // Notify all the existing renderers of the change in the network quality.
     for (RenderProcessHost::iterator it(RenderProcessHost::AllHostsIterator());
          !it.IsAtEnd(); it.Advance()) {
-      it.GetCurrentValue()->GetRendererInterface()->OnNetworkQualityChanged(
-          last_notified_type_, last_notified_network_quality_.http_rtt(),
-          last_notified_network_quality_.transport_rtt(),
-          last_notified_network_quality_.downstream_throughput_kbps());
+      if (it.GetCurrentValue()->IsInitializedAndNotDead()) {
+        it.GetCurrentValue()->GetRendererInterface()->OnNetworkQualityChanged(
+            last_notified_type_, last_notified_network_quality_.http_rtt(),
+            last_notified_network_quality_.transport_rtt(),
+            last_notified_network_quality_.downstream_throughput_kbps());
+      }
     }
   }
 

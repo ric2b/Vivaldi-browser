@@ -5,6 +5,7 @@
 #include "components/ntp_tiles/webui/ntp_tiles_internals_message_handler.h"
 
 #include <array>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -14,10 +15,10 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/task_runner_util.h"
 #include "base/values.h"
 #include "components/favicon/core/favicon_service.h"
+#include "components/ntp_tiles/constants.h"
 #include "components/ntp_tiles/most_visited_sites.h"
 #include "components/ntp_tiles/pref_names.h"
 #include "components/ntp_tiles/webui/ntp_tiles_internals_message_handler_client.h"
@@ -58,7 +59,10 @@ NTPTilesInternalsMessageHandler::NTPTilesInternalsMessageHandler(
     favicon::FaviconService* favicon_service)
     : favicon_service_(favicon_service),
       client_(nullptr),
-      site_count_(8),
+      // 9 tiles are required for the custom links feature in order to balance
+      // the Most Visited rows (this is due to an additional "Add" button).
+      // Otherwise, Most Visited should return the regular 8 tiles.
+      site_count_(IsCustomLinksEnabled() ? 9 : 8),
       weak_ptr_factory_(this) {}
 
 NTPTilesInternalsMessageHandler::~NTPTilesInternalsMessageHandler() = default;
@@ -69,22 +73,26 @@ void NTPTilesInternalsMessageHandler::RegisterMessages(
 
   client_->RegisterMessageCallback(
       "registerForEvents",
-      base::Bind(&NTPTilesInternalsMessageHandler::HandleRegisterForEvents,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &NTPTilesInternalsMessageHandler::HandleRegisterForEvents,
+          base::Unretained(this)));
 
   client_->RegisterMessageCallback(
-      "update", base::Bind(&NTPTilesInternalsMessageHandler::HandleUpdate,
-                           base::Unretained(this)));
+      "update",
+      base::BindRepeating(&NTPTilesInternalsMessageHandler::HandleUpdate,
+                          base::Unretained(this)));
 
   client_->RegisterMessageCallback(
       "fetchSuggestions",
-      base::Bind(&NTPTilesInternalsMessageHandler::HandleFetchSuggestions,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &NTPTilesInternalsMessageHandler::HandleFetchSuggestions,
+          base::Unretained(this)));
 
   client_->RegisterMessageCallback(
       "viewPopularSitesJson",
-      base::Bind(&NTPTilesInternalsMessageHandler::HandleViewPopularSitesJson,
-                 base::Unretained(this)));
+      base::BindRepeating(
+          &NTPTilesInternalsMessageHandler::HandleViewPopularSitesJson,
+          base::Unretained(this)));
 }
 
 void NTPTilesInternalsMessageHandler::HandleRegisterForEvents(
@@ -243,23 +251,23 @@ void NTPTilesInternalsMessageHandler::SendSourceInfo() {
 void NTPTilesInternalsMessageHandler::SendTiles(
     const NTPTilesVector& tiles,
     const FaviconResultMap& result_map) {
-  auto sites_list = base::MakeUnique<base::ListValue>();
+  auto sites_list = std::make_unique<base::ListValue>();
   for (const NTPTile& tile : tiles) {
-    auto entry = base::MakeUnique<base::DictionaryValue>();
+    auto entry = std::make_unique<base::DictionaryValue>();
     entry->SetString("title", tile.title);
     entry->SetString("url", tile.url.spec());
     entry->SetInteger("source", static_cast<int>(tile.source));
     entry->SetString("whitelistIconPath",
                      tile.whitelist_icon_path.LossyDisplayName());
 
-    auto icon_list = base::MakeUnique<base::ListValue>();
+    auto icon_list = std::make_unique<base::ListValue>();
     for (const auto& entry : kIconTypesAndNames) {
       FaviconResultMap::const_iterator it = result_map.find(
           FaviconResultMap::key_type(tile.url, entry.type_enum));
 
       if (it != result_map.end()) {
         const favicon_base::FaviconRawBitmapResult& result = it->second;
-        auto icon = base::MakeUnique<base::DictionaryValue>();
+        auto icon = std::make_unique<base::DictionaryValue>();
         icon->SetString("url", result.icon_url.spec());
         icon->SetString("type", entry.type_name);
         icon->SetBoolean("onDemand", !result.fetched_because_of_page_visit);

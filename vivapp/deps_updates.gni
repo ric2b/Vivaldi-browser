@@ -7,3 +7,14 @@ if (is_mac) {
     public_deps += [ "//vivaldi/vivapp:vivaldi_app" ]
   }
 }
+
+update_target("//components/resources:about_credits") {
+  if (!defined(deps)) {
+    deps = []
+  }
+  deps += [ "//vivaldi/vivapp:vivaldi_app" ]
+  inputs += [
+    "//vivaldi/scripts/licenses/licenses_vivaldi.py",
+    "$root_gen_dir/vivaldi/vivapp/module_list",
+  ]
+}

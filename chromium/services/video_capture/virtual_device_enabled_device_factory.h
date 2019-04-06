@@ -9,13 +9,11 @@
 
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/cpp/service_context_ref.h"
-#include "services/video_capture/public/interfaces/device.mojom.h"
-#include "services/video_capture/public/interfaces/device_factory.mojom.h"
-#include "services/video_capture/public/interfaces/virtual_device.mojom.h"
+#include "services/video_capture/public/mojom/device.mojom.h"
+#include "services/video_capture/public/mojom/device_factory.mojom.h"
+#include "services/video_capture/public/mojom/virtual_device.mojom.h"
 
 namespace video_capture {
-
-class VirtualDeviceMojoAdapter;
 
 // Decorator that adds support for virtual devices to a given
 // mojom::DeviceFactory.
@@ -31,21 +29,17 @@ class VirtualDeviceEnabledDeviceFactory : public mojom::DeviceFactory {
   void CreateDevice(const std::string& device_id,
                     mojom::DeviceRequest device_request,
                     CreateDeviceCallback callback) override;
-  void AddVirtualDevice(const media::VideoCaptureDeviceInfo& device_info,
-                        mojom::ProducerPtr producer,
-                        mojom::VirtualDeviceRequest virtual_device) override;
+  void AddSharedMemoryVirtualDevice(
+      const media::VideoCaptureDeviceInfo& device_info,
+      mojom::ProducerPtr producer,
+      bool send_buffer_handles_to_producer_as_raw_file_descriptors,
+      mojom::SharedMemoryVirtualDeviceRequest virtual_device) override;
+  void AddTextureVirtualDevice(
+      const media::VideoCaptureDeviceInfo& device_info,
+      mojom::TextureVirtualDeviceRequest virtual_device) override;
 
  private:
-  struct VirtualDeviceEntry {
-    VirtualDeviceEntry();
-    ~VirtualDeviceEntry();
-    VirtualDeviceEntry(VirtualDeviceEntry&& other);
-    VirtualDeviceEntry& operator=(VirtualDeviceEntry&& other);
-
-    std::unique_ptr<VirtualDeviceMojoAdapter> device;
-    std::unique_ptr<mojo::Binding<mojom::VirtualDevice>> producer_binding;
-    std::unique_ptr<mojo::Binding<mojom::Device>> consumer_binding;
-  };
+  class VirtualDeviceEntry;
 
   void OnGetDeviceInfos(
       GetDeviceInfosCallback callback,

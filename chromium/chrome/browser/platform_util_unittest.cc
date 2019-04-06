@@ -18,7 +18,6 @@
 
 #if defined(OS_CHROMEOS)
 #include "base/json/json_string_value_serializer.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
@@ -58,7 +57,7 @@ class PlatformUtilTestContentBrowserClient : public ChromeContentBrowserClient {
 
     // New FileSystemBackend that uses our MockSpecialStoragePolicy.
     additional_backends->push_back(
-        base::MakeUnique<chromeos::FileSystemBackend>(
+        std::make_unique<chromeos::FileSystemBackend>(
             nullptr, nullptr, nullptr, nullptr, nullptr, external_mount_points,
             storage::ExternalMountPoints::GetSystemInstance()));
   }

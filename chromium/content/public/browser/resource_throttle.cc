@@ -6,18 +6,6 @@
 
 namespace content {
 
-/* NOTE(yngve): Risk of infinite loop, should only be a problem for us,
-* if we add new subclasses, chromium will still use the abstract definition.
-*/
-void ResourceThrottle::Delegate::Resume() {
-  Resume(false, false);
-}
-
-void ResourceThrottle::Delegate::Resume(bool open_when_done,
-  bool ask_for_target) {
-  Resume();
-};
-
 bool ResourceThrottle::MustProcessResponseBeforeReadingBody() {
   return false;
 }
@@ -32,10 +20,6 @@ void ResourceThrottle::CancelWithError(int error_code) {
 
 void ResourceThrottle::Resume() {
   delegate_->Resume();
-}
-
-void ResourceThrottle::Resume(bool open_when_done, bool ask_for_target) {
-  delegate_->Resume(open_when_done, ask_for_target);
 }
 
 }  // namespace content

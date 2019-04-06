@@ -6,9 +6,11 @@
 #define CHROME_BROWSER_DEVTOOLS_DEVTOOLS_UI_BINDINGS_H_
 
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
+#include "base/containers/unique_ptr_adapters.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -122,7 +124,8 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
   void UpgradeDraggedFileSystemPermissions(
       const std::string& file_system_url) override;
   void IndexPath(int index_request_id,
-                 const std::string& file_system_path) override;
+                 const std::string& file_system_path,
+                 const std::string& excluded_folders) override;
   void StopIndexing(int index_request_id) override;
   void SearchInPath(int search_request_id,
                     const std::string& file_system_path,
@@ -248,10 +251,17 @@ class DevToolsUIBindings : public DevToolsEmbedderMessageDispatcher::Delegate,
   std::unique_ptr<DevToolsEmbedderMessageDispatcher>
       embedder_message_dispatcher_;
   GURL url_;
+
   using PendingRequestsMap = std::map<const net::URLFetcher*, DispatchCallback>;
   PendingRequestsMap pending_requests_;
+
+  class NetworkResourceLoader;
+  std::set<std::unique_ptr<NetworkResourceLoader>, base::UniquePtrComparator>
+      loaders_;
+
   using ExtensionsAPIs = std::map<std::string, std::string>;
   ExtensionsAPIs extensions_api_;
+
   base::WeakPtrFactory<DevToolsUIBindings> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DevToolsUIBindings);

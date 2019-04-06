@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "services/ui/display/screen_manager.h"
@@ -21,15 +20,8 @@
 #include "ui/platform_window/platform_window.h"
 #include "ui/platform_window/stub/stub_window.h"
 
-#if defined(OS_WIN)
-#include "ui/platform_window/win/win_window.h"
-#elif defined(USE_X11)
-#include "ui/platform_window/x11/x11_window.h"
-#elif defined(OS_ANDROID)
-#include "ui/platform_window/android/platform_window_android.h"
-#elif defined(USE_OZONE)
+#if defined(USE_OZONE)
 #include "ui/events/ozone/chromeos/cursor_controller.h"
-#include "ui/ozone/public/ozone_platform.h"
 #endif
 
 namespace ui {
@@ -73,26 +65,18 @@ void PlatformDisplayDefault::Init(PlatformDisplayDelegate* delegate) {
   const gfx::Rect& bounds = metrics_.bounds_in_pixels;
   DCHECK(!bounds.size().IsEmpty());
 
-  // Use StubWindow for virtual unified displays, like AshWindowTreeHostUnified.
   if (delegate_->GetDisplay().id() == display::kUnifiedDisplayId) {
+    // Virtual unified displays use a StubWindow; see AshWindowTreeHostUnified.
     platform_window_ = std::make_unique<ui::StubWindow>(this, true, bounds);
+  } else if (delegate_->GetDisplay().id() == display::kInvalidDisplayId) {
+    // Unit tests may use kInvalidDisplayId to request a StubWindow for testing.
+    platform_window_ = std::make_unique<ui::StubWindow>(this, false);
   } else {
-#if defined(OS_WIN)
-    platform_window_ = std::make_unique<ui::WinWindow>(this, bounds);
-#elif defined(USE_X11)
-    platform_window_ = std::make_unique<ui::X11Window>(this, bounds);
-#elif defined(OS_ANDROID)
-    platform_window_ = std::make_unique<ui::PlatformWindowAndroid>(this);
-    platform_window_->SetBounds(bounds);
-#elif defined(USE_OZONE)
-    platform_window_ =
-        delegate_->GetOzonePlatform()->CreatePlatformWindow(this, bounds);
-#else
-    NOTREACHED() << "Unsupported platform";
-#endif
+    platform_window_ = CreatePlatformWindow(this, metrics_.bounds_in_pixels);
   }
 
   platform_window_->Show();
+
   if (image_cursors_) {
     image_cursors_->SetDisplay(delegate_->GetDisplay(),
                                metrics_.device_scale_factor);
@@ -203,16 +187,8 @@ void PlatformDisplayDefault::OnDamageRect(const gfx::Rect& damaged_region) {
 }
 
 void PlatformDisplayDefault::DispatchEvent(ui::Event* event) {
-  // Event location and event root location are the same, and both in pixels
-  // and display coordinates.
-  if (event->IsScrollEvent()) {
-    // TODO(moshayedi): crbug.com/602859. Dispatch scroll events as
-    // they are once we have proper support for scroll events.
-
-    ui::PointerEvent pointer_event(
-        ui::MouseWheelEvent(*event->AsScrollEvent()));
-    SendEventToSink(&pointer_event);
-  } else if (event->IsMouseEvent()) {
+  // Mojo requires conversion of mouse and touch events to pointer events.
+  if (event->IsMouseEvent()) {
     ui::PointerEvent pointer_event(*event->AsMouseEvent());
     SendEventToSink(&pointer_event);
   } else if (event->IsTouchEvent()) {
@@ -276,14 +252,16 @@ void PlatformDisplayDefault::OnAcceleratedWidgetAvailable(
       std::make_unique<CompositorFrameSinkClientBinding>(
           frame_generator_.get(),
           std::move(compositor_frame_sink_client_request),
-          std::move(compositor_frame_sink), std::move(display_private));
-  frame_generator_->Bind(std::move(frame_sink_client_binding));
+          std::move(compositor_frame_sink));
+  frame_generator_->Bind(std::move(frame_sink_client_binding),
+                         std::move(display_private));
   frame_generator_->OnWindowSizeChanged(root_window_->bounds().size());
   frame_generator_->SetDeviceScaleFactor(metrics_.device_scale_factor);
 }
 
+void PlatformDisplayDefault::OnAcceleratedWidgetDestroying() {}
+
 void PlatformDisplayDefault::OnAcceleratedWidgetDestroyed() {
-  NOTREACHED();
 }
 
 void PlatformDisplayDefault::OnActivationChanged(bool active) {}

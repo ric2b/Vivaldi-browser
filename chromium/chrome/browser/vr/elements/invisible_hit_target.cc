@@ -12,8 +12,17 @@ InvisibleHitTarget::InvisibleHitTarget() {
 InvisibleHitTarget::~InvisibleHitTarget() = default;
 
 void InvisibleHitTarget::Render(UiElementRenderer* renderer,
-                                const CameraModel& model) const {
-  DCHECK(hit_testable());
+                                const CameraModel& model) const {}
+
+void InvisibleHitTarget::OnHoverEnter(const gfx::PointF& position,
+                                      base::TimeTicks timestamp) {
+  UiElement::OnHoverEnter(position, timestamp);
+  hovered_ = true;
+}
+
+void InvisibleHitTarget::OnHoverLeave(base::TimeTicks timestamp) {
+  UiElement::OnHoverLeave(timestamp);
+  hovered_ = false;
 }
 
 }  // namespace vr

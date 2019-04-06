@@ -39,9 +39,10 @@ enum EditingBehavior {
 enum V8CacheOptions {
   V8_CACHE_OPTIONS_DEFAULT,
   V8_CACHE_OPTIONS_NONE,
-  V8_CACHE_OPTIONS_PARSE,
   V8_CACHE_OPTIONS_CODE,
-  V8_CACHE_OPTIONS_LAST = V8_CACHE_OPTIONS_CODE
+  V8_CACHE_OPTIONS_CODE_WITHOUT_HEAT_CHECK,
+  V8_CACHE_OPTIONS_FULLCODE_WITHOUT_HEAT_CHECK,
+  V8_CACHE_OPTIONS_LAST = V8_CACHE_OPTIONS_FULLCODE_WITHOUT_HEAT_CHECK
 };
 
 // ImageAnimationPolicy is used for controlling image animation
@@ -55,17 +56,6 @@ enum ImageAnimationPolicy {
 };
 
 enum class ViewportStyle { DEFAULT, MOBILE, TELEVISION, LAST = TELEVISION };
-
-// Controls when the progress bar reports itself as complete. See
-// third_party/WebKit/Source/core/loader/ProgressTracker.cpp for most of its
-// effects.
-enum class ProgressBarCompletion {
-  LOAD_EVENT,
-  RESOURCES_BEFORE_DCL,
-  DOM_CONTENT_LOADED,
-  RESOURCES_BEFORE_DCL_AND_SAME_ORIGIN_IFRAMES,
-  LAST = RESOURCES_BEFORE_DCL_AND_SAME_ORIGIN_IFRAMES
-};
 
 enum class SavePreviousDocumentResources {
   NEVER,
@@ -91,9 +81,9 @@ CONTENT_EXPORT extern const char kCommonScript[];
 // A struct for managing blink's settings.
 //
 // Adding new values to this class probably involves updating
-// blink::WebSettings, content/common/view_messages.h, browser/tab_contents/
-// render_view_host_delegate_helper.cc, browser/profiles/profile.cc,
-// and content/public/common/common_param_traits_macros.h
+// blink::WebSettings, content/common/view_messages.h,
+// browser/profiles/profile.cc, and
+// content/public/common/common_param_traits_macros.h
 struct CONTENT_EXPORT WebPreferences {
   ScriptFontFamilyMap standard_font_family_map;
   ScriptFontFamilyMap fixed_font_family_map;
@@ -128,11 +118,20 @@ struct CONTENT_EXPORT WebPreferences {
   // Preference to save data. When enabled, requests will contain the header
   // 'Save-Data: on'.
   bool data_saver_enabled;
+  // Whether data saver holdback for Web APIs is enabled. If enabled, data saver
+  // appears as disabled to the web consumers even if it has been actually
+  // enabled by the user.
+  bool data_saver_holdback_web_api_enabled;
+  // Whether data saver holdback is enabled when queried by the media APIs
+  // within Blink. If enabled, data saver appears as disabled to the media APIs
+  // even if it has been actually enabled by the user.
+  bool data_saver_holdback_media_api_enabled;
   bool local_storage_enabled;
   bool databases_enabled;
   bool application_cache_enabled;
   bool tabs_to_links;
   bool history_entry_requires_user_gesture;
+  bool disable_pushstate_throttle;
   bool hyperlink_auditing_enabled;
   bool allow_universal_access_from_file_urls;
   bool allow_file_access_from_file_urls;
@@ -192,6 +191,7 @@ struct CONTENT_EXPORT WebPreferences {
   bool shrinks_viewport_contents_to_fit;
   ViewportStyle viewport_style;
   bool always_show_context_menu_on_touch;
+  bool smooth_scroll_for_find_enabled;
   bool main_frame_resizes_are_orientation_changes;
   bool initialize_at_minimum_page_scale;
   bool smart_insert_delete_enabled;
@@ -201,7 +201,6 @@ struct CONTENT_EXPORT WebPreferences {
   V8CacheOptions v8_cache_options;
   bool record_whole_document;
   SavePreviousDocumentResources save_previous_document_resources;
-  bool serve_resources_only_from_cache;
 
   // This flags corresponds to a Page's Settings' setCookieEnabled state. It
   // only controls whether or not the "document.cookie" field is properly
@@ -223,15 +222,17 @@ struct CONTENT_EXPORT WebPreferences {
   // Cues will not be placed in this margin area.
   float text_track_margin_percentage;
 
-  bool page_popups_suppressed;
+  bool immersive_mode_enabled;
+
+  bool text_autosizing_enabled;
+
+  bool double_tap_to_zoom_enabled;
 
 #if defined(OS_ANDROID)
-  bool text_autosizing_enabled;
   float font_scale_factor;
   float device_scale_adjustment;
   bool force_enable_zoom;
   bool fullscreen_supported;
-  bool double_tap_to_zoom_enabled;
   std::string media_playback_gesture_whitelist_scope;
   GURL default_video_poster_url;
   bool support_deprecated_target_density_dpi;
@@ -248,8 +249,7 @@ struct CONTENT_EXPORT WebPreferences {
   bool report_screen_size_in_physical_pixels_quirk;
   // Used by Android_WebView only to support legacy apps that inject script into
   // a top-level initial empty document and expect it to persist on navigation.
-  bool resue_global_for_unowned_main_frame;
-  ProgressBarCompletion progress_bar_completion;
+  bool reuse_global_for_unowned_main_frame;
   // Specifies default setting for spellcheck when the spellcheck attribute is
   // not explicitly specified.
   bool spellcheck_enabled_by_default;
@@ -302,6 +302,23 @@ struct CONTENT_EXPORT WebPreferences {
   // Network quality threshold below which resources from iframes are assigned
   // lowest priority.
   net::EffectiveConnectionType low_priority_iframes_threshold;
+
+  // Whether Picture-in-Picture is enabled.
+  bool picture_in_picture_enabled;
+
+  // Specifies how close a lazily loaded iframe should be from the viewport
+  // before it should start being loaded in, depending on the effective
+  // connection type of the current network. Blink will use the default distance
+  // threshold for effective connection types that aren't specified here.
+  std::map<net::EffectiveConnectionType, int>
+      lazy_frame_loading_distance_thresholds_px;
+
+  // Vivaldi specific preferences:
+  // Maps to the Cycle focus setting in Vivaldi.
+  bool allow_tab_cycle_from_webpage_into_ui = false;
+
+  bool serve_resources_only_from_cache = false;
+  // end vivaldi specific
 
   // We try to keep the default values the same as the default values in
   // chrome, except for the cases where it would require lots of extra work for

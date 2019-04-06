@@ -20,6 +20,13 @@ login.createScreen(
          */
         ignoreAccelerators: true,
 
+        /**
+         * Returns default event target element.
+         */
+        get defaultControl() {
+          return $('encryption-migration-element');
+        },
+
         /** @override */
         decorate: function() {
           var encryptionMigration = $('encryption-migration-element');
@@ -47,7 +54,6 @@ login.createScreen(
          * Event handler that is invoked just before the screen in shown.
          */
         onBeforeShow: function() {
-          $('progress-dots').hidden = true;
           var headerBar = $('login-header-bar');
           headerBar.allowCancel = false;
           headerBar.showGuestButton = false;

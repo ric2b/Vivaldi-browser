@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 #include <sys/xattr.h>
 
+#include <memory>
 #include <queue>
 #include <vector>
 
@@ -475,6 +476,11 @@ FileError FileCache::Unpin(const std::string& id) {
   return FILE_ERROR_OK;
 }
 
+bool FileCache::IsMarkedAsMounted(const std::string& id) {
+  AssertOnSequencedWorkerPool();
+  return mounted_files_.count(id);
+}
+
 FileError FileCache::MarkAsMounted(const std::string& id,
                                    base::FilePath* cache_file_path) {
   AssertOnSequencedWorkerPool();
@@ -536,12 +542,10 @@ FileError FileCache::OpenForWrite(
     return error;
 
   write_opened_files_[id]++;
-  file_closer->reset(new base::ScopedClosureRunner(
-      base::Bind(&google_apis::RunTaskWithTaskRunner,
-                 blocking_task_runner_,
+  *file_closer = std::make_unique<base::ScopedClosureRunner>(
+      base::Bind(&google_apis::RunTaskWithTaskRunner, blocking_task_runner_,
                  base::Bind(&FileCache::CloseForWrite,
-                            weak_ptr_factory_.GetWeakPtr(),
-                            id))));
+                            weak_ptr_factory_.GetWeakPtr(), id)));
   return FILE_ERROR_OK;
 }
 
@@ -683,7 +687,7 @@ bool FileCache::Initialize() {
 }
 
 void FileCache::Destroy() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   in_shutdown_.Set();
 
@@ -755,9 +759,10 @@ bool FileCache::RecoverFilesFromCacheDirectory(
     if (it != recovered_cache_info.end() && !it->second.title.empty()) {
       // We can use a file name recovered from the trashed DB.
       dest_base_name = base::FilePath::FromUTF8Unsafe(it->second.title);
-    } else if (net::SniffMimeType(&content[0], read_result,
-                                  net::FilePathToFileURL(current),
-                                  std::string(), &mime_type) ||
+    } else if (net::SniffMimeType(
+                   &content[0], read_result, net::FilePathToFileURL(current),
+                   std::string(), net::ForceSniffFileUrlsForHtml::kDisabled,
+                   &mime_type) ||
                net::SniffMimeTypeFromLocalData(&content[0], read_result,
                                                &mime_type)) {
       // Change base name for common mime types.

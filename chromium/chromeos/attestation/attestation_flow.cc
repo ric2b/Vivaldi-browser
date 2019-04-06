@@ -9,13 +9,13 @@
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/message_loop/message_loop_current.h"
 #include "base/optional.h"
 #include "base/timer/timer.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/cryptohome_client.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 
 namespace chromeos {
 namespace attestation {
@@ -252,7 +252,7 @@ void AttestationFlow::StartCertificateRequest(
         certificate_profile, account_id, request_origin, true, callback);
     cryptohome_client_->TpmAttestationDoesKeyExist(
         key_type, cryptohome::Identification(account_id), key_name,
-        base::BindRepeating(
+        base::BindOnce(
             &DBusBoolRedirectCallback, on_key_exists, on_key_not_exists,
             base::BindRepeating(callback, ATTESTATION_UNSPECIFIED_FAILURE, ""),
             "check for existence of attestation key"));
@@ -317,7 +317,7 @@ void AttestationFlow::GetExistingCertificate(
     const CertificateCallback& callback) {
   cryptohome_client_->TpmAttestationGetCertificate(
       key_type, cryptohome::Identification(account_id), key_name,
-      base::BindRepeating(&DBusCertificateMethodCallback, callback));
+      base::BindOnce(&DBusCertificateMethodCallback, callback));
 }
 
 void AttestationFlow::CheckAttestationReadyAndReschedule(
@@ -327,10 +327,11 @@ void AttestationFlow::CheckAttestationReadyAndReschedule(
   if (base::TimeTicks::Now() < end_time) {
     LOG(WARNING) << "Attestation: Not prepared yet."
                  << " Retrying in " << retry_delay_ << ".";
-    base::MessageLoop::current()->task_runner()->PostDelayedTask(
+    base::MessageLoopCurrent::Get()->task_runner()->PostDelayedTask(
         FROM_HERE,
-        base::Bind(&AttestationFlow::WaitForAttestationReadyAndStartEnroll,
-                   weak_factory_.GetWeakPtr(), end_time, on_failure, next_task),
+        base::BindOnce(&AttestationFlow::WaitForAttestationReadyAndStartEnroll,
+                       weak_factory_.GetWeakPtr(), end_time, on_failure,
+                       next_task),
         retry_delay_);
   } else {
     LOG(ERROR) << "Attestation: Not prepared. Giving up on retrying.";

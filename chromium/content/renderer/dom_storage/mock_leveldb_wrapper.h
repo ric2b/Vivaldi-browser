@@ -5,17 +5,18 @@
 #ifndef CONTENT_RENDERER_DOM_STORAGE_MOCK_LEVELDB_WRAPPER_H
 #define CONTENT_RENDERER_DOM_STORAGE_MOCK_LEVELDB_WRAPPER_H
 
-#include "content/common/leveldb_wrapper.mojom.h"
-#include "content/common/storage_partition_service.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/strong_binding_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/dom_storage/storage_area.mojom.h"
+#include "third_party/blink/public/mojom/dom_storage/storage_partition_service.mojom.h"
 
 namespace content {
 
 // Mock LevelDBWrapper that records all read and write events. It also
 // implements a mock StoragePartitionService.
-class MockLevelDBWrapper : public mojom::StoragePartitionService,
-                           public mojom::LevelDBWrapper {
+class MockLevelDBWrapper : public blink::mojom::StoragePartitionService,
+                           public blink::mojom::StorageArea {
  public:
   using ResultCallback = base::OnceCallback<void(bool)>;
 
@@ -24,13 +25,14 @@ class MockLevelDBWrapper : public mojom::StoragePartitionService,
 
   // StoragePartitionService implementation:
   void OpenLocalStorage(const url::Origin& origin,
-                        mojom::LevelDBWrapperRequest database) override;
-  void OpenSessionStorage(int64_t namespace_id,
-                          const url::Origin& origin,
-                          mojom::LevelDBWrapperRequest database) override;
+                        blink::mojom::StorageAreaRequest database) override;
+  void OpenSessionStorage(
+      const std::string& namespace_id,
+      blink::mojom::SessionStorageNamespaceRequest request) override;
 
-  // LevelDBWrapper implementation:
-  void AddObserver(mojom::LevelDBObserverAssociatedPtrInfo observer) override;
+  // StorageArea implementation:
+  void AddObserver(
+      blink::mojom::StorageAreaObserverAssociatedPtrInfo observer) override;
 
   void Put(const std::vector<uint8_t>& key,
            const std::vector<uint8_t>& value,
@@ -48,12 +50,14 @@ class MockLevelDBWrapper : public mojom::StoragePartitionService,
 
   void Get(const std::vector<uint8_t>& key, GetCallback callback) override;
 
-  void GetAll(
-      mojom::LevelDBWrapperGetAllCallbackAssociatedPtrInfo complete_callback,
-      GetAllCallback callback) override;
+  void GetAll(blink::mojom::StorageAreaGetAllCallbackAssociatedPtrInfo
+                  complete_callback,
+              GetAllCallback callback) override;
 
   // Methods and members for use by test fixtures.
   bool HasBindings() { return !bindings_.empty(); }
+
+  size_t NumNamespaceBindings() { return namespace_bindings_.size(); }
 
   void ResetObservations() {
     observed_get_all_ = false;
@@ -98,18 +102,25 @@ class MockLevelDBWrapper : public mojom::StoragePartitionService,
   }
 
  private:
+  class MockSessionStorageNamespace;
+
   std::list<ResultCallback> pending_callbacks_;
   bool observed_get_all_ = false;
   bool observed_put_ = false;
   bool observed_delete_ = false;
   bool observed_delete_all_ = false;
+  bool observed_clone_ = false;
   std::vector<uint8_t> observed_key_;
   std::vector<uint8_t> observed_value_;
   std::string observed_source_;
+  std::string observed_clone_from_namespace_;
+  std::string observed_clone_to_namespace_;
 
   std::map<std::vector<uint8_t>, std::vector<uint8_t>> get_all_return_values_;
 
-  mojo::BindingSet<mojom::LevelDBWrapper> bindings_;
+  mojo::BindingSet<blink::mojom::StorageArea> bindings_;
+  mojo::StrongBindingSet<blink::mojom::SessionStorageNamespace>
+      namespace_bindings_;
 };
 
 }  // namespace content

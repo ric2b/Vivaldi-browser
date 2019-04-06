@@ -8,13 +8,13 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "net/base/proxy_server.h"
 #include "net/http/http_stream.h"
 #include "net/http/http_stream_factory.h"
-#include "net/http/http_stream_factory_impl.h"
-#include "net/http/http_stream_factory_impl_job.h"
-#include "net/http/http_stream_factory_impl_job_controller.h"
-#include "net/proxy/proxy_info.h"
-#include "net/proxy/proxy_server.h"
+#include "net/http/http_stream_factory_job.h"
+#include "net/http/http_stream_factory_job_controller.h"
+#include "net/http/http_stream_request.h"
+#include "net/proxy_resolution/proxy_info.h"
 #include "net/socket/next_proto.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -23,20 +23,20 @@ using testing::Invoke;
 
 namespace net {
 
-class HttpStreamFactoryImplPeer {
+class HttpStreamFactoryPeer {
  public:
   static void AddJobController(
-      HttpStreamFactoryImpl* factory,
-      HttpStreamFactoryImpl::JobController* job_controller) {
+      HttpStreamFactory* factory,
+      HttpStreamFactory::JobController* job_controller) {
     factory->job_controller_set_.insert(base::WrapUnique(job_controller));
   }
 
-  static bool IsJobControllerDeleted(HttpStreamFactoryImpl* factory) {
+  static bool IsJobControllerDeleted(HttpStreamFactory* factory) {
     return factory->job_controller_set_.empty();
   }
 
-  static HttpStreamFactoryImpl::JobFactory* GetDefaultJobFactory(
-      HttpStreamFactoryImpl* factory) {
+  static HttpStreamFactory::JobFactory* GetDefaultJobFactory(
+      HttpStreamFactory* factory) {
     return factory->job_factory_.get();
   }
 };
@@ -105,41 +105,41 @@ class MockHttpStreamRequestDelegate : public HttpStreamRequest::Delegate {
   DISALLOW_COPY_AND_ASSIGN(MockHttpStreamRequestDelegate);
 };
 
-class MockHttpStreamFactoryImplJob : public HttpStreamFactoryImpl::Job {
+class MockHttpStreamFactoryJob : public HttpStreamFactory::Job {
  public:
-  MockHttpStreamFactoryImplJob(HttpStreamFactoryImpl::Job::Delegate* delegate,
-                               HttpStreamFactoryImpl::JobType job_type,
-                               HttpNetworkSession* session,
-                               const HttpRequestInfo& request_info,
-                               RequestPriority priority,
-                               ProxyInfo proxy_info,
-                               const SSLConfig& server_ssl_config,
-                               const SSLConfig& proxy_ssl_config,
-                               HostPortPair destination,
-                               GURL origin_url,
-                               NextProto alternative_protocol,
-                               QuicTransportVersion quic_version,
-                               const ProxyServer& alternative_proxy_server,
-                               bool is_websocket,
-                               bool enable_ip_based_pooling,
-                               NetLog* net_log);
+  MockHttpStreamFactoryJob(HttpStreamFactory::Job::Delegate* delegate,
+                           HttpStreamFactory::JobType job_type,
+                           HttpNetworkSession* session,
+                           const HttpRequestInfo& request_info,
+                           RequestPriority priority,
+                           ProxyInfo proxy_info,
+                           const SSLConfig& server_ssl_config,
+                           const SSLConfig& proxy_ssl_config,
+                           HostPortPair destination,
+                           GURL origin_url,
+                           NextProto alternative_protocol,
+                           quic::QuicTransportVersion quic_version,
+                           const ProxyServer& alternative_proxy_server,
+                           bool is_websocket,
+                           bool enable_ip_based_pooling,
+                           NetLog* net_log);
 
-  ~MockHttpStreamFactoryImplJob() override;
+  ~MockHttpStreamFactoryJob() override;
 
   MOCK_METHOD0(Resume, void());
 
   MOCK_METHOD0(Orphan, void());
 };
 
-// JobFactory for creating MockHttpStreamFactoryImplJobs.
-class TestJobFactory : public HttpStreamFactoryImpl::JobFactory {
+// JobFactory for creating MockHttpStreamFactoryJobs.
+class TestJobFactory : public HttpStreamFactory::JobFactory {
  public:
   TestJobFactory();
   ~TestJobFactory() override;
 
-  std::unique_ptr<HttpStreamFactoryImpl::Job> CreateMainJob(
-      HttpStreamFactoryImpl::Job::Delegate* delegate,
-      HttpStreamFactoryImpl::JobType job_type,
+  std::unique_ptr<HttpStreamFactory::Job> CreateMainJob(
+      HttpStreamFactory::Job::Delegate* delegate,
+      HttpStreamFactory::JobType job_type,
       HttpNetworkSession* session,
       const HttpRequestInfo& request_info,
       RequestPriority priority,
@@ -152,9 +152,9 @@ class TestJobFactory : public HttpStreamFactoryImpl::JobFactory {
       bool enable_ip_based_pooling,
       NetLog* net_log) override;
 
-  std::unique_ptr<HttpStreamFactoryImpl::Job> CreateAltSvcJob(
-      HttpStreamFactoryImpl::Job::Delegate* delegate,
-      HttpStreamFactoryImpl::JobType job_type,
+  std::unique_ptr<HttpStreamFactory::Job> CreateAltSvcJob(
+      HttpStreamFactory::Job::Delegate* delegate,
+      HttpStreamFactory::JobType job_type,
       HttpNetworkSession* session,
       const HttpRequestInfo& request_info,
       RequestPriority priority,
@@ -164,14 +164,14 @@ class TestJobFactory : public HttpStreamFactoryImpl::JobFactory {
       HostPortPair destination,
       GURL origin_url,
       NextProto alternative_protocol,
-      QuicTransportVersion quic_version,
+      quic::QuicTransportVersion quic_version,
       bool is_websocket,
       bool enable_ip_based_pooling,
       NetLog* net_log) override;
 
-  std::unique_ptr<HttpStreamFactoryImpl::Job> CreateAltProxyJob(
-      HttpStreamFactoryImpl::Job::Delegate* delegate,
-      HttpStreamFactoryImpl::JobType job_type,
+  std::unique_ptr<HttpStreamFactory::Job> CreateAltProxyJob(
+      HttpStreamFactory::Job::Delegate* delegate,
+      HttpStreamFactory::JobType job_type,
       HttpNetworkSession* session,
       const HttpRequestInfo& request_info,
       RequestPriority priority,
@@ -185,10 +185,8 @@ class TestJobFactory : public HttpStreamFactoryImpl::JobFactory {
       bool enable_ip_based_pooling,
       NetLog* net_log) override;
 
-  MockHttpStreamFactoryImplJob* main_job() const { return main_job_; }
-  MockHttpStreamFactoryImplJob* alternative_job() const {
-    return alternative_job_;
-  }
+  MockHttpStreamFactoryJob* main_job() const { return main_job_; }
+  MockHttpStreamFactoryJob* alternative_job() const { return alternative_job_; }
 
   void UseDifferentURLForMainJob(GURL url) {
     override_main_job_url_ = true;
@@ -196,8 +194,8 @@ class TestJobFactory : public HttpStreamFactoryImpl::JobFactory {
   }
 
  private:
-  MockHttpStreamFactoryImplJob* main_job_;
-  MockHttpStreamFactoryImplJob* alternative_job_;
+  MockHttpStreamFactoryJob* main_job_;
+  MockHttpStreamFactoryJob* alternative_job_;
   bool override_main_job_url_;
   GURL main_job_alternative_url_;
 };

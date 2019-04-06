@@ -6,8 +6,8 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "base/process/process.h"
+#include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/browser_main_loop.h"
@@ -94,7 +94,7 @@ void MidiHost::OnStartSession() {
 
 void MidiHost::OnSendData(uint32_t port,
                           const std::vector<uint8_t>& data,
-                          double timestamp) {
+                          base::TimeTicks timestamp) {
   {
     base::AutoLock auto_lock(output_port_count_lock_);
     if (output_port_count_ <= port) {
@@ -109,8 +109,7 @@ void MidiHost::OnSendData(uint32_t port,
   // Blink running in a renderer checks permission to raise a SecurityError
   // in JavaScript. The actual permission check for security purposes
   // happens here in the browser process.
-  if (!has_sys_ex_permission_ &&
-      std::find(data.begin(), data.end(), kSysExByte) != data.end()) {
+  if (!has_sys_ex_permission_ && base::ContainsValue(data, kSysExByte)) {
     bad_message::ReceivedBadMessage(this, bad_message::MH_SYS_EX_PERMISSION);
     return;
   }
@@ -172,7 +171,7 @@ void MidiHost::SetOutputPortState(uint32_t port, PortState state) {
 void MidiHost::ReceiveMidiData(uint32_t port,
                                const uint8_t* data,
                                size_t length,
-                               double timestamp) {
+                               base::TimeTicks timestamp) {
   TRACE_EVENT0("midi", "MidiHost::ReceiveMidiData");
 
   base::AutoLock auto_lock(messages_queues_lock_);

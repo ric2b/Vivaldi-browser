@@ -5,10 +5,15 @@
 #include <queue>
 
 #include "ash/accelerators/accelerator_controller.h"
-#include "ash/accelerators/accelerator_table.h"
-#include "ash/public/cpp/accessibility_types.h"
+#include "ash/public/cpp/accelerators.h"
+#include "ash/public/cpp/app_list/app_list_features.h"
+#include "ash/public/cpp/app_list/app_list_switches.h"
+#include "ash/public/cpp/ash_features.h"
+#include "ash/root_window_controller.h"
 #include "ash/shell.h"
+#include "ash/system/status_area_widget.h"
 #include "ash/system/tray/system_tray.h"
+#include "ash/system/unified/unified_system_tray.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/pattern.h"
@@ -35,7 +40,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/chromeos_switches.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/account_id/account_id.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/url_constants.h"
@@ -44,8 +49,6 @@
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/process_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/app_list/app_list_features.h"
-#include "ui/app_list/app_list_switches.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/views/widget/widget.h"
@@ -128,8 +131,7 @@ class LoggedInSpokenFeedbackTest : public InProcessBrowserTest {
     // Enable ChromeVox, skip welcome message/notification, and disable earcons.
     ASSERT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
 
-    AccessibilityManager::Get()->EnableSpokenFeedback(
-        true, ash::A11Y_NOTIFICATION_NONE);
+    AccessibilityManager::Get()->EnableSpokenFeedback(true);
     EXPECT_TRUE(speech_monitor_.SkipChromeVoxEnabledMessage());
     DisableEarcons();
   }
@@ -279,7 +281,8 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_EnableSpokenFeedback) {
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, FocusToolbar) {
   EnableChromeVox();
   chrome::ExecuteCommand(browser(), IDC_FOCUS_TOOLBAR);
-  EXPECT_EQ("Reload", speech_monitor_.GetNextUtterance());
+  while (speech_monitor_.GetNextUtterance() != "Reload") {
+  }
   EXPECT_EQ("Button", speech_monitor_.GetNextUtterance());
 }
 
@@ -314,6 +317,8 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, FocusShelf) {
   EXPECT_EQ("Shelf", speech_monitor_.GetNextUtterance());
   EXPECT_EQ("Tool bar", speech_monitor_.GetNextUtterance());
   EXPECT_EQ(", window", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("Press Search plus Space to activate.",
+            speech_monitor_.GetNextUtterance());
 
   SendKeyPress(ui::VKEY_TAB);
   EXPECT_TRUE(base::MatchPattern(speech_monitor_.GetNextUtterance(), "*"));
@@ -621,8 +626,16 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, DISABLED_TouchExploreStatusTray) {
 
   // Send an accessibility hover event on the system tray, which is
   // what we get when you tap it on a touch screen when ChromeVox is on.
-  ash::SystemTray* tray = ash::Shell::Get()->GetPrimarySystemTray();
-  tray->NotifyAccessibilityEvent(ui::AX_EVENT_HOVER, true);
+  ash::TrayBackgroundView* tray =
+      ash::features::IsSystemTrayUnifiedEnabled()
+          ? static_cast<ash::TrayBackgroundView*>(
+                ash::Shell::Get()
+                    ->GetPrimaryRootWindowController()
+                    ->GetStatusAreaWidget()
+                    ->unified_system_tray())
+          : static_cast<ash::TrayBackgroundView*>(
+                ash::Shell::Get()->GetPrimarySystemTray());
+  tray->NotifyAccessibilityEvent(ax::mojom::Event::kHover, true);
 
   EXPECT_EQ("Status tray,", speech_monitor_.GetNextUtterance());
   EXPECT_TRUE(base::MatchPattern(speech_monitor_.GetNextUtterance(), "time*,"));
@@ -696,10 +709,9 @@ class GuestSpokenFeedbackTest : public LoggedInSpokenFeedbackTest {
 
 IN_PROC_BROWSER_TEST_F(GuestSpokenFeedbackTest, FocusToolbar) {
   EnableChromeVox();
-
   chrome::ExecuteCommand(browser(), IDC_FOCUS_TOOLBAR);
-
-  EXPECT_EQ("Reload", speech_monitor_.GetNextUtterance());
+  while (speech_monitor_.GetNextUtterance() != "Reload") {
+  }
   EXPECT_EQ("Button", speech_monitor_.GetNextUtterance());
 }
 
@@ -738,8 +750,7 @@ IN_PROC_BROWSER_TEST_F(OobeSpokenFeedbackTest, DISABLED_SpokenFeedbackInOobe) {
   // We expect to be in the language select dropdown for this test to work,
   // so make sure that's the case.
   js_checker().ExecuteAsync("$('language-select').focus()");
-  AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ash::A11Y_NOTIFICATION_NONE);
+  AccessibilityManager::Get()->EnableSpokenFeedback(true);
   ASSERT_TRUE(speech_monitor_.SkipChromeVoxEnabledMessage());
   // There's no guarantee that ChromeVox speaks anything when injected after
   // the page loads, which is by design.  Tab forward and then backward

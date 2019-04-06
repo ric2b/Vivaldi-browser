@@ -7,9 +7,10 @@
 #include <stddef.h>
 #include <utility>
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/guid.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
@@ -162,7 +163,7 @@ MetricsStateManager::~MetricsStateManager() {
 }
 
 std::unique_ptr<MetricsProvider> MetricsStateManager::GetProvider() {
-  return base::MakeUnique<MetricsStateMetricsProvider>(
+  return std::make_unique<MetricsStateMetricsProvider>(
       local_state_, metrics_ids_were_reset_, previous_client_id_);
 }
 
@@ -238,7 +239,7 @@ void MetricsStateManager::CheckForClonedInstall() {
   if (!MachineIdProvider::HasId())
     return;
 
-  cloned_install_detector_ = base::MakeUnique<ClonedInstallDetector>();
+  cloned_install_detector_ = std::make_unique<ClonedInstallDetector>();
   cloned_install_detector_->CheckForClonedInstall(local_state_);
 }
 
@@ -258,7 +259,7 @@ MetricsStateManager::CreateDefaultEntropyProvider() {
     const std::string high_entropy_source =
         client_id_ + base::IntToString(low_entropy_source_value);
     return std::unique_ptr<const base::FieldTrial::EntropyProvider>(
-        new SHA1EntropyProvider(high_entropy_source));
+        new variations::SHA1EntropyProvider(high_entropy_source));
   }
 
   UpdateEntropySourceReturnedValue(ENTROPY_SOURCE_LOW);
@@ -271,12 +272,12 @@ MetricsStateManager::CreateLowEntropyProvider() {
 
 #if defined(OS_ANDROID) || defined(OS_IOS)
   return std::unique_ptr<const base::FieldTrial::EntropyProvider>(
-      new CachingPermutedEntropyProvider(local_state_, low_entropy_source_value,
-                                         kMaxLowEntropySize));
+      new variations::CachingPermutedEntropyProvider(
+          local_state_, low_entropy_source_value, kMaxLowEntropySize));
 #else
   return std::unique_ptr<const base::FieldTrial::EntropyProvider>(
-      new PermutedEntropyProvider(low_entropy_source_value,
-                                  kMaxLowEntropySize));
+      new variations::PermutedEntropyProvider(low_entropy_source_value,
+                                              kMaxLowEntropySize));
 #endif
 }
 
@@ -307,7 +308,7 @@ void MetricsStateManager::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterInt64Pref(prefs::kInstallDate, 0);
 
   ClonedInstallDetector::RegisterPrefs(registry);
-  CachingPermutedEntropyProvider::RegisterPrefs(registry);
+  variations::CachingPermutedEntropyProvider::RegisterPrefs(registry);
 }
 
 void MetricsStateManager::BackUpCurrentClientInfo() {
@@ -361,7 +362,7 @@ void MetricsStateManager::UpdateLowEntropySource() {
   LogLowEntropyValue(low_entropy_source_);
   local_state_->SetInteger(prefs::kMetricsLowEntropySource,
                            low_entropy_source_);
-  CachingPermutedEntropyProvider::ClearCache(local_state_);
+  variations::CachingPermutedEntropyProvider::ClearCache(local_state_);
 }
 
 void MetricsStateManager::UpdateEntropySourceReturnedValue(

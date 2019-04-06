@@ -5,7 +5,11 @@
 Polymer({
   is: 'print-preview-layout-settings',
 
-  behaviors: [SettingsBehavior],
+  behaviors: [SettingsBehavior, print_preview_new.SelectBehavior],
+
+  properties: {
+    disabled: Boolean,
+  },
 
   observers: ['onLayoutSettingChange_(settings.layout.value)'],
 
@@ -18,8 +22,8 @@ Polymer({
         /** @type {boolean} */ (value) ? 'landscape' : 'portrait';
   },
 
-  /** @private */
-  onChange_: function() {
-    this.setSetting('layout', this.$$('select').value == 'landscape');
+  /** @param {string} value The new select value. */
+  onProcessSelectChange: function(value) {
+    this.setSetting('layout', value == 'landscape');
   },
 });

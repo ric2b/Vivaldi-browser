@@ -9,12 +9,9 @@
 #include "ui/views/widget/widget.h"
 
 #if defined(OS_CHROMEOS)
-// gn check complains on Linux Ozone.
-#include "ash/public/cpp/shell_window_ids.h"  // nogncheck
-#include "ash/shell.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "chrome/browser/ui/ash/ash_util.h"
-#include "services/ui/public/cpp/property_type_converters.h"
-#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "ui/wm/core/shadow_types.h"
 #endif  // defined(OS_CHROMEOS)
 
 namespace chrome {
@@ -53,20 +50,21 @@ gfx::NativeWindow ShowWebDialog(gfx::NativeView parent,
 #if defined(OS_CHROMEOS)
 gfx::NativeWindow ShowWebDialogInContainer(int container_id,
                                            content::BrowserContext* context,
-                                           ui::WebDialogDelegate* delegate) {
+                                           ui::WebDialogDelegate* delegate,
+                                           bool is_minimal_style) {
   DCHECK(container_id != ash::kShellWindowId_Invalid);
   views::WebDialogView* view =
       new views::WebDialogView(context, delegate, new ChromeWebContentsHandler);
   views::Widget::InitParams params;
-  params.delegate = view;
-  if (ash_util::IsRunningInMash()) {
-    using ui::mojom::WindowManager;
-    params.mus_properties[WindowManager::kContainerId_InitProperty] =
-        mojo::ConvertTo<std::vector<uint8_t>>(container_id);
-  } else {
-    params.parent = ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
-                                             container_id);
+  // TODO(updowndota) Remove the special handling for hiding dialog title after
+  // the bug is fixed.
+  if (is_minimal_style) {
+    params.type = views::Widget::InitParams::TYPE_WINDOW_FRAMELESS;
+    params.shadow_type = views::Widget::InitParams::SHADOW_TYPE_DROP;
+    params.shadow_elevation = ::wm::kShadowElevationActiveWindow;
   }
+  params.delegate = view;
+  ash_util::SetupWidgetInitParamsForContainer(&params, container_id);
   return ShowWebDialogWidget(params, view);
 }
 #endif  // defined(OS_CHROMEOS)

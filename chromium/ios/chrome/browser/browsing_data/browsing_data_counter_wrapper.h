@@ -6,9 +6,9 @@
 #define IOS_CHROME_BROWSER_BROWSING_DATA_BROWSING_DATA_COUNTER_WRAPPER_H_
 
 #include <memory>
-#include <string>
 
 #include "base/callback_forward.h"
+#include "base/strings/string_piece.h"
 #include "components/browsing_data/core/counters/browsing_data_counter.h"
 
 class PrefService;
@@ -21,16 +21,16 @@ class ChromeBrowserState;
 // UI callback to the UI.
 class BrowsingDataCounterWrapper {
  public:
-  using UpdateUICallback =
-      base::Callback<void(const browsing_data::BrowsingDataCounter::Result&)>;
+  using UpdateUICallback = base::RepeatingCallback<void(
+      const browsing_data::BrowsingDataCounter::Result&)>;
 
   // This method returns the counter corresponding to the data type specified by
   // |pref_name| or null if there is no such counter.
   static std::unique_ptr<BrowsingDataCounterWrapper> CreateCounterWrapper(
-      const char* pref_name,
+      base::StringPiece pref_name,
       ios::ChromeBrowserState* browser_state,
       PrefService* pref_service,
-      const UpdateUICallback& update_ui_callback);
+      UpdateUICallback update_ui_callback);
 
   ~BrowsingDataCounterWrapper();
 
@@ -40,7 +40,7 @@ class BrowsingDataCounterWrapper {
   BrowsingDataCounterWrapper(
       std::unique_ptr<browsing_data::BrowsingDataCounter> counter,
       PrefService* pref_service,
-      const UpdateUICallback& update_ui_callback);
+      UpdateUICallback update_ui_callback);
 
   // Method to be passed as callback to the counter. This will be invoked when
   // the result is ready.

@@ -193,7 +193,7 @@
       var videoElement = document.createElement('video');
 
       // No crash for this operation.
-      videoElement.src = URL.createObjectURL(newStream);
+      videoElement.srcObject = newStream;
       detectVideoPlaying('remote-view-2')
           .then(reportTestSuccess);
     })
@@ -223,9 +223,8 @@
     setOfferSdpTransform(removeVideoCodec);
 
     setOnLocalDescriptionError(function(error) {
-      var expectedMsg = 'Failed to set local offer sdp:' +
-          ' Session error code: ERROR_CONTENT. Session error description:' +
-          ' Failed to set local video description recv parameters..';
+      var expectedMsg = 'Failed to set local offer sdp: Failed to set local' +
+          ' video description recv parameters.';
       assertEquals(expectedMsg, error.message);
       reportTestSuccess();
     });
@@ -239,10 +238,10 @@
     createConnections(null);
     setOfferSdpTransform(removeCrypto);
     setOnLocalDescriptionError(function(error) {
-      var expectedMsg = 'Failed to set local offer sdp:' +
-          ' Called with SDP without DTLS fingerprint.';
-
-      assertEquals(expectedMsg, error.message);
+      // Note: Per spec, error should be 'IllegalModificationError'
+      // https://crbug.com/823036
+      var expectedError = 'OperationError';
+      assertEquals(expectedError, error.name);
       reportTestSuccess();
     });
     navigator.mediaDevices.getUserMedia({audio: true, video: true})
@@ -517,8 +516,7 @@
   }
 
   function displayAndRemember(localStream) {
-    var localStreamUrl = URL.createObjectURL(localStream);
-    $('local-view').src = localStreamUrl;
+    $('local-view').srcObject = localStream;
 
     gLocalStream = localStream;
   }
@@ -656,9 +654,8 @@
           e.stream.id + ' was received.');
     }
     gRemoteStreams[target] = e.stream;
-    var remoteStreamUrl = URL.createObjectURL(e.stream);
     var remoteVideo = $(target);
-    remoteVideo.src = remoteStreamUrl;
+    remoteVideo.srcObject = e.stream;
   }
 
   // Check that applyConstraints() fails on remote tracks because there is

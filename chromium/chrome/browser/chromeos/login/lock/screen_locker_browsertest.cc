@@ -10,7 +10,6 @@
 #include "ash/wm/window_state.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker_tester.h"
@@ -48,7 +47,7 @@ namespace {
 // An object that wait for lock state and fullscreen state.
 class Waiter : public content::NotificationObserver {
  public:
-  explicit Waiter(Browser* browser) : browser_(browser), running_(false) {
+  explicit Waiter(Browser* browser) : browser_(browser) {
     registrar_.Add(this, chrome::NOTIFICATION_SCREEN_LOCK_STATE_CHANGED,
                    content::NotificationService::AllSources());
     registrar_.Add(this, chrome::NOTIFICATION_FULLSCREEN_CHANGED,
@@ -62,30 +61,29 @@ class Waiter : public content::NotificationObserver {
                const content::NotificationDetails& details) override {
     DCHECK(type == chrome::NOTIFICATION_SCREEN_LOCK_STATE_CHANGED ||
            type == chrome::NOTIFICATION_FULLSCREEN_CHANGED);
-    if (running_)
-      base::RunLoop::QuitCurrentWhenIdleDeprecated();
+    if (quit_loop_)
+      std::move(quit_loop_).Run();
   }
 
   // Wait until the two conditions are met.
   void Wait(bool locker_state, bool fullscreen) {
-    running_ = true;
     std::unique_ptr<chromeos::test::ScreenLockerTester> tester(
         chromeos::ScreenLocker::GetTester());
     while (tester->IsLocked() != locker_state ||
            browser_->window()->IsFullscreen() != fullscreen) {
-      content::RunMessageLoop();
+      base::RunLoop run_loop;
+      quit_loop_ = run_loop.QuitClosure();
+      run_loop.Run();
     }
     // Make sure all pending tasks are executed.
     content::RunAllPendingInMessageLoop();
-    running_ = false;
   }
 
  private:
   Browser* browser_;
   content::NotificationRegistrar registrar_;
 
-  // Are we currently running the message loop?
-  bool running_;
+  base::OnceClosure quit_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(Waiter);
 };
@@ -170,7 +168,8 @@ IN_PROC_BROWSER_TEST_F(WebUiScreenLockerTest, TestBasic) {
   EXPECT_GT(lock_bounds.width(), 10);
   EXPECT_GT(lock_bounds.height(), 10);
 
-  UserContext user_context(user_manager::StubAccountId());
+  UserContext user_context(user_manager::UserType::USER_TYPE_REGULAR,
+                           user_manager::StubAccountId());
   user_context.SetKey(Key("pass"));
   tester->InjectStubUserContext(user_context);
   EXPECT_TRUE(tester->IsLocked());
@@ -195,7 +194,7 @@ IN_PROC_BROWSER_TEST_F(WebUiScreenLockerTest, TestBasic) {
 IN_PROC_BROWSER_TEST_F(ScreenLockerTest, LockScreenWhileAddingUser) {
   UserAddingScreen::Get()->Start();
   content::RunAllPendingInMessageLoop();
-  ScreenLocker::HandleLockScreenRequest();
+  ScreenLocker::HandleShowLockScreenRequest();
 }
 
 // Test how locking the screen affects an active fullscreen window.
@@ -228,7 +227,8 @@ IN_PROC_BROWSER_TEST_F(WebUiScreenLockerTest, TestFullscreenExit) {
     EXPECT_FALSE(window_state->GetHideShelfWhenFullscreen());
     EXPECT_TRUE(tester->IsLocked());
   }
-  UserContext user_context(user_manager::StubAccountId());
+  UserContext user_context(user_manager::UserType::USER_TYPE_REGULAR,
+                           user_manager::StubAccountId());
   user_context.SetKey(Key("pass"));
   tester->InjectStubUserContext(user_context);
   tester->EnterPassword("pass");

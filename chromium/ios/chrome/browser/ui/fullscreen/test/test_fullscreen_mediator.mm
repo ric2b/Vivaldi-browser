@@ -5,7 +5,6 @@
 #import "ios/chrome/browser/ui/fullscreen/test/test_fullscreen_mediator.h"
 
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller_observer.h"
-#import "ios/chrome/browser/ui/fullscreen/fullscreen_scroll_end_animator.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -16,9 +15,8 @@
 class TestNoopAnimationProvider : public FullscreenControllerObserver {
  public:
   // FullscreenControllerObserver:
-  void FullscreenScrollEventEnded(
-      FullscreenController* controller,
-      FullscreenScrollEndAnimator* animator) override {
+  void FullscreenScrollEventEnded(FullscreenController* controller,
+                                  FullscreenAnimator* animator) override {
     [animator addAnimations:^{
     }];
   }

@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "ios/web/public/web_client.h"
+#import "ios/web/public/web_client.h"
 
 // Chrome implementation of WebClient.
 class ChromeWebClient : public web::WebClient {
@@ -22,7 +22,6 @@ class ChromeWebClient : public web::WebClient {
   std::unique_ptr<web::WebMainParts> CreateWebMainParts() override;
   void PreWebViewCreation() const override;
   void AddAdditionalSchemes(Schemes* schemes) const override;
-  std::string GetAcceptLangs(web::BrowserState* state) const override;
   std::string GetApplicationLocale() const override;
   bool IsAppSpecificURL(const GURL& url) const override;
   base::string16 GetPluginNotSupportedText() const override;
@@ -39,6 +38,8 @@ class ChromeWebClient : public web::WebClient {
       std::vector<std::string>* additional_schemes) override;
   void PostBrowserURLRewriterCreation(
       web::BrowserURLRewriter* rewriter) override;
+  NSString* GetDocumentStartScriptForAllFrames(
+      web::BrowserState* browser_state) const override;
   NSString* GetDocumentStartScriptForMainFrame(
       web::BrowserState* browser_state) const override;
   void AllowCertificateError(
@@ -48,6 +49,11 @@ class ChromeWebClient : public web::WebClient {
       const GURL& request_url,
       bool overridable,
       const base::Callback<void(bool)>& callback) override;
+  void PrepareErrorPage(NSError* error,
+                        bool is_post,
+                        bool is_off_the_record,
+                        NSString** error_html) override;
+  void RegisterServices(StaticServiceMap* services) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChromeWebClient);

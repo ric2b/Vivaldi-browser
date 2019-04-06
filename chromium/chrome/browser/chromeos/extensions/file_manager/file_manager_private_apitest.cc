@@ -5,19 +5,29 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
+#include "base/base64.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
+#include "chrome/browser/chromeos/crostini/crostini_manager.h"
+#include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/extensions/file_manager/event_router.h"
 #include "chrome/browser/chromeos/file_manager/file_watcher.h"
 #include "chrome/browser/chromeos/file_manager/mount_test_util.h"
 #include "chrome/browser/chromeos/file_system_provider/icon_set.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_info.h"
 #include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/api/file_system_provider_capabilities/file_system_provider_capabilities_handler.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/dbus/cros_disks_client.h"
 #include "chromeos/disks/mock_disk_mount_manager.h"
 #include "components/drive/file_change.h"
+#include "components/prefs/pref_service.h"
+#include "components/signin/core/browser/signin_manager_base.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/install_warning.h"
 #include "google_apis/drive/test_util.h"
@@ -164,7 +174,7 @@ bool InitializeLocalFileSystem(std::string mount_point_name,
 
 }  // namespace
 
-class FileManagerPrivateApiTest : public ExtensionApiTest {
+class FileManagerPrivateApiTest : public extensions::ExtensionApiTest {
  public:
   FileManagerPrivateApiTest() : disk_mount_manager_mock_(nullptr) {
     InitMountPoints();
@@ -177,10 +187,11 @@ class FileManagerPrivateApiTest : public ExtensionApiTest {
   }
 
   void SetUpOnMainThread() override {
-    ExtensionApiTest::SetUpOnMainThread();
+    extensions::ExtensionApiTest::SetUpOnMainThread();
 
-    testing_profile_.reset(new TestingProfile());
-    event_router_.reset(new file_manager::EventRouter(testing_profile_.get()));
+    testing_profile_ = std::make_unique<TestingProfile>();
+    event_router_ =
+        std::make_unique<file_manager::EventRouter>(testing_profile_.get());
   }
 
   void TearDownOnMainThread() override {
@@ -189,12 +200,12 @@ class FileManagerPrivateApiTest : public ExtensionApiTest {
     event_router_.reset();
     testing_profile_.reset();
 
-    ExtensionApiTest::TearDownOnMainThread();
+    extensions::ExtensionApiTest::TearDownOnMainThread();
   }
 
   // ExtensionApiTest override
   void SetUpInProcessBrowserTestFixture() override {
-    ExtensionApiTest::SetUpInProcessBrowserTestFixture();
+    extensions::ExtensionApiTest::SetUpInProcessBrowserTestFixture();
     disk_mount_manager_mock_ = new chromeos::disks::MockDiskMountManager;
     chromeos::disks::DiskMountManager::InitializeForTesting(
         disk_mount_manager_mock_);
@@ -214,7 +225,7 @@ class FileManagerPrivateApiTest : public ExtensionApiTest {
     chromeos::disks::DiskMountManager::Shutdown();
     disk_mount_manager_mock_ = nullptr;
 
-    ExtensionApiTest::TearDownInProcessBrowserTestFixture();
+    extensions::ExtensionApiTest::TearDownInProcessBrowserTestFixture();
   }
 
  private:
@@ -306,6 +317,21 @@ class FileManagerPrivateApiTest : public ExtensionApiTest {
   }
 
  protected:
+  void SshfsMount(const std::string& source_path,
+                  const std::string& source_format,
+                  const std::string& mount_label,
+                  const std::vector<std::string>& mount_options,
+                  chromeos::MountType type,
+                  chromeos::MountAccessMode access_mode) {
+    disk_mount_manager_mock_->NotifyMountEvent(
+        chromeos::disks::DiskMountManager::MountEvent::MOUNTING,
+        chromeos::MountError::MOUNT_ERROR_NONE,
+        chromeos::disks::DiskMountManager::MountPointInfo(
+            source_path, "/media/fuse/" + mount_label,
+            chromeos::MountType::MOUNT_TYPE_NETWORK_STORAGE,
+            chromeos::disks::MountCondition::MOUNT_CONDITION_NONE));
+  }
+
   chromeos::disks::MockDiskMountManager* disk_mount_manager_mock_;
   DiskMountManager::DiskMap volumes_;
   DiskMountManager::MountPointMap mount_points_;
@@ -470,4 +496,38 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Recent) {
   }
 
   ASSERT_TRUE(RunComponentExtensionTest("file_browser/recent_test"));
+}
+
+IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Crostini) {
+  // TODO(joelhockey): Setting prefs and features to allow crostini is not
+  // ideal.  It would be better if the crostini interface allowed for testing
+  // without such tight coupling.
+  browser()->profile()->GetPrefs()->SetBoolean(
+      crostini::prefs::kCrostiniEnabled, true);
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      {features::kCrostini, features::kExperimentalCrostiniUI}, {});
+  crostini::CrostiniManager::GetInstance()->set_skip_restart_for_testing();
+
+  // Profile must be signed in with email for crostini.
+  SigninManagerFactory::GetForProfileIfExists(browser()->profile())
+      ->SetAuthenticatedAccountInfo("12345", "testuser@gmail.com");
+
+  // DiskMountManager mock.
+  std::string known_hosts;
+  base::Base64Encode("[hostname]:2222 pubkey", &known_hosts);
+  std::string identity;
+  base::Base64Encode("privkey", &identity);
+  std::vector<std::string> mount_options = {
+      "UserKnownHostsBase64=" + known_hosts, "IdentityBase64=" + identity,
+      "Port=2222"};
+  EXPECT_CALL(*disk_mount_manager_mock_,
+              MountPath("sshfs://testuser@hostname:", "",
+                        "crostini_user_termina_penguin", mount_options,
+                        chromeos::MOUNT_TYPE_NETWORK_STORAGE,
+                        chromeos::MOUNT_ACCESS_MODE_READ_WRITE))
+      .WillOnce(
+          Invoke(this, &FileManagerPrivateApiTest_Crostini_Test::SshfsMount));
+
+  ASSERT_TRUE(RunComponentExtensionTest("file_browser/crostini_test"));
 }

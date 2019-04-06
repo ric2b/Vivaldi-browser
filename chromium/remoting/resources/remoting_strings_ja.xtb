@@ -3,9 +3,6 @@
 <translationbundle lang="ja">
 <translation id="1002108253973310084">互換性のないプロトコル バージョンが検出されました。両方のパソコンにインストールしているソフトウェアのバージョンが最新であることを確認し、もう一度お試しください。</translation>
 <translation id="1050693411695664090">悪い</translation>
-<translation id="1059802506829356230">• デザインを一新しました。
-• パフォーマンス、応答性、信頼性が向上しました。
-• Windows または Linux パソコンからのオーディオ再生に対応しました。</translation>
 <translation id="1152528166145813711">選択してください…</translation>
 <translation id="1199593201721843963">リモート接続を無効にする</translation>
 <translation id="1291443878853470558">Chromoting を使用してこのパソコンにアクセスするには、リモート接続を有効にする必要があります。</translation>
@@ -143,10 +140,12 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="4145029455188493639"><ph name="EMAIL_ADDRESS" /> としてログインしています。</translation>
 <translation id="4155497795971509630">必要なコンポーネントが見つかりません。インストールしているソフトウェアのバージョンが最新であることを確認し、もう一度お試しください。</translation>
 <translation id="4156740505453712750">このパソコンへのアクセスを保護するには、<ph name="BOLD_START" />6 桁以上<ph name="BOLD_END" />の PIN を選択してください。この PIN は別の場所から接続するときに必要となります。</translation>
+<translation id="4169432154993690151">プロフィール画像を選択するには、Chrome リモート デスクトップにカメラへのアクセスを許可してください</translation>
 <translation id="4176825807642096119">アクセス コード</translation>
 <translation id="4207623512727273241">続行する前にインストーラを実行してください。</translation>
 <translation id="4227991223508142681">ユーティリティ プロビジョニングをホストします</translation>
 <translation id="4240294130679914010">Chromoting ホスト アンインストーラ</translation>
+<translation id="4249741460382919890">問題の修正と安定性の向上。</translation>
 <translation id="4277463233460010382">このパソコンは、1 つ以上のクライアントが PIN の入力なしで接続できるように設定されています。</translation>
 <translation id="4277736576214464567">アクセス コードが無効です。もう一度入力してください。</translation>
 <translation id="4361728918881830843">別のパソコンへのリモート接続を有効にするには、対象となるパソコンに Chrome リモート デスクトップをインストールし、[<ph name="BUTTON_NAME" />] をクリックしてください。</translation>
@@ -192,6 +191,7 @@ PC</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" />（オフライン）</translation>
 <translation id="5070121137485264635">リモート ホストで、サードパーティ ウェブサイトへの認証が求められています。続行するには、次のアドレスにアクセスできるように Chrome リモート デスクトップに追加の権限を与える必要があります:</translation>
 <translation id="507204348399810022"><ph name="HOSTNAME" /> へのリモート接続を無効にしてもよろしいですか？</translation>
+<translation id="5081343395220691640">サーバーと通信できませんでした: <ph name="ERROR" /></translation>
 <translation id="5156271271724754543">両方のボックスに同じ PIN を入力してください。</translation>
 <translation id="5170982930780719864">ホスト ID が無効です。</translation>
 <translation id="518094545883702183">この情報は、報告していただいた問題を診断する目的にのみ使用され、調査担当者のみに利用可能となります。この情報が 30 日間を過ぎて保持されることはありません。</translation>
@@ -242,6 +242,7 @@ PC</translation>
 <translation id="6381670701864002291">その他の問題。</translation>
 <translation id="6398765197997659313">全画面表示を終了</translation>
 <translation id="6441316101718669559">このプラットフォームでデスクトップの統合はサポートされていません。アプリケーションは引き続き使用できますが、ユーザー エクスペリエンスは低下します。</translation>
+<translation id="6502629188777329097">パソコンに安全にアクセス</translation>
 <translation id="652218476070540101">このパソコン用の PIN を更新しています...</translation>
 <translation id="6527303717912515753">共有</translation>
 <translation id="6541219117979389420">アプリケーション ログには、メールアドレスのような個人情報をはじめ、Google ドライブのファイルやフォルダの名前、プロパティといったプライバシーにかかわる情報が含まれる可能性があります。</translation>
@@ -259,6 +260,7 @@ PC</translation>
 <translation id="6748108480210050150">From</translation>
 <translation id="677755392401385740">次のユーザーのホストを開始しました: <ph name="HOST_USERNAME" />。</translation>
 <translation id="6865175692670882333">表示/編集</translation>
+<translation id="6913710942997637770">プロフィール画像を選択するには、Chrome リモート デスクトップに写真へのアクセスを許可してください</translation>
 <translation id="6930242544192836755">接続時間</translation>
 <translation id="6939719207673461467">キーボードを表示/非表示</translation>
 <translation id="6944854424004126054">ウィンドウを元のサイズに戻す</translation>
@@ -290,6 +292,7 @@ PC</translation>
 <translation id="7672203038394118626">このパソコンのリモート接続が無効になりました。</translation>
 <translation id="7678209621226490279">左に固定</translation>
 <translation id="7693372326588366043">ホストのリストを更新します</translation>
+<translation id="7714222945760997814">この問題を報告</translation>
 <translation id="7782471917492991422">お使いのパソコンの電源管理設定で、アイドル状態のときにスリープにならないように設定されていることをご確認ください。</translation>
 <translation id="7810127880729796595">統計情報を表示（接続状態: <ph name="QUALITY" />）</translation>
 <translation id="7836926030608666805">必要なコンポーネントが見つかりません。実行している Chrome のバージョンが最新であることを確認し、もう一度お試しください。</translation>

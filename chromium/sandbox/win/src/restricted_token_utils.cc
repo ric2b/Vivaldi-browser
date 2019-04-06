@@ -23,13 +23,42 @@
 
 namespace sandbox {
 
-DWORD CreateRestrictedToken(TokenLevel security_level,
+namespace {
+
+DWORD GetObjectSecurityDescriptor(HANDLE handle,
+                                  SECURITY_INFORMATION security_info,
+                                  std::vector<char>* security_desc_buffer,
+                                  PSECURITY_DESCRIPTOR* security_desc) {
+  DWORD last_error = 0;
+  DWORD length_needed = 0;
+
+  ::GetKernelObjectSecurity(handle, security_info, nullptr, 0, &length_needed);
+  last_error = ::GetLastError();
+  if (last_error != ERROR_INSUFFICIENT_BUFFER)
+    return last_error;
+
+  security_desc_buffer->resize(length_needed);
+  *security_desc =
+      reinterpret_cast<PSECURITY_DESCRIPTOR>(security_desc_buffer->data());
+
+  if (!::GetKernelObjectSecurity(handle, security_info, *security_desc,
+                                 length_needed, &length_needed)) {
+    return ::GetLastError();
+  }
+
+  return ERROR_SUCCESS;
+}
+
+}  // namespace
+
+DWORD CreateRestrictedToken(HANDLE effective_token,
+                            TokenLevel security_level,
                             IntegrityLevel integrity_level,
                             TokenType token_type,
                             bool lockdown_default_dacl,
                             base::win::ScopedHandle* token) {
   RestrictedToken restricted_token;
-  restricted_token.Init(nullptr);  // Initialized with the current process token
+  restricted_token.Init(effective_token);
   if (lockdown_default_dacl)
     restricted_token.SetLockdownDefaultDacl();
 
@@ -243,31 +272,21 @@ DWORD SetProcessIntegrityLevel(IntegrityLevel integrity_level) {
 }
 
 DWORD HardenTokenIntegrityLevelPolicy(HANDLE token) {
-  DWORD last_error = 0;
-  DWORD length_needed = 0;
-
-  ::GetKernelObjectSecurity(token, LABEL_SECURITY_INFORMATION, nullptr, 0,
-                            &length_needed);
-
-  last_error = ::GetLastError();
-  if (last_error != ERROR_INSUFFICIENT_BUFFER)
+  std::vector<char> security_desc_buffer;
+  PSECURITY_DESCRIPTOR security_desc = nullptr;
+  DWORD last_error = GetObjectSecurityDescriptor(
+      token, LABEL_SECURITY_INFORMATION, &security_desc_buffer, &security_desc);
+  if (last_error != ERROR_SUCCESS)
     return last_error;
-
-  std::vector<char> security_desc_buffer(length_needed);
-  PSECURITY_DESCRIPTOR security_desc =
-      reinterpret_cast<PSECURITY_DESCRIPTOR>(&security_desc_buffer[0]);
-
-  if (!::GetKernelObjectSecurity(token, LABEL_SECURITY_INFORMATION,
-                                 security_desc, length_needed, &length_needed))
-    return ::GetLastError();
 
   PACL sacl = nullptr;
   BOOL sacl_present = false;
   BOOL sacl_defaulted = false;
 
   if (!::GetSecurityDescriptorSacl(security_desc, &sacl_present, &sacl,
-                                   &sacl_defaulted))
+                                   &sacl_defaulted)) {
     return ::GetLastError();
+  }
 
   for (DWORD ace_index = 0; ace_index < sacl->AceCount; ++ace_index) {
     PSYSTEM_MANDATORY_LABEL_ACE ace;
@@ -343,7 +362,7 @@ DWORD CreateLowBoxToken(HANDLE base_token,
 
   // Default from NtCreateLowBoxToken is a Primary token.
   if (token_type == PRIMARY) {
-    token->Set(token_lowbox_handle.Take());
+    *token = std::move(token_lowbox_handle);
     return ERROR_SUCCESS;
   }
 
@@ -354,7 +373,23 @@ DWORD CreateLowBoxToken(HANDLE base_token,
     return ::GetLastError();
   }
 
-  token->Set(dup_handle);
+  // Copy security descriptor from primary token as the new object will have
+  // the DACL from the current token's default DACL.
+  base::win::ScopedHandle token_for_sd(dup_handle);
+  std::vector<char> security_desc_buffer;
+  PSECURITY_DESCRIPTOR security_desc = nullptr;
+  DWORD last_error = GetObjectSecurityDescriptor(
+      token_lowbox_handle.Get(), DACL_SECURITY_INFORMATION,
+      &security_desc_buffer, &security_desc);
+  if (last_error != ERROR_SUCCESS)
+    return last_error;
+
+  if (!::SetKernelObjectSecurity(token_for_sd.Get(), DACL_SECURITY_INFORMATION,
+                                 security_desc)) {
+    return ::GetLastError();
+  }
+
+  *token = std::move(token_for_sd);
 
   return ERROR_SUCCESS;
 }

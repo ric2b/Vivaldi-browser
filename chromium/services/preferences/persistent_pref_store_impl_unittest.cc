@@ -7,14 +7,13 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/values.h"
 #include "components/prefs/in_memory_pref_store.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/preferences/public/cpp/persistent_pref_store_client.h"
-#include "services/preferences/public/interfaces/preferences.mojom.h"
+#include "services/preferences/public/mojom/preferences.mojom.h"
 #include "services/preferences/unittest_common.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"

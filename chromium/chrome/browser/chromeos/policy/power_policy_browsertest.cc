@@ -41,6 +41,7 @@
 #include "chromeos/dbus/fake_session_manager_client.h"
 #include "chromeos/dbus/power_manager/policy.pb.h"
 #include "chromeos/dbus/power_policy_controller.h"
+#include "components/account_id/account_id.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/core/common/cloud/policy_builder.h"
@@ -49,7 +50,6 @@
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/policy/proto/device_management_backend.pb.h"
-#include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
@@ -201,11 +201,14 @@ void PowerPolicyBrowserTestBase::SetUpOnMainThread() {
   InstallUserKey();
   user_policy_.policy_data().set_username(
       user_manager::StubAccountId().GetUserEmail());
+  user_policy_.policy_data().set_gaia_id(
+      user_manager::StubAccountId().GetGaiaId());
 }
 
 void PowerPolicyBrowserTestBase::InstallUserKey() {
   base::FilePath user_keys_dir;
-  ASSERT_TRUE(PathService::Get(chromeos::DIR_USER_POLICY_KEYS, &user_keys_dir));
+  ASSERT_TRUE(
+      base::PathService::Get(chromeos::DIR_USER_POLICY_KEYS, &user_keys_dir));
   std::string sanitized_username =
       chromeos::CryptohomeClient::GetStubSanitizedUsername(
           cryptohome::Identification(user_manager::StubAccountId()));
@@ -336,6 +339,8 @@ IN_PROC_BROWSER_TEST_F(PowerPolicyLoginScreenBrowserTest, SetDevicePolicy) {
   proto.mutable_login_screen_power_management()->
       set_login_screen_power_management(kLoginScreenPowerManagementPolicy);
   StoreAndReloadDevicePolicyAndWaitForLoginProfileChange();
+  // Spin the run loop to ensure ash sees pref change.
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetDebugString(power_management_policy),
             GetDebugString(power_manager_client_->policy()));
 }
@@ -405,6 +410,8 @@ IN_PROC_BROWSER_TEST_F(PowerPolicyInSessionBrowserTest, SetLegacyUserPolicy) {
       300);
   user_policy_.payload().mutable_waitforinitialuseractivity()->set_value(true);
   StoreAndReloadUserPolicy();
+  // Spin the run loop to ensure ash sees pref change.
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetDebugString(power_management_policy),
             GetDebugString(power_manager_client_->policy()));
 }
@@ -470,6 +477,8 @@ IN_PROC_BROWSER_TEST_F(PowerPolicyInSessionBrowserTest, SetUserPolicy) {
       kScreenLockDelayPolicy);
 
   StoreAndReloadUserPolicy();
+  // Spin the run loop to ensure ash sees pref change.
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetDebugString(power_management_policy),
             GetDebugString(power_manager_client_->policy()));
 }
@@ -518,6 +527,8 @@ IN_PROC_BROWSER_TEST_F(PowerPolicyInSessionBrowserTest, AllowScreenWakeLocks) {
   policy.set_battery_idle_action(
       power_manager_client_->policy().battery_idle_action());
   policy.set_reason(power_manager_client_->policy().reason());
+  // Spin the run loop to ensure ash sees pref change.
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(GetDebugString(policy),
             GetDebugString(power_manager_client_->policy()));
 }

@@ -3,9 +3,6 @@
 <translationbundle lang="vi">
 <translation id="1002108253973310084">Đã phát hiện một phiên bản giao thức không tương thích. Vui lòng đảm bảo rằng bạn đã cài đặt phiên bản mới nhất của phần mềm trên cả hai máy tính và thử lại.</translation>
 <translation id="1050693411695664090">Kém</translation>
-<translation id="1059802506829356230">• Giao diện mới.
-• Hiệu suất, khả năng phản hồi và độ tin cậy được cải thiện.
-• Hỗ trợ phát âm thanh từ máy tính chạy Windows hoặc Linux.</translation>
 <translation id="1152528166145813711">Chọn…</translation>
 <translation id="1199593201721843963">Tắt kết nối từ xa</translation>
 <translation id="1291443878853470558">Bạn phải bật kết nối từ xa nếu bạn muốn sử dụng Kết nối từ xa trên Chrome để truy cập vào máy tính này.</translation>
@@ -143,10 +140,12 @@ Các máy tính từ xa có bàn phím không phải tiếng Anh-Mỹ có thể 
 <translation id="4145029455188493639">Đã đăng nhập bằng địa chỉ <ph name="EMAIL_ADDRESS" />.</translation>
 <translation id="4155497795971509630">Thiếu một số thành phần bắt buộc. Vui lòng đảm bảo rằng bạn đã cài đặt phiên bản mới nhất của phần mềm và thử lại.</translation>
 <translation id="4156740505453712750">Để bảo vệ quyền truy cập vào máy tính này, vui lòng chọn một mã PIN <ph name="BOLD_START" />ít nhất sáu chữ số<ph name="BOLD_END" />. Mã PIN này sẽ được yêu cầu khi kết nối từ một vị trí khác.</translation>
+<translation id="4169432154993690151">Để chọn ảnh hồ sơ, hãy cho phép Chrome Remote Desktop truy cập vào máy ảnh</translation>
 <translation id="4176825807642096119">Mã truy cập</translation>
 <translation id="4207623512727273241">Vui lòng chạy trình cài đặt trước khi tiếp tục.</translation>
 <translation id="4227991223508142681">Tiện ích cấp phép máy chủ</translation>
 <translation id="4240294130679914010">Trình gỡ cài đặt máy chủ kết nối từ xa trên Chrome</translation>
+<translation id="4249741460382919890">Các sửa lỗi và cải thiện độ ổn định chung.</translation>
 <translation id="4277463233460010382">Máy tính này được định cấu hình để cho phép một hoặc nhiều ứng dụng khách kết nối mà không cần nhập mã PIN.</translation>
 <translation id="4277736576214464567">Mã truy cập không hợp lệ. Vui lòng thử lại.</translation>
 <translation id="4361728918881830843">Để bật kết nối từ xa với một máy tính khác, hãy cài đặt Chrome Remote Desktop trên máy tính đó và nhấp “<ph name="BUTTON_NAME" />”.</translation>
@@ -192,6 +191,7 @@ PC</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (ngoại tuyến)</translation>
 <translation id="5070121137485264635">Máy chủ lưu trữ từ xa yêu cầu bạn xác thực với một trang web của bên thứ ba. Để tiếp tục, bạn phải cấp cho Chrome Remote Desktop thêm quyền truy cập vào địa chỉ sau:</translation>
 <translation id="507204348399810022">Bạn có chắc chắn muốn tắt kết nối từ xa với <ph name="HOSTNAME" /> không?</translation>
+<translation id="5081343395220691640">Không kết nối được với máy chủ: <ph name="ERROR" /></translation>
 <translation id="5156271271724754543">Vui lòng nhập cùng một mã PIN vào cả hai hộp.</translation>
 <translation id="5170982930780719864">Id máy chủ không hợp lệ.</translation>
 <translation id="518094545883702183">Thông tin này chỉ được sử dụng để chẩn đoán sự cố bạn đang báo cáo, chỉ khả dụng đối với người điều tra báo cáo của bạn và được giữ lại tối đa 30 ngày.</translation>
@@ -242,6 +242,7 @@ PC</translation>
 <translation id="6381670701864002291">Vấn đề khác.</translation>
 <translation id="6398765197997659313">Thoát khỏi chế độ toàn màn hình</translation>
 <translation id="6441316101718669559">Tích hợp máy tính để bàn không được hỗ trợ trên nền tảng này. Bạn sẽ vẫn có thể sử dụng ứng dụng nhưng trải nghiệm người dùng sẽ bị giảm.</translation>
+<translation id="6502629188777329097">Truy cập an toàn vào máy tính của bạn</translation>
 <translation id="652218476070540101">Mã PIN cho máy tính này đang được cập nhật…</translation>
 <translation id="6527303717912515753">Chia sẻ</translation>
 <translation id="6541219117979389420">Nhật ký ứng dụng có thể bao gồm thông tin riêng tư, bao gồm danh tính (địa chỉ email) của bạn và tên cũng như thuộc tính của tệp và thư mục trong Google Drive.</translation>
@@ -259,6 +260,7 @@ PC</translation>
 <translation id="6748108480210050150">Từ</translation>
 <translation id="677755392401385740">Máy chủ đã khởi động cho người dùng: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">Xem/chỉnh sửa</translation>
+<translation id="6913710942997637770">Để chọn ảnh hồ sơ, hãy cho phép Chrome Remote Desktop truy cập vào ảnh</translation>
 <translation id="6930242544192836755">Thời lượng</translation>
 <translation id="6939719207673461467">Hiển thị / ẩn bàn phím.</translation>
 <translation id="6944854424004126054">Khôi phục cửa sổ</translation>
@@ -290,6 +292,7 @@ PC</translation>
 <translation id="7672203038394118626">Kết nối từ xa cho máy tính này đã bị tắt.</translation>
 <translation id="7678209621226490279">Gắn vào bên trái</translation>
 <translation id="7693372326588366043">Làm mới danh sách máy chủ</translation>
+<translation id="7714222945760997814">Báo cáo vấn đề này</translation>
 <translation id="7782471917492991422">Vui lòng kiểm tra cài đặt quản lý nguồn máy tính của bạn và đảm bảo rằng máy tính không được định cấu hình để ngủ khi không hoạt động.</translation>
 <translation id="7810127880729796595">Hiển thị số liệu thống kê (kết nối: <ph name="QUALITY" />)</translation>
 <translation id="7836926030608666805">Thiếu một số thành phần bắt buộc. Vui lòng đảm bảo rằng bạn đang chạy phiên bản Chrome mới nhất và thử lại.</translation>

@@ -6,19 +6,19 @@
 #define CHROME_BROWSER_UI_APP_LIST_SEARCH_ANSWER_CARD_ANSWER_CARD_CONTENTS_H_
 
 #include <string>
+
 #include "base/observer_list.h"
+#include "base/unguessable_token.h"
+
+namespace gfx {
+class Size;
+}  // namespace gfx
 
 class GURL;
 
 namespace app_list {
+
 class AnswerCardResult;
-}
-
-namespace views {
-class View;
-}
-
-namespace app_list {
 
 // Abstract source of contents for AnswerCardSearchProvider.
 class AnswerCardContents {
@@ -38,7 +38,9 @@ class AnswerCardContents {
                                      bool has_answer_card,
                                      const std::string& result_title,
                                      const std::string& issued_query) = 0;
-    virtual void DidStopLoading(const AnswerCardContents* source) = 0;
+
+    // Invoked when |source| is ready to be shown.
+    virtual void OnContentsReady(const AnswerCardContents* source) = 0;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(Delegate);
@@ -49,13 +51,19 @@ class AnswerCardContents {
 
   // Loads contents from |url|.
   virtual void LoadURL(const GURL& url) = 0;
-  // Returns the view associated with the contents.
-  virtual views::View* GetView() = 0;
+
+  // Returns the token associated with the contents.
+  virtual const base::UnguessableToken& GetToken() const = 0;
+
+  // Returns the preferred contents size.
+  virtual gfx::Size GetPreferredSize() const = 0;
 
   // Sets the delegate to process contents-related events.
   void SetDelegate(Delegate* delegate);
+
   // Registers a result that will be notified of input events for the view.
   void RegisterResult(AnswerCardResult* result);
+
   // Unregisters a result.
   void UnregisterResult(AnswerCardResult* result);
 

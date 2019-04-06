@@ -4,8 +4,8 @@
 
 #include "content/renderer/service_worker/controller_service_worker_impl.h"
 
-#include "content/common/service_worker/service_worker_utils.h"
 #include "content/renderer/service_worker/service_worker_context_client.h"
+#include "third_party/blink/public/common/service_worker/service_worker_utils.h"
 
 namespace content {
 
@@ -13,7 +13,7 @@ ControllerServiceWorkerImpl::ControllerServiceWorkerImpl(
     mojom::ControllerServiceWorkerRequest request,
     base::WeakPtr<ServiceWorkerContextClient> context_client)
     : context_client_(std::move(context_client)) {
-  CHECK(ServiceWorkerUtils::IsServicificationEnabled());
+  CHECK(blink::ServiceWorkerUtils::IsServicificationEnabled());
   bindings_.AddBinding(this, std::move(request));
 }
 
@@ -25,13 +25,12 @@ void ControllerServiceWorkerImpl::Clone(
 }
 
 void ControllerServiceWorkerImpl::DispatchFetchEvent(
-    const network::ResourceRequest& request,
+    blink::mojom::DispatchFetchEventParamsPtr params,
     mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
     DispatchFetchEventCallback callback) {
   DCHECK(context_client_);
   context_client_->DispatchOrQueueFetchEvent(
-      request, nullptr /* preload_handle */, std::move(response_callback),
-      std::move(callback));
+      std::move(params), std::move(response_callback), std::move(callback));
 }
 
 }  // namespace content

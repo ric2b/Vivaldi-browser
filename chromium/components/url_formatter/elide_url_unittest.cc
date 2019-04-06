@@ -22,11 +22,6 @@
 
 namespace {
 
-enum ElisionMethod {
-  kMethodOriginal,
-  kMethodSimple,
-};
-
 struct Testcase {
   const std::string input;
   const std::string output;
@@ -49,59 +44,18 @@ struct ParsingTestcase {
   const std::vector<UrlComponent> components;
 };
 
-base::string16 FormatAndElideUrlSimple(const GURL& url,
-                                       const gfx::FontList& font_list,
-                                       float available_pixel_width,
-                                       url::Parsed* parsed) {
-  const base::string16 url_string = url_formatter::FormatUrl(
-      url, url_formatter::kFormatUrlOmitDefaults, net::UnescapeRule::SPACES,
-      parsed, nullptr, nullptr);
-  return url_formatter::ElideUrlSimple(url, url_string, font_list,
-                                       available_pixel_width, parsed);
-}
-
-base::string16 Elide(const GURL& url,
-                     const gfx::FontList& font_list,
-                     float available_width,
-                     ElisionMethod method) {
-  switch (method) {
-    case kMethodSimple: {
-      url::Parsed parsed;
-      return FormatAndElideUrlSimple(url, font_list, available_width, &parsed);
-    }
 #if !defined(OS_ANDROID)
-    case kMethodOriginal:
-      return url_formatter::ElideUrl(url, font_list, available_width);
-#endif
-    default:
-      NOTREACHED();
-      return base::string16();
-  }
-}
 
-url::Component* GetComponent(url::Parsed* parsed,
-                             url::Parsed::ComponentType type) {
-  switch (type) {
-    case url::Parsed::SCHEME:
-      return &parsed->scheme;
-    case url::Parsed::USERNAME:
-      return &parsed->username;
-    case url::Parsed::PASSWORD:
-      return &parsed->password;
-    case url::Parsed::HOST:
-      return &parsed->host;
-    case url::Parsed::PORT:
-      return &parsed->port;
-    case url::Parsed::PATH:
-      return &parsed->path;
-    case url::Parsed::QUERY:
-      return &parsed->query;
-    case url::Parsed::REF:
-      return &parsed->ref;
-    default:
-      NOTREACHED();
-      return nullptr;
-  }
+// Returns the width of a utf8 or utf16 string using the BROWSER typesetter and
+// default UI font, or the provided |font_list|.
+float GetWidth(const std::string& utf8,
+               const gfx::FontList& font_list = gfx::FontList()) {
+  return gfx::GetStringWidthF(base::UTF8ToUTF16(utf8), font_list,
+                              gfx::Typesetter::BROWSER);
+}
+float GetWidth(const base::string16& utf16,
+               const gfx::FontList& font_list = gfx::FontList()) {
+  return gfx::GetStringWidthF(utf16, font_list, gfx::Typesetter::BROWSER);
 }
 
 // Verify that one or more URLs passes through an explicit sequence of elided
@@ -120,8 +74,7 @@ url::Component* GetComponent(url::Parsed* parsed,
 // google.com/in...   <- Must match.
 //
 void RunProgressiveElisionTest(
-    const std::vector<ProgressiveTestcase>& testcases,
-    ElisionMethod method) {
+    const std::vector<ProgressiveTestcase>& testcases) {
   const gfx::FontList font_list;
   for (const auto& testcase : testcases) {
     SCOPED_TRACE("Eliding " + testcase.input);
@@ -130,10 +83,8 @@ void RunProgressiveElisionTest(
     // Occasionally, a parsed URL can grow in length before elision, such as
     // when parsing a Windows file path with missing slashes.
     ASSERT_FALSE(testcase.output.empty());
-    float width = std::max(
-        gfx::GetStringWidthF(base::UTF8ToUTF16(testcase.input), font_list),
-        gfx::GetStringWidthF(base::UTF8ToUTF16(testcase.output.front()),
-                             font_list));
+    float width = std::max(GetWidth(testcase.input, font_list),
+                           GetWidth(testcase.output.front(), font_list));
 
     // Ideally, this test would iterate through all available field widths on a
     // per-pixel basis, but this is slow. Instead, compute the next input field
@@ -146,7 +97,8 @@ void RunProgressiveElisionTest(
     for (size_t i = 0; i < testcase.output.size(); i++) {
       const auto& expected = testcase.output[i];
       base::string16 expected_utf16 = base::UTF8ToUTF16(expected);
-      base::string16 elided = Elide(url, font_list, width, method);
+      base::string16 elided = url_formatter::ElideUrl(url, font_list, width,
+                                                      gfx::Typesetter::BROWSER);
       if (expected_utf16 != elided) {
         if (i > 0 && i < testcase.output.size() - 1 &&
             mismatches < kMaxConsecutiveMismatches) {
@@ -157,7 +109,7 @@ void RunProgressiveElisionTest(
         break;
       }
       mismatches = 0;
-      float new_width = gfx::GetStringWidthF(elided, font_list);
+      float new_width = GetWidth(elided, font_list);
       // Elision rounds fractional available widths up.
       EXPECT_LE(new_width, std::ceil(width)) << " at " << elided;
       width = new_width - 1.0f;
@@ -165,28 +117,20 @@ void RunProgressiveElisionTest(
   }
 }
 
-#if !defined(OS_ANDROID)
-
 void RunElisionTest(const std::vector<Testcase>& testcases) {
   const gfx::FontList font_list;
   for (const auto& testcase : testcases) {
     SCOPED_TRACE("Eliding " + testcase.input);
     const GURL url(testcase.input);
-    const float available_width =
-        gfx::GetStringWidthF(base::UTF8ToUTF16(testcase.output), font_list);
+    const float available_width = GetWidth(testcase.output, font_list);
     EXPECT_EQ(base::UTF8ToUTF16(testcase.output),
-              url_formatter::ElideUrl(url, font_list, available_width));
+              url_formatter::ElideUrl(url, font_list, available_width,
+                                      gfx::Typesetter::BROWSER));
   }
 }
 
 // Test eliding of commonplace URLs.
-// Disabled on Mac for the typesetter migration. http://crbug.com/803354.
-#if defined(OS_MACOSX)
-#define MAYBE_TestGeneralEliding DISABLED_TestGeneralEliding
-#else
-#define MAYBE_TestGeneralEliding TestGeneralEliding
-#endif
-TEST(TextEliderTest, MAYBE_TestGeneralEliding) {
+TEST(TextEliderTest, TestGeneralEliding) {
   const std::string kEllipsisStr(gfx::kEllipsis);
   const std::vector<ProgressiveTestcase> progressive_testcases = {
       // Elide a non-www URL (www URLs are handled differently). In this first
@@ -270,7 +214,7 @@ TEST(TextEliderTest, MAYBE_TestGeneralEliding) {
            /* clang-format on */
        }},
   };
-  RunProgressiveElisionTest(progressive_testcases, kMethodOriginal);
+  RunProgressiveElisionTest(progressive_testcases);
 }
 
 // When there is very little space available, the elision code will shorten
@@ -283,34 +227,32 @@ TEST(TextEliderTest, TestTrailingEllipsisSlashEllipsisHack) {
   // Very little space, would cause double ellipsis.
   gfx::FontList font_list;
   GURL url("http://battersbox.com/directory/foo/peter_paul_and_mary.html");
-  float available_width = gfx::GetStringWidthF(
-      base::UTF8ToUTF16("battersbox.com/" + kEllipsisStr + "/" + kEllipsisStr),
-      font_list);
+  float available_width = GetWidth(
+      "battersbox.com/" + kEllipsisStr + "/" + kEllipsisStr, font_list);
 
   // Create the expected string, after elision. Depending on font size, the
   // directory might become /dir... or /di... or/d... - it never should be
   // shorter than that. (If it is, the font considers d... to be longer
   // than .../... -  that should never happen).
-  ASSERT_GT(
-      gfx::GetStringWidthF(base::UTF8ToUTF16(kEllipsisStr + "/" + kEllipsisStr),
-                           font_list),
-      gfx::GetStringWidthF(base::UTF8ToUTF16("d" + kEllipsisStr), font_list));
+  ASSERT_GT(GetWidth(kEllipsisStr + "/" + kEllipsisStr, font_list),
+            GetWidth("d" + kEllipsisStr, font_list));
   GURL long_url("http://battersbox.com/directorynameisreallylongtoforcetrunc");
   base::string16 expected = url_formatter::ElideUrl(
-      long_url, font_list, available_width);
+      long_url, font_list, available_width, gfx::Typesetter::BROWSER);
   // Ensure that the expected result still contains part of the directory name.
   ASSERT_GT(expected.length(), std::string("battersbox.com/d").length());
-  EXPECT_EQ(expected, url_formatter::ElideUrl(url, font_list, available_width));
+  EXPECT_EQ(expected, url_formatter::ElideUrl(url, font_list, available_width,
+                                              gfx::Typesetter::BROWSER));
 
   // Regression test for https://crbug.com/756717. An empty path, eliding to a
   // width in between the full domain ("www.angelfire.lycos.com") and a bit
   // longer than the ETLD+1 ("…lycos.com…/…UV"). This previously crashed due to
   // the path being empty.
   url = GURL("http://www.angelfire.lycos.com/");
-  available_width = gfx::GetStringWidthF(
-      base::UTF8ToUTF16(kEllipsisStr + "angelfire.lycos.com"), font_list);
+  available_width = GetWidth(kEllipsisStr + "angelfire.lycos.com", font_list);
   EXPECT_EQ(base::UTF8ToUTF16(kEllipsisStr + "lycos.com"),
-            url_formatter::ElideUrl(url, font_list, available_width));
+            url_formatter::ElideUrl(url, font_list, available_width,
+                                    gfx::Typesetter::BROWSER));
 
   // More space available - elide directories, partially elide filename.
   const std::vector<Testcase> testcases = {
@@ -369,13 +311,7 @@ TEST(TextEliderTest, TestElisionSpecialCases) {
 }
 
 // Test eliding of file: URLs.
-// Disabled on Mac for the typesetter migration. http://crbug.com/803354.
-#if defined(OS_MACOSX)
-#define MAYBE_TestFileURLEliding DISABLED_TestFileURLEliding
-#else
-#define MAYBE_TestFileURLEliding TestFileURLEliding
-#endif
-TEST(TextEliderTest, MAYBE_TestFileURLEliding) {
+TEST(TextEliderTest, TestFileURLEliding) {
   const std::string kEllipsisStr(gfx::kEllipsis);
   const std::vector<ProgressiveTestcase> progressive_testcases = {
     {"file:///C:/path1/path2/path3/filename",
@@ -416,7 +352,7 @@ TEST(TextEliderTest, MAYBE_TestFileURLEliding) {
      }},
   };
 
-  RunProgressiveElisionTest(progressive_testcases, kMethodOriginal);
+  RunProgressiveElisionTest(progressive_testcases);
 
   const std::vector<Testcase> testcases = {
       // Eliding file URLs with nothing after the ':' shouldn't crash.
@@ -446,6 +382,8 @@ TEST(TextEliderTest, TestHostEliding) {
   };
 
   for (size_t i = 0; i < arraysize(testcases); ++i) {
+    // Note this does not use GetWidth(), so typesetting will be done with
+    // gfx::Typesetter::DEFAULT. ElideHost() supports either typesetter on Mac.
     const float available_width = gfx::GetStringWidthF(
         base::UTF8ToUTF16(testcases[i].output), gfx::FontList());
     EXPECT_EQ(base::UTF8ToUTF16(testcases[i].output),
@@ -753,169 +691,6 @@ TEST(TextEliderTest, FormatOriginForSecurityDisplay) {
       url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC);
   EXPECT_EQ(base::string16(), formatted_omit_scheme)
       << "Explicitly test the url::Origin which takes an empty, invalid URL";
-}
-
-// Disabled on Mac for the typesetter migration. http://crbug.com/803354.
-#if defined(OS_MACOSX)
-#define MAYBE_TestSimpleElisionMethod DISABLED_TestSimpleElisionMethod
-#else
-#define MAYBE_TestSimpleElisionMethod TestSimpleElisionMethod
-#endif
-TEST(TextEliderTest, MAYBE_TestSimpleElisionMethod) {
-  const std::string kEllipsisStr(gfx::kEllipsis);
-  const std::vector<ProgressiveTestcase> testcases = {
-      {"https://www.abc.com/def/",
-       {
-           /* clang-format off */
-           {"https://www.abc.com/def/"},
-           {"https://www.abc.com/d" + kEllipsisStr},
-           {"https://www.abc.com/" + kEllipsisStr},
-           {"www.abc.com/def/"},
-           {"www.abc.com/d" + kEllipsisStr},
-           {"www.abc.com/" + kEllipsisStr},
-           {kEllipsisStr + "ww.abc.com/" + kEllipsisStr},
-           {kEllipsisStr + "w.abc.com/" + kEllipsisStr},
-           {kEllipsisStr + ".abc.com/" + kEllipsisStr},
-           {kEllipsisStr + "abc.com/" + kEllipsisStr},
-           {kEllipsisStr + "bc.com/" + kEllipsisStr},
-           {kEllipsisStr + "c.com/" + kEllipsisStr},
-           {kEllipsisStr + ".com/" + kEllipsisStr},
-           {kEllipsisStr + "com/" + kEllipsisStr},
-           {kEllipsisStr + "om/" + kEllipsisStr},
-           {kEllipsisStr + "m/" + kEllipsisStr},
-           {kEllipsisStr + "/" + kEllipsisStr},
-           {kEllipsisStr},
-           {""},
-           /* clang-format on */
-       }},
-      {"file://fs/file",
-       {
-           /* clang-format off */
-           "file://fs/file",
-           "file://fs/fi" + kEllipsisStr,
-           "file://fs/f" + kEllipsisStr,
-           "file://fs/" + kEllipsisStr,
-           "file://fs" + kEllipsisStr,
-           "file://f" + kEllipsisStr,
-           "file://" + kEllipsisStr,
-           "file:/" + kEllipsisStr,
-           "file:" + kEllipsisStr,
-           "file" + kEllipsisStr,
-           "fil" + kEllipsisStr,
-           "fi" + kEllipsisStr,
-           "f" + kEllipsisStr,
-           kEllipsisStr,
-           "",
-           /* clang-format on */
-       }},
-  };
-  RunProgressiveElisionTest(testcases, kMethodSimple);
-}
-
-// Verify that the secure elision method returns URL component data that
-// correctly represents the elided URL.
-void RunElisionParsingTest(const std::vector<ParsingTestcase>& testcases) {
-  const gfx::FontList font_list;
-  for (const auto& testcase : testcases) {
-    SCOPED_TRACE(testcase.input + " to " + testcase.output);
-
-    const GURL url(testcase.input);
-    const float available_width =
-        gfx::GetStringWidthF(base::UTF8ToUTF16(testcase.output), font_list);
-
-    url::Parsed parsed;
-    auto elided =
-        FormatAndElideUrlSimple(url, font_list, available_width, &parsed);
-    EXPECT_EQ(base::UTF8ToUTF16(testcase.output), elided);
-
-    // Build an expected Parsed struct from the sparse test expectations.
-    url::Parsed expected;
-    for (const auto& expectation : testcase.components) {
-      url::Component* component = GetComponent(&expected, expectation.type);
-      component->begin = expectation.begin;
-      component->len = expectation.len;
-    }
-
-    const std::vector<url::Parsed::ComponentType> kComponents = {
-        url::Parsed::SCHEME, url::Parsed::USERNAME, url::Parsed::PASSWORD,
-        url::Parsed::HOST,   url::Parsed::PORT,     url::Parsed::PATH,
-        url::Parsed::QUERY,  url::Parsed::REF,
-    };
-    for (const auto& type : kComponents) {
-      EXPECT_EQ(GetComponent(&expected, type)->begin,
-                GetComponent(&parsed, type)->begin)
-          << " in component " << type;
-      EXPECT_EQ(GetComponent(&expected, type)->len,
-                GetComponent(&parsed, type)->len)
-          << " in component " << type;
-    }
-  }
-}
-
-// Verify that during elision, the parsed URL components are properly modified.
-// Disabled on Mac for the typesetter migration. http://crbug.com/803354.
-#if defined(OS_MACOSX)
-#define MAYBE_TestElisionParsingAdjustments \
-  DISABLED_TestElisionParsingAdjustments
-#else
-#define MAYBE_TestElisionParsingAdjustments TestElisionParsingAdjustments
-#endif
-TEST(TextEliderTest, MAYBE_TestElisionParsingAdjustments) {
-  const std::string kEllipsisStr(gfx::kEllipsis);
-  const std::vector<ParsingTestcase> testcases = {
-      // HTTPS with path.
-      {"https://www.google.com/intl/en/ads/",
-       "https://www.google.com/intl/en/ads/",
-       {{url::Parsed::ComponentType::SCHEME, 0, 5},
-        {url::Parsed::ComponentType::HOST, 8, 14},
-        {url::Parsed::ComponentType::PATH, 22, 13}}},
-      {"https://www.google.com/intl/en/ads/",
-       "https://www.google.com/intl/en/a" + kEllipsisStr,
-       {{url::Parsed::ComponentType::SCHEME, 0, 5},
-        {url::Parsed::ComponentType::HOST, 8, 14},
-        {url::Parsed::ComponentType::PATH, 22, 11}}},
-      {"https://www.google.com/intl/en/ads/",
-       "https://www.google.com/" + kEllipsisStr,
-       {{url::Parsed::ComponentType::SCHEME, 0, 5},
-        {url::Parsed::ComponentType::HOST, 8, 14},
-        {url::Parsed::ComponentType::PATH, 22, 2}}},
-      {"https://www.google.com/intl/en/ads/",
-       kEllipsisStr + "google.com/" + kEllipsisStr,
-       {{url::Parsed::ComponentType::HOST, 0, 11},
-        {url::Parsed::ComponentType::PATH, 11, 2}}},
-      {"https://www.google.com/intl/en/ads/",
-       kEllipsisStr,
-       {{url::Parsed::ComponentType::PATH, 0, 1}}},
-      // HTTPS with no path.
-      {"https://www.google.com/",
-       "www.google.com",
-       {{url::Parsed::ComponentType::HOST, 0, 14}}},
-      {"https://www.google.com/",
-       kEllipsisStr,
-       {{url::Parsed::ComponentType::HOST, 0, 1}}},
-      // HTTP with no path.
-      {"http://www.google.com/",
-       "www.google.com",
-       {{url::Parsed::ComponentType::HOST, 0, 14}}},
-      // File URLs.
-      {"file:///C:/path1/path2",
-       "file:///C:/path1/" + kEllipsisStr,
-       {{url::Parsed::ComponentType::SCHEME, 0, 4},
-        {url::Parsed::ComponentType::PATH, 7, 11}}},
-      {"file:///C:/path1/path2",
-       "fi" + kEllipsisStr,
-       {{url::Parsed::ComponentType::SCHEME, 0, 3}}},
-      {"file:///C:/path1/path2",
-       kEllipsisStr,
-       {{url::Parsed::ComponentType::SCHEME, 0, 1}}},
-      // RTL URL.
-      {"http://127.0.0.1/ا/http://attack.com‬",
-       kEllipsisStr + "7.0.0.1/" + kEllipsisStr,
-       {{url::Parsed::ComponentType::HOST, 0, 8},
-        {url::Parsed::ComponentType::PATH, 8, 2}}},
-  };
-
-  RunElisionParsingTest(testcases);
 }
 
 }  // namespace

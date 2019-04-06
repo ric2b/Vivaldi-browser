@@ -6,8 +6,8 @@
 
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/message_center/notification_tray.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/web_notification/web_notification_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
@@ -15,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/devicetype_utils.h"
@@ -25,8 +26,8 @@
 #include "ui/display/manager/display_manager_utilities.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/message_center/message_center.h"
-#include "ui/message_center/notification.h"
 #include "ui/message_center/notification_list.h"
+#include "ui/message_center/public/cpp/notification.h"
 #include "ui/views/controls/label.h"
 
 namespace ash {
@@ -39,11 +40,11 @@ class ScreenLayoutObserverTest : public AshTestBase {
  protected:
   void SetUp() override {
     AshTestBase::SetUp();
-    WebNotificationTray::DisableAnimationsForTest(true);
+    NotificationTray::DisableAnimationsForTest(true);
   }
 
   void TearDown() override {
-    WebNotificationTray::DisableAnimationsForTest(false);
+    NotificationTray::DisableAnimationsForTest(false);
     AshTestBase::TearDown();
   }
 
@@ -51,6 +52,7 @@ class ScreenLayoutObserverTest : public AshTestBase {
   void CheckUpdate();
 
   void CloseNotification();
+  void ClickNotification();
   base::string16 GetDisplayNotificationText() const;
   base::string16 GetDisplayNotificationAdditionalText() const;
 
@@ -80,6 +82,11 @@ void ScreenLayoutObserverTest::CloseNotification() {
   message_center::MessageCenter::Get()->RemoveNotification(
       ScreenLayoutObserver::kNotificationId, false);
   RunAllPendingInMessageLoop();
+}
+
+void ScreenLayoutObserverTest::ClickNotification() {
+  const message_center::Notification* notification = GetDisplayNotification();
+  notification->delegate()->Click(base::nullopt, base::nullopt);
 }
 
 base::string16 ScreenLayoutObserverTest::GetDisplayNotificationText() const {
@@ -153,6 +160,25 @@ class ScreenLayoutObserverTestMultiMirroring
   DISALLOW_COPY_AND_ASSIGN(ScreenLayoutObserverTestMultiMirroring);
 };
 
+class ScreenLayoutObserverTestMultiMirroringWithUiScale
+    : public ScreenLayoutObserverTestMultiMirroring {
+ public:
+  ScreenLayoutObserverTestMultiMirroringWithUiScale() = default;
+  ~ScreenLayoutObserverTestMultiMirroringWithUiScale() override = default;
+
+  // ScreenLayoutObserverTestMultiMirroring
+  void SetUp() override {
+    scoped_feature_list_.InitAndDisableFeature(
+        features::kEnableDisplayZoomSetting);
+    ScreenLayoutObserverTestMultiMirroring::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScreenLayoutObserverTestMultiMirroringWithUiScale);
+};
+
 // Instantiate the boolean which is used to enable/disable multi-mirroring in
 // the parameterized tests.
 INSTANTIATE_TEST_CASE_P(,
@@ -184,28 +210,6 @@ TEST_P(ScreenLayoutObserverTestMultiMirroring, DisplayNotifications) {
                     IDS_ASH_STATUS_TRAY_DISPLAY_STANDARD_ORIENTATION)),
             GetDisplayNotificationAdditionalText());
   EXPECT_TRUE(GetDisplayNotificationText().empty());
-
-  // UI-scale
-  CloseNotification();
-  UpdateDisplay("400x400@1.5");
-  EXPECT_EQ(l10n_util::GetStringFUTF16(
-                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED,
-                GetFirstDisplayName(), base::UTF8ToUTF16("600x600")),
-            GetDisplayNotificationAdditionalText());
-  EXPECT_EQ(l10n_util::GetStringUTF16(
-                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED_TITLE),
-            GetDisplayNotificationText());
-
-  // UI-scale to 1.0
-  CloseNotification();
-  UpdateDisplay("400x400");
-  EXPECT_EQ(l10n_util::GetStringFUTF16(
-                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED,
-                GetFirstDisplayName(), base::UTF8ToUTF16("400x400")),
-            GetDisplayNotificationAdditionalText());
-  EXPECT_EQ(l10n_util::GetStringUTF16(
-                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED_TITLE),
-            GetDisplayNotificationText());
 
   // No-update
   CloseNotification();
@@ -272,16 +276,6 @@ TEST_P(ScreenLayoutObserverTestMultiMirroring, DisplayNotifications) {
   }
   EXPECT_TRUE(GetDisplayNotificationAdditionalText().empty());
 
-  // Resize the first display.
-  UpdateDisplay("400x400@1.5,200x200");
-  EXPECT_EQ(l10n_util::GetStringFUTF16(
-                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED,
-                GetFirstDisplayName(), base::UTF8ToUTF16("600x600")),
-            GetDisplayNotificationAdditionalText());
-  EXPECT_EQ(l10n_util::GetStringUTF16(
-                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED_TITLE),
-            GetDisplayNotificationText());
-
   // Rotate the second.
   UpdateDisplay("400x400@1.5,200x200/r");
   EXPECT_EQ(l10n_util::GetStringFUTF16(
@@ -297,6 +291,42 @@ TEST_P(ScreenLayoutObserverTestMultiMirroring, DisplayNotifications) {
       display_manager()->GetSecondaryDisplay().id());
   UpdateDisplay("400x400@1.5");
   EXPECT_TRUE(GetDisplayNotificationText().empty());
+}
+
+TEST_P(ScreenLayoutObserverTestMultiMirroringWithUiScale,
+       DisplayNotifications) {
+  Shell::Get()->screen_layout_observer()->set_show_notifications_for_testing(
+      true);
+
+  UpdateDisplay("400x400@1.5");
+  EXPECT_EQ(l10n_util::GetStringFUTF16(
+                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED,
+                GetFirstDisplayName(), base::UTF8ToUTF16("600x600")),
+            GetDisplayNotificationAdditionalText());
+  EXPECT_EQ(l10n_util::GetStringUTF16(
+                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED_TITLE),
+            GetDisplayNotificationText());
+
+  // UI-scale to 1.0
+  CloseNotification();
+  UpdateDisplay("400x400");
+  EXPECT_EQ(l10n_util::GetStringFUTF16(
+                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED,
+                GetFirstDisplayName(), base::UTF8ToUTF16("400x400")),
+            GetDisplayNotificationAdditionalText());
+  EXPECT_EQ(l10n_util::GetStringUTF16(
+                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED_TITLE),
+            GetDisplayNotificationText());
+
+  // Resize the first display.
+  UpdateDisplay("400x400@1.5,200x200");
+  EXPECT_EQ(l10n_util::GetStringFUTF16(
+                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED,
+                GetFirstDisplayName(), base::UTF8ToUTF16("600x600")),
+            GetDisplayNotificationAdditionalText());
+  EXPECT_EQ(l10n_util::GetStringUTF16(
+                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED_TITLE),
+            GetDisplayNotificationText());
 }
 
 // Zooming in Unified Mode results in display size changes rather than changes
@@ -587,14 +617,14 @@ TEST_F(ScreenLayoutObserverTest, RotationNotification) {
   // The accelerometer source.
   display_manager()->SetDisplayRotation(
       primary_id, display::Display::ROTATE_90,
-      display::Display::ROTATION_SOURCE_ACCELEROMETER);
+      display::Display::RotationSource::ACCELEROMETER);
   EXPECT_TRUE(GetDisplayNotificationText().empty());
   EXPECT_TRUE(GetDisplayNotificationAdditionalText().empty());
 
   // The user source.
   display_manager()->SetDisplayRotation(primary_id,
                                         display::Display::ROTATE_180,
-                                        display::Display::ROTATION_SOURCE_USER);
+                                        display::Display::RotationSource::USER);
   EXPECT_EQ(l10n_util::GetStringFUTF16(
                 IDS_ASH_STATUS_TRAY_DISPLAY_ROTATED, GetFirstDisplayName(),
                 l10n_util::GetStringUTF16(
@@ -604,7 +634,7 @@ TEST_F(ScreenLayoutObserverTest, RotationNotification) {
   // The active source.
   display_manager()->SetDisplayRotation(
       primary_id, display::Display::ROTATE_270,
-      display::Display::ROTATION_SOURCE_ACTIVE);
+      display::Display::RotationSource::ACTIVE);
   EXPECT_EQ(l10n_util::GetStringFUTF16(
                 IDS_ASH_STATUS_TRAY_DISPLAY_ROTATED, GetFirstDisplayName(),
                 l10n_util::GetStringUTF16(
@@ -617,13 +647,13 @@ TEST_F(ScreenLayoutObserverTest, RotationNotification) {
   // The accelerometer source.
   display_manager()->SetDisplayRotation(
       primary_id, display::Display::ROTATE_90,
-      display::Display::ROTATION_SOURCE_ACCELEROMETER);
+      display::Display::RotationSource::ACCELEROMETER);
   EXPECT_TRUE(GetDisplayNotificationText().empty());
 
   // The user source.
   display_manager()->SetDisplayRotation(primary_id,
                                         display::Display::ROTATE_180,
-                                        display::Display::ROTATION_SOURCE_USER);
+                                        display::Display::RotationSource::USER);
   EXPECT_EQ(l10n_util::GetStringFUTF16(
                 IDS_ASH_STATUS_TRAY_DISPLAY_ROTATED, GetFirstDisplayName(),
                 l10n_util::GetStringUTF16(
@@ -633,7 +663,7 @@ TEST_F(ScreenLayoutObserverTest, RotationNotification) {
   // The active source.
   display_manager()->SetDisplayRotation(
       primary_id, display::Display::ROTATE_270,
-      display::Display::ROTATION_SOURCE_ACTIVE);
+      display::Display::RotationSource::ACTIVE);
   EXPECT_TRUE(GetDisplayNotificationText().empty());
 }
 
@@ -704,6 +734,19 @@ TEST_F(ScreenLayoutObserverTest, MirrorModeAddOrRemoveDisplayMessage) {
   display_manager()->OnNativeDisplaysChanged(display_info_list);
   EXPECT_TRUE(GetDisplayNotificationText().empty());
   EXPECT_TRUE(display_manager()->IsInMirrorMode());
+}
+
+TEST_F(ScreenLayoutObserverTest, ClickNotification) {
+  Shell::Get()->screen_layout_observer()->set_show_notifications_for_testing(
+      true);
+
+  // Create notification.
+  UpdateDisplay("400x400/r");
+  EXPECT_FALSE(GetDisplayNotificationAdditionalText().empty());
+
+  // Click notification.
+  ClickNotification();
+  EXPECT_TRUE(GetDisplayNotificationAdditionalText().empty());
 }
 
 }  // namespace ash

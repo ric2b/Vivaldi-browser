@@ -20,7 +20,6 @@
 #include "components/sync/base/proto_value_ptr.h"
 #include "components/sync/base/time.h"
 #include "components/sync/base/unique_position.h"
-#include "components/sync/protocol/attachments.pb.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/syncable/metahandle_set.h"
 #include "components/sync/syncable/syncable_id.h"
@@ -162,23 +161,14 @@ enum UniquePositionField {
 
 enum {
   UNIQUE_POSITION_FIELDS_COUNT =
-      UNIQUE_POSITION_FIELDS_END - UNIQUE_POSITION_FIELDS_BEGIN,
-  ATTACHMENT_METADATA_FIELDS_BEGIN = UNIQUE_POSITION_FIELDS_END
-};
-
-enum AttachmentMetadataField {
-  ATTACHMENT_METADATA = ATTACHMENT_METADATA_FIELDS_BEGIN,
-  SERVER_ATTACHMENT_METADATA,
-  ATTACHMENT_METADATA_FIELDS_END
+      UNIQUE_POSITION_FIELDS_END - UNIQUE_POSITION_FIELDS_BEGIN
 };
 
 enum {
-  ATTACHMENT_METADATA_FIELDS_COUNT =
-      ATTACHMENT_METADATA_FIELDS_END - ATTACHMENT_METADATA_FIELDS_BEGIN,
   // If FIELD_COUNT is changed then g_metas_columns must be updated.
-  FIELD_COUNT = ATTACHMENT_METADATA_FIELDS_END - BEGIN_FIELDS,
+  FIELD_COUNT = UNIQUE_POSITION_FIELDS_END - BEGIN_FIELDS,
   // Past this point we have temporaries, stored in memory only.
-  BEGIN_TEMPS = ATTACHMENT_METADATA_FIELDS_END,
+  BEGIN_TEMPS = UNIQUE_POSITION_FIELDS_END,
   BIT_TEMPS_BEGIN = BEGIN_TEMPS,
 };
 
@@ -198,7 +188,6 @@ enum { BIT_TEMPS_COUNT = BIT_TEMPS_END - BIT_TEMPS_BEGIN };
 struct EntryKernel {
  private:
   using EntitySpecificsPtr = ProtoValuePtr<sync_pb::EntitySpecifics>;
-  using AttachmentMetadataPtr = ProtoValuePtr<sync_pb::AttachmentMetadata>;
 
   std::string string_fields[STRING_FIELDS_COUNT];
   EntitySpecificsPtr specifics_fields[PROTO_FIELDS_COUNT];
@@ -206,8 +195,6 @@ struct EntryKernel {
   base::Time time_fields[TIME_FIELDS_COUNT];
   Id id_fields[ID_FIELDS_COUNT];
   UniquePosition unique_position_fields[UNIQUE_POSITION_FIELDS_COUNT];
-  AttachmentMetadataPtr
-      attachment_metadata_fields[ATTACHMENT_METADATA_FIELDS_COUNT];
   std::bitset<BIT_FIELDS_COUNT> bit_fields;
   std::bitset<BIT_TEMPS_COUNT> bit_temps;
 
@@ -280,11 +267,6 @@ struct EntryKernel {
   inline void put(UniquePositionField field, const UniquePosition& value) {
     unique_position_fields[field - UNIQUE_POSITION_FIELDS_BEGIN] = value;
   }
-  inline void put(AttachmentMetadataField field,
-                  const sync_pb::AttachmentMetadata& value) {
-    attachment_metadata_fields[field - ATTACHMENT_METADATA_FIELDS_BEGIN]
-        .set_value(value);
-  }
   inline void put(BitTemp field, bool value) {
     bit_temps[field - BIT_TEMPS_BEGIN] = value;
   }
@@ -323,11 +305,6 @@ struct EntryKernel {
   inline const UniquePosition& ref(UniquePositionField field) const {
     return unique_position_fields[field - UNIQUE_POSITION_FIELDS_BEGIN];
   }
-  inline const sync_pb::AttachmentMetadata& ref(
-      AttachmentMetadataField field) const {
-    return attachment_metadata_fields[field - ATTACHMENT_METADATA_FIELDS_BEGIN]
-        .value();
-  }
   inline bool ref(BitTemp field) const {
     return bit_temps[field - BIT_TEMPS_BEGIN];
   }
@@ -348,24 +325,11 @@ struct EntryKernel {
     specifics_fields[field - PROTO_FIELDS_BEGIN].load(blob, length);
   }
 
-  inline void load(AttachmentMetadataField field,
-                   const void* blob,
-                   int length) {
-    attachment_metadata_fields[field - ATTACHMENT_METADATA_FIELDS_BEGIN].load(
-        blob, length);
-  }
-
   // Sharing data methods for ::google::protobuf::MessageLite derived types.
   inline void copy(ProtoField src, ProtoField dest) {
     DCHECK_NE(src, dest);
     specifics_fields[dest - PROTO_FIELDS_BEGIN] =
         specifics_fields[src - PROTO_FIELDS_BEGIN];
-  }
-
-  inline void copy(AttachmentMetadataField src, AttachmentMetadataField dest) {
-    DCHECK_NE(src, dest);
-    attachment_metadata_fields[dest - ATTACHMENT_METADATA_FIELDS_BEGIN] =
-        attachment_metadata_fields[src - ATTACHMENT_METADATA_FIELDS_BEGIN];
   }
 
   ModelType GetModelType() const;

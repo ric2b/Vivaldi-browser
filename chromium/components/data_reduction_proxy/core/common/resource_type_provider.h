@@ -23,13 +23,20 @@ class ResourceTypeProvider {
   enum ContentType {
     CONTENT_TYPE_UNKNOWN = 0,
     CONTENT_TYPE_MEDIA = 1,
-    CONTENT_TYPE_MAX = 2,
+    CONTENT_TYPE_MAIN_FRAME = 2,
+    CONTENT_TYPE_MAX = 3,
   };
   virtual ~ResourceTypeProvider() {}
 
   virtual void SetContentType(const net::URLRequest& request) = 0;
 
   virtual ContentType GetContentType(const GURL& url) const = 0;
+
+  // Returns if the request is initiated via non-content that cannot be scoped
+  // to a page load. These ResourceInfo-less requests can be issued by chrome
+  // services, service-worker, Downloads, etc.
+  virtual bool IsNonContentInitiatedRequest(
+      const net::URLRequest& request) const = 0;
 
  protected:
   ResourceTypeProvider() {}

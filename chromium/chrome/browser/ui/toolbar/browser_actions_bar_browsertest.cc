@@ -10,32 +10,42 @@
 #include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
-#include "chrome/browser/extensions/browser_action_test_util.h"
 #include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
+#include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/extensions/browser_action_test_util.h"
 #include "chrome/browser/ui/extensions/extension_action_view_controller.h"
+#include "chrome/browser/ui/extensions/icon_with_badge_image_source.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/test/test_browser_ui.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_bar.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/test/base/ui_test_utils.h"
 #include "components/crx_file/id_util.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/value_builder.h"
 #include "extensions/test/extension_test_message_listener.h"
+#include "extensions/test/test_extension_dir.h"
+#include "net/dns/mock_host_resolver.h"
 
 namespace {
 
@@ -68,19 +78,19 @@ BrowserActionsBarBrowserTest::~BrowserActionsBarBrowserTest() {
 
 void BrowserActionsBarBrowserTest::SetUpCommandLine(
     base::CommandLine* command_line) {
-  ExtensionBrowserTest::SetUpCommandLine(command_line);
+  extensions::ExtensionBrowserTest::SetUpCommandLine(command_line);
   ToolbarActionsBar::disable_animations_for_testing_ = true;
 }
 
 void BrowserActionsBarBrowserTest::SetUpOnMainThread() {
-  ExtensionBrowserTest::SetUpOnMainThread();
-  browser_actions_bar_.reset(new BrowserActionTestUtil(browser()));
+  extensions::ExtensionBrowserTest::SetUpOnMainThread();
+  browser_actions_bar_ = BrowserActionTestUtil::Create(browser());
   toolbar_model_ = ToolbarActionsModel::Get(profile());
 }
 
 void BrowserActionsBarBrowserTest::TearDownOnMainThread() {
   ToolbarActionsBar::disable_animations_for_testing_ = false;
-  ExtensionBrowserTest::TearDownOnMainThread();
+  extensions::ExtensionBrowserTest::TearDownOnMainThread();
 }
 
 void BrowserActionsBarBrowserTest::LoadExtensions() {
@@ -281,7 +291,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
   ASSERT_TRUE(action);
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  int tab_id = SessionTabHelper::IdForTab(web_contents);
+  int tab_id = SessionTabHelper::IdForTab(web_contents).id();
   action->SetIsVisible(tab_id, true);
   extensions::ExtensionActionAPI* extension_action_api =
       extensions::ExtensionActionAPI::Get(profile());
@@ -508,7 +518,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest,
       LoadExtension(test_data_dir_.AppendASCII("trigger_actions").
                         AppendASCII("page_action_popup"));
   ASSERT_TRUE(page_action_extension);
-  listener.WaitUntilSatisfied();
+  EXPECT_TRUE(listener.WaitUntilSatisfied());
   EXPECT_EQ(1, browser_actions_bar()->VisibleBrowserActions());
   EXPECT_EQ(page_action_extension->id(),
             browser_actions_bar()->GetExtensionId(0));
@@ -550,7 +560,7 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarBrowserTest, RemovePoppedOutAction) {
   EXPECT_EQ(3, browser_actions_bar()->NumberOfBrowserActions());
 
   // Pop out Extension 3 (index 3).
-  base::Closure closure = base::Bind(&base::DoNothing);
+  base::Closure closure = base::DoNothing();
   ToolbarActionsBar* toolbar_actions_bar =
       browser()->window()->GetToolbarActionsBar();
   EXPECT_EQ(extension3->id(), toolbar_actions_bar->GetActions()[2]->GetId());
@@ -632,20 +642,175 @@ IN_PROC_BROWSER_TEST_F(BrowserActionsBarIncognitoTest, IncognitoMode) {
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(second_browser->profile()->IsOffTheRecord());
 
-  content::WindowedNotificationObserver window_close_observer(
-      chrome::NOTIFICATION_BROWSER_CLOSED, content::Source<Browser>(browser()));
-  browser()->window()->Close();
-  window_close_observer.Wait();
+  CloseBrowserSynchronously(browser());
 
   std::vector<ToolbarActionViewController*> actions =
       second_browser->window()->GetToolbarActionsBar()->GetActions();
   ASSERT_EQ(1u, actions.size());
   gfx::Image icon = actions[0]->GetIcon(
       second_browser->tab_strip_model()->GetActiveWebContents(),
-      gfx::Size(ToolbarActionsBar::IconWidth(false),
-                ToolbarActionsBar::IconHeight()));
+      second_browser->window()->GetToolbarActionsBar()->GetViewSize());
   const gfx::ImageSkia* skia = icon.ToImageSkia();
   ASSERT_TRUE(skia);
   // Force the image to try and load a representation.
   skia->GetRepresentation(2.0);
+}
+
+class BrowserActionsBarRuntimeHostPermissionsBrowserTest
+    : public BrowserActionsBarBrowserTest {
+ public:
+  BrowserActionsBarRuntimeHostPermissionsBrowserTest() = default;
+  ~BrowserActionsBarRuntimeHostPermissionsBrowserTest() override = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    BrowserActionsBarBrowserTest::SetUpCommandLine(command_line);
+    scoped_feature_list_.InitAndEnableFeature(
+        extensions::features::kRuntimeHostPermissions);
+  }
+
+  void SetUpOnMainThread() override {
+    BrowserActionsBarBrowserTest::SetUpOnMainThread();
+    host_resolver()->AddRule("*", "127.0.0.1");
+    ASSERT_TRUE(embedded_test_server()->Start());
+  }
+
+  void LoadAllUrlsExtension() {
+    extension_dir_.WriteManifest(
+        R"({
+             "name": "All Urls Extension",
+             "description": "Runs a content script everywhere",
+             "manifest_version": 2,
+             "version": "0.1",
+             "content_scripts": [{
+               "matches": ["<all_urls>"],
+               "js": ["script.js"],
+               "run_at": "document_start"
+             }]
+           })");
+    extension_dir_.WriteFile(FILE_PATH_LITERAL("script.js"),
+                             "console.warn('Hello, world!')");
+    extension_ = LoadExtension(extension_dir_.UnpackedPath());
+    ASSERT_TRUE(extension_);
+    extensions::ScriptingPermissionsModifier(profile(), extension_)
+        .SetWithholdHostPermissions(true);
+  }
+
+  const extensions::Extension* extension() const { return extension_.get(); }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+  extensions::TestExtensionDir extension_dir_;
+  scoped_refptr<const extensions::Extension> extension_;
+
+  DISALLOW_COPY_AND_ASSIGN(BrowserActionsBarRuntimeHostPermissionsBrowserTest);
+};
+
+IN_PROC_BROWSER_TEST_F(BrowserActionsBarRuntimeHostPermissionsBrowserTest,
+                       RuntimeHostPermissionsDecoration) {
+  LoadAllUrlsExtension();
+
+  const GURL url =
+      embedded_test_server()->GetURL("example.com", "/title1.html");
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  {
+    content::TestNavigationObserver observer(web_contents);
+    ui_test_utils::NavigateToURL(browser(), url);
+    EXPECT_TRUE(observer.last_navigation_succeeded());
+  }
+
+  extensions::ExtensionActionRunner* action_runner =
+      extensions::ExtensionActionRunner::GetForWebContents(web_contents);
+  EXPECT_TRUE(action_runner->WantsToRun(extension()));
+
+  ToolbarActionsBar* actions_bar = browser()->window()->GetToolbarActionsBar();
+  std::vector<ToolbarActionViewController*> actions = actions_bar->GetActions();
+  ASSERT_EQ(1u, actions.size());
+
+  EXPECT_TRUE(browser_actions_bar()->ActionButtonWantsToRun(0));
+
+  {
+    // Simulate clicking on the extension icon to allow it to run via a page
+    // reload.
+    content::TestNavigationObserver observer(web_contents);
+    action_runner->set_default_bubble_close_action_for_testing(
+        std::make_unique<ToolbarActionsBarBubbleDelegate::CloseAction>(
+            ToolbarActionsBarBubbleDelegate::CLOSE_EXECUTE));
+    browser_actions_bar()->Press(0);
+    observer.WaitForNavigationFinished();
+    EXPECT_TRUE(observer.last_navigation_succeeded());
+  }
+
+  // The extension should have already run on page reload, so the button
+  // shouldn't indicate the extension wants to run.
+  EXPECT_FALSE(browser_actions_bar()->ActionButtonWantsToRun(0));
+}
+
+class BrowserActionsBarUiBrowserTest
+    : public SupportsTestUi<BrowserActionsBarRuntimeHostPermissionsBrowserTest,
+                            TestBrowserUi> {
+ public:
+  BrowserActionsBarUiBrowserTest() = default;
+  ~BrowserActionsBarUiBrowserTest() override = default;
+
+  void ShowUi(const std::string& name) override {
+    ASSERT_EQ("blocked_actions", name);
+
+    LoadAllUrlsExtension();
+    const GURL url =
+        embedded_test_server()->GetURL("example.com", "/title1.html");
+    content::WebContents* web_contents =
+        browser()->tab_strip_model()->GetActiveWebContents();
+    content::TestNavigationObserver observer(web_contents);
+    ui_test_utils::NavigateToURL(browser(), url);
+    EXPECT_TRUE(observer.last_navigation_succeeded());
+  }
+
+  bool VerifyUi() override {
+    content::WebContents* web_contents =
+        browser()->tab_strip_model()->GetActiveWebContents();
+    extensions::ExtensionActionRunner* action_runner =
+        extensions::ExtensionActionRunner::GetForWebContents(web_contents);
+    if (!action_runner->WantsToRun(extension())) {
+      ADD_FAILURE() << "Extension should want to run";
+      return false;
+    }
+
+    ToolbarActionsBar* actions_bar =
+        browser()->window()->GetToolbarActionsBar();
+    std::vector<ToolbarActionViewController*> actions =
+        actions_bar->GetActions();
+    if (actions.size() != 1) {
+      ADD_FAILURE() << "Incorrect number of actions: " << actions.size();
+      return false;
+    }
+
+    std::unique_ptr<IconWithBadgeImageSource> image_source =
+        (static_cast<ExtensionActionViewController*>(actions[0]))
+            ->GetIconImageSourceForTesting(web_contents,
+                                           actions_bar->GetViewSize());
+    if (!image_source->paint_blocked_actions_decoration()) {
+      ADD_FAILURE() << "Did not paint blocked actions decoration";
+      return false;
+    }
+
+    return true;
+  }
+
+  void WaitForUserDismissal() override {
+    // Since this UI is shown in the browser's toolbar, just consider closing
+    // the browser to be dismissal.
+    content::WindowedNotificationObserver observer(
+        chrome::NOTIFICATION_BROWSER_CLOSED,
+        content::NotificationService::AllSources());
+    observer.Wait();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(BrowserActionsBarUiBrowserTest);
+};
+
+IN_PROC_BROWSER_TEST_F(BrowserActionsBarUiBrowserTest,
+                       InvokeUi_blocked_actions) {
+  ShowAndVerifyUi();
 }

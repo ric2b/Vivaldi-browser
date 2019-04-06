@@ -9,20 +9,23 @@
 
 #import <EarlGrey/EarlGrey.h>
 
+#include "ios/web/public/test/element_selector.h"
+
 namespace chrome_test_util {
 
-// Action to longpress on element |element_id| in the Chrome's webview.
-// If |triggers_context_menu| is true, this gesture is expected to
+// Action to longpress on the element selected by |selector| in the Chrome's
+// webview. If |triggers_context_menu| is true, this gesture is expected to
 // cause the context menu to appear, and is not expected to trigger events
 // in the webview. If |triggers_context_menu| is false, the converse is true.
 // This action doesn't fail if the context menu isn't displayed; calling code
 // should check for that separately with a matcher.
-id<GREYAction> LongPressElementForContextMenu(const std::string& element_id,
-                                              bool triggers_context_menu);
+id<GREYAction> LongPressElementForContextMenu(
+    web::test::ElementSelector selector,
+    bool triggers_context_menu);
 
-// Action to turn the switch of a CollectionViewSwitchCell to the given |on|
+// Action to turn the switch of a SettingsSwitchCell to the given |on|
 // state.
-id<GREYAction> TurnCollectionViewSwitchOn(BOOL on);
+id<GREYAction> TurnSettingsSwitchOn(BOOL on);
 
 // Action to turn the switch of a SyncSwitchCell to the given |on| state.
 id<GREYAction> TurnSyncSwitchOn(BOOL on);

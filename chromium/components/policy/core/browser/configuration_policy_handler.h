@@ -329,18 +329,18 @@ class POLICY_EXPORT SchemaValidatingPolicyHandler
 
  private:
   const char* policy_name_;
-  Schema schema_;
-  SchemaOnErrorStrategy strategy_;
+  const Schema schema_;
+  const SchemaOnErrorStrategy strategy_;
 
   DISALLOW_COPY_AND_ASSIGN(SchemaValidatingPolicyHandler);
 };
 
 // Maps policy to pref like SimplePolicyHandler while ensuring that the value
 // set matches the schema. |schema| is the schema used for policies, and
-// |strategy| is the strategy used for schema validation errors. The
-// |recommended_permission| and |mandatory_permission| flags indicate the levels
-// at which the policy can be set. A value set at an unsupported level will be
-// ignored.
+// |strategy| is the strategy used for schema validation errors.
+// The |recommended_permission| and |mandatory_permission| flags indicate the
+// levels at which the policy can be set. A value set at an unsupported level
+// will be ignored.
 class POLICY_EXPORT SimpleSchemaValidatingPolicyHandler
     : public SchemaValidatingPolicyHandler {
  public:
@@ -368,6 +368,77 @@ class POLICY_EXPORT SimpleSchemaValidatingPolicyHandler
   const bool allow_mandatory_;
 
   DISALLOW_COPY_AND_ASSIGN(SimpleSchemaValidatingPolicyHandler);
+};
+
+// Maps policy to pref like SimplePolicyHandler. Ensures that the root value
+// of the policy is of the correct type (that is, a string, or a list, depending
+// on the policy). Apart from that, all policy values are accepted without
+// modification, but the |PolicyErrorMap| will be updated for every error
+// encountered - for instance, if the embedded JSON is unparsable or if it does
+// not match the validation schema.
+// NOTE: Do not store new policies using JSON strings! If your policy has a
+// complex schema, store it as a dict of that schema. This has some advantages:
+// - You don't have to parse JSON every time you read it from the pref store.
+// - Nested dicts are simple, but nested JSON strings are complicated.
+class POLICY_EXPORT SimpleJsonStringSchemaValidatingPolicyHandler
+    : public ConfigurationPolicyHandler {
+ public:
+  SimpleJsonStringSchemaValidatingPolicyHandler(
+      const char* policy_name,
+      const char* pref_path,
+      Schema schema,
+      SimpleSchemaValidatingPolicyHandler::RecommendedPermission
+          recommended_permission,
+      SimpleSchemaValidatingPolicyHandler::MandatoryPermission
+          mandatory_permission);
+
+  ~SimpleJsonStringSchemaValidatingPolicyHandler() override;
+
+  // ConfigurationPolicyHandler:
+  bool CheckPolicySettings(const PolicyMap& policies,
+                           PolicyErrorMap* errors) override;
+  void ApplyPolicySettings(const PolicyMap& policies,
+                           PrefValueMap* prefs) override;
+
+ private:
+  // Validates |root_value| as a string. Updates |errors| if it is not valid
+  // JSON or if it does not match the validation schema.
+  bool CheckSingleJsonString(const base::Value* root_value,
+                             PolicyErrorMap* errors);
+
+  // Validates |root_value| as a list. Updates |errors| for each item that is
+  // not a string, is not valid JSON, or doesn't match the validation schema.
+  bool CheckListOfJsonStrings(const base::Value* root_value,
+                              PolicyErrorMap* errors);
+
+  // Validates that the given JSON string matches the schema. |index| is used
+  // only in error messages, it is the index of the given string in the list
+  // if the root value is a list, and ignored otherwise. Adds any errors it
+  // finds to |errors|.
+  bool ValidateJsonString(const std::string& json_string,
+                          PolicyErrorMap* errors,
+                          int index);
+
+  // Returns a string describing where an error occurred - |index| is the index
+  // of the string where the error occurred if the root value is a list, and
+  // ignored otherwise. |json_error_path| describes where the error occurred
+  // inside a JSON string (this can be empty).
+  std::string ErrorPath(int index, std::string json_error_path);
+
+  // Record to UMA that this policy failed validation due to an error in one or
+  // more embedded JSON strings - either unparsable, or didn't match the schema.
+  void RecordJsonError();
+
+  // Returns true if the schema root is a list.
+  bool IsListSchema() const;
+
+  const char* policy_name_;
+  const Schema schema_;
+  const char* pref_path_;
+  const bool allow_recommended_;
+  const bool allow_mandatory_;
+
+  DISALLOW_COPY_AND_ASSIGN(SimpleJsonStringSchemaValidatingPolicyHandler);
 };
 
 // A policy handler to deprecate multiple legacy policies with a new one.

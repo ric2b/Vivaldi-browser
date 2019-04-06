@@ -14,7 +14,7 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/singleton.h"
+#include "base/no_destructor.h"
 #include "base/process/kill.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
@@ -24,6 +24,7 @@
 #include "gpu/config/gpu_control_list.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
+#include "gpu/config/gpu_mode.h"
 
 class GURL;
 
@@ -69,7 +70,6 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager {
   bool GpuAccessAllowed(std::string* reason) const override;
   void RequestCompleteGpuInfoIfNeeded() override;
   bool IsEssentialGpuInfoAvailable() const override;
-  bool IsCompleteGpuInfoAvailable() const override;
   void RequestVideoMemoryUsageStatsUpdate(
       const base::Callback<void(const gpu::VideoMemoryUsageStats& stats)>&
           callback) const override;
@@ -80,53 +80,37 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager {
   // callbacks, should probably be required to occur on the UI thread.
   void AddObserver(GpuDataManagerObserver* observer) override;
   void RemoveObserver(GpuDataManagerObserver* observer) override;
-  void UnblockDomainFrom3DAPIs(const GURL& url) override;
-  void SetGLStrings(const std::string& gl_vendor,
-                    const std::string& gl_renderer,
-                    const std::string& gl_version) override;
   void DisableHardwareAcceleration() override;
   bool HardwareAccelerationEnabled() const override;
-  void GetDisabledExtensions(std::string* disabled_extensions) const override;
-  void SetGpuInfo(const gpu::GPUInfo& gpu_info) override;
 
-  void GetDisabledWebGLExtensions(std::string* disabled_webgl_extensions) const;
+  void RequestGpuSupportedRuntimeVersion() const;
+  bool GpuProcessStartAllowed() const;
 
   bool IsGpuFeatureInfoAvailable() const;
   gpu::GpuFeatureStatus GetFeatureStatus(gpu::GpuFeatureType feature) const;
 
-  // This collects preliminary GPU info, load GpuBlacklist, and compute the
-  // preliminary blacklisted features; it should only be called at browser
-  // startup time in UI thread before the IO restriction is turned on.
-  void Initialize();
-
   // Only update if the current GPUInfo is not finalized.  If blacklist is
   // loaded, run through blacklist and update blacklisted features.
-  void UpdateGpuInfo(const gpu::GPUInfo& gpu_info);
+  void UpdateGpuInfo(
+      const gpu::GPUInfo& gpu_info,
+      const base::Optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu);
 
   // Update the GPU feature info. This updates the blacklist and enabled status
   // of GPU rasterization. In the future this will be used for more features.
-  void UpdateGpuFeatureInfo(const gpu::GpuFeatureInfo& gpu_feature_info);
+  void UpdateGpuFeatureInfo(const gpu::GpuFeatureInfo& gpu_feature_info,
+                            const base::Optional<gpu::GpuFeatureInfo>&
+                                gpu_feature_info_for_hardware_gpu);
 
   gpu::GpuFeatureInfo GetGpuFeatureInfo() const;
 
-  // Insert disable-feature switches corresponding to preliminary gpu feature
-  // flags into the renderer process command line.
-  void AppendRendererCommandLine(base::CommandLine* command_line) const;
+  gpu::GPUInfo GetGPUInfoForHardwareGpu() const;
+  gpu::GpuFeatureInfo GetGpuFeatureInfoForHardwareGpu() const;
 
   // Insert switches into gpu process command line: kUseGL, etc.
   void AppendGpuCommandLine(base::CommandLine* command_line) const;
 
   // Update GpuPreferences based on blacklisting decisions.
   void UpdateGpuPreferences(gpu::GpuPreferences* gpu_preferences) const;
-
-  // Returns the reasons for the latest run of blacklisting decisions.
-  // For the structure of returned value, see documentation for
-  // GpuBlacklist::GetBlacklistedReasons().
-  void GetBlacklistReasons(base::ListValue* reasons) const;
-
-  // Returns the workarounds that are applied to the current system as
-  // a vector of strings.
-  std::vector<std::string> GetDriverBugWorkarounds() const;
 
   void AddLogMessage(int level,
                      const std::string& header,
@@ -148,60 +132,45 @@ class CONTENT_EXPORT GpuDataManagerImpl : public GpuDataManager {
   //
   // The given URL may be a partial URL (including at least the host)
   // or a full URL to a page.
-  //
-  // Note that the unblocking API must be part of the content API
-  // because it is called from Chrome side code.
   void BlockDomainFrom3DAPIs(const GURL& url, DomainGuilt guilt);
   bool Are3DAPIsBlocked(const GURL& top_origin_url,
                         int render_process_id,
                         int render_frame_id,
                         ThreeDAPIType requester);
+  void UnblockDomainFrom3DAPIs(const GURL& url);
 
   // Disables domain blocking for 3D APIs. For use only in tests.
   void DisableDomainBlockingFor3DAPIsForTesting();
-
-  void Notify3DAPIBlocked(const GURL& top_origin_url,
-                          int render_process_id,
-                          int render_frame_id,
-                          ThreeDAPIType requester);
 
   // Set the active gpu.
   // Return true if it's a different GPU from the previous active one.
   bool UpdateActiveGpu(uint32_t vendor_id, uint32_t device_id);
 
-  // Called when GPU process initialization failed.
-  void OnGpuProcessInitFailure();
+  // Notify all observers whenever there is a GPU info or GPU feature
+  // status update.
+  void NotifyGpuInfoUpdate();
 
-  void DisableSwiftShader();
+  // Return mode describing what the GPU process will be launched to run.
+  gpu::GpuMode GetGpuMode() const;
+
+  // Called when GPU process initialization failed or the GPU process has
+  // crashed repeatedly. This will try to disable hardware acceleration and then
+  // SwiftShader WebGL. It will also crash the browser process as a last resort
+  // on Android and Chrome OS.
+  void FallBackToNextGpuMode();
+
+  // Returns false if the latest GPUInfo gl_renderer is from SwiftShader or
+  // Disabled (in the viz case).
+  bool IsGpuProcessUsingHardwareGpu() const;
+
+  // State tracking allows us to customize GPU process launch depending on
+  // whether we are in the foreground or background.
+  void SetApplicationVisible(bool is_visible);
 
  private:
   friend class GpuDataManagerImplPrivate;
   friend class GpuDataManagerImplPrivateTest;
-  friend struct base::DefaultSingletonTraits<GpuDataManagerImpl>;
-
-  // It's similar to AutoUnlock, but we want to make it a no-op
-  // if the owner GpuDataManagerImpl is null.
-  // This should only be used by GpuDataManagerImplPrivate where
-  // callbacks are called, during which re-entering
-  // GpuDataManagerImpl is possible.
-  class UnlockedSession {
-   public:
-    explicit UnlockedSession(GpuDataManagerImpl* owner)
-        : owner_(owner) {
-      DCHECK(owner_);
-      owner_->lock_.AssertAcquired();
-      owner_->lock_.Release();
-    }
-
-    ~UnlockedSession() {
-      DCHECK(owner_);
-      owner_->lock_.Acquire();
-    }
-
-   private:
-    GpuDataManagerImpl* owner_;
-    DISALLOW_COPY_AND_ASSIGN(UnlockedSession);
-  };
+  friend class base::NoDestructor<GpuDataManagerImpl>;
 
   GpuDataManagerImpl();
   ~GpuDataManagerImpl() override;

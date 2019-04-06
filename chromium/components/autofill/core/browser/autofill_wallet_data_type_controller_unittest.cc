@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
@@ -94,7 +93,7 @@ class AutofillWalletDataTypeControllerTest : public testing::Test,
         base::ThreadTaskRunnerHandle::Get());
     autofill_wallet_dtc_ = std::make_unique<AutofillWalletDataTypeController>(
         syncer::AUTOFILL_WALLET_DATA, base::ThreadTaskRunnerHandle::Get(),
-        base::Bind(&base::DoNothing), this, web_data_service_);
+        base::DoNothing(), this, web_data_service_);
 
     last_type_ = syncer::UNSPECIFIED;
     last_error_ = syncer::SyncError();
@@ -179,7 +178,7 @@ TEST_F(AutofillWalletDataTypeControllerTest, DatatypeDisabledWhileRunning) {
   EXPECT_EQ(syncer::DataTypeController::RUNNING, autofill_wallet_dtc_->state());
   EXPECT_FALSE(last_error_.IsSet());
   EXPECT_EQ(syncer::AUTOFILL_WALLET_DATA, last_type_);
-  GetPrefService()->SetBoolean(autofill::prefs::kAutofillCreditCardEnabled,
+  GetPrefService()->SetBoolean(autofill::prefs::kAutofillWalletImportEnabled,
                                false);
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(last_error_.IsSet());
@@ -188,7 +187,7 @@ TEST_F(AutofillWalletDataTypeControllerTest, DatatypeDisabledWhileRunning) {
 TEST_F(AutofillWalletDataTypeControllerTest, DatatypeDisabledAtStartup) {
   SetStartExpectations();
   web_data_service_->LoadDatabase();
-  GetPrefService()->SetBoolean(autofill::prefs::kAutofillCreditCardEnabled,
+  GetPrefService()->SetBoolean(autofill::prefs::kAutofillWalletImportEnabled,
                                false);
   EXPECT_EQ(syncer::DataTypeController::NOT_RUNNING,
             autofill_wallet_dtc_->state());

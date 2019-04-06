@@ -11,6 +11,7 @@
 #include <memory>
 
 #include "base/callback.h"
+#include "base/macros.h"
 #include "chromecast/public/media/cast_key_system.h"
 #include "chromecast/public/media/decrypt_context.h"
 
@@ -25,36 +26,41 @@ class DecryptContextImpl : public DecryptContext {
  public:
   using DecryptCB = base::OnceCallback<void(bool)>;
 
+  // Type for the output buffer:
+  // |kSecure| means the decrypted data will be put in a secured buffer, where
+  // normal CPU can't access.
+  // |kClearAllowed| means the license allows the decrypted data to be accessed
+  // by normal CPU. Caller can decide where is the decrypted data.
+  // |kClearRequired| means the CDM or platform doesn't support secure buffer.
+  enum class OutputType { kSecure, kClearAllowed, kClearRequired };
+
   explicit DecryptContextImpl(CastKeySystem key_system);
   ~DecryptContextImpl() override;
 
   // DecryptContext implementation:
-  CastKeySystem GetKeySystem() override;
+  CastKeySystem GetKeySystem() final;
   bool Decrypt(CastDecoderBuffer* buffer,
-               uint8_t* output,
-               size_t data_offset) override;
+               uint8_t* opaque_handle,
+               size_t data_offset) final;
 
   // Similar as the above one. Decryption success or not will be returned in
-  // |decrypt_cb|. |decrypt_cb| will be called on caller's thread.
+  // |decrypt_cb|. |output_or_handle| is a pointer to the normal memory, if
+  // |clear_output| is true. Otherwise, it's an opaque handle to the secure
+  // memory which is only accessible in TEE. |decrypt_cb| will be called on
+  // caller's thread.
   virtual void DecryptAsync(CastDecoderBuffer* buffer,
-                            uint8_t* output,
+                            uint8_t* output_or_handle,
                             size_t data_offset,
+                            bool clear_output,
                             DecryptCB decrypt_cb);
 
-  // Returns whether the data can be decrypted into user memory.
-  // If the key system doesn't support secure output or the app explicitly
-  // requires non secure output, it should return true;
-  // If the key system doesn't allow clear content to be decrypted into user
-  // memory, it should return false.
-  virtual bool CanDecryptToBuffer() const;
+  // Returns the type of output buffer.
+  virtual OutputType GetOutputType() const;
 
  private:
   CastKeySystem key_system_;
 
-  // TODO(smcgruer): Restore macro usage next public API release.
-  // DISALLOW_COPY_AND_ASSIGN(DecryptContextImpl);
-  DecryptContextImpl(const DecryptContextImpl&) = delete;
-  void operator=(const DecryptContextImpl&) = delete;
+  DISALLOW_COPY_AND_ASSIGN(DecryptContextImpl);
 };
 
 }  // namespace media

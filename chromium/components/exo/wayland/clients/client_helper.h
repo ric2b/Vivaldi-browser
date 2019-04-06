@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_EXO_WAYLAND_CLIENTS_CLIENT_HELPER_H_
 #define COMPONENTS_EXO_WAYLAND_CLIENTS_CLIENT_HELPER_H_
 
+#include <input-timestamps-unstable-v1-client-protocol.h>
 #include <linux-dmabuf-unstable-v1-client-protocol.h>
 #include <presentation-time-client-protocol.h>
 #include <wayland-client-core.h>
@@ -13,7 +14,7 @@
 #include <memory>
 
 #include "base/scoped_generic.h"
-#include "components/exo/wayland/aura-shell-client-protocol.h"
+#include "components/exo/wayland/public/aura-shell-client-protocol.h"
 
 #if defined(USE_GBM)
 #include <gbm.h>
@@ -37,6 +38,7 @@ DEFAULT_DELETER_FDECL(wl_compositor)
 DEFAULT_DELETER_FDECL(wl_display)
 DEFAULT_DELETER_FDECL(wl_pointer)
 DEFAULT_DELETER_FDECL(wl_region)
+DEFAULT_DELETER_FDECL(wl_registry)
 DEFAULT_DELETER_FDECL(wl_seat)
 DEFAULT_DELETER_FDECL(wl_shell)
 DEFAULT_DELETER_FDECL(wl_shell_surface)
@@ -52,6 +54,8 @@ DEFAULT_DELETER_FDECL(struct wp_presentation_feedback)
 DEFAULT_DELETER_FDECL(zaura_shell)
 DEFAULT_DELETER_FDECL(zaura_surface)
 DEFAULT_DELETER_FDECL(zaura_output)
+DEFAULT_DELETER_FDECL(zwp_input_timestamps_manager_v1)
+DEFAULT_DELETER_FDECL(zwp_input_timestamps_v1)
 DEFAULT_DELETER_FDECL(zwp_linux_buffer_params_v1)
 DEFAULT_DELETER_FDECL(zwp_linux_dmabuf_v1)
 

@@ -7,6 +7,10 @@ Polymer({
 
   behaviors: [SettingsBehavior],
 
+  properties: {
+    disabled: Boolean,
+  },
+
   observers: [
     'onHeaderFooterSettingChange_(settings.headerFooter.value)',
     'onDuplexSettingChange_(settings.duplex.value)',
@@ -15,12 +19,39 @@ Polymer({
     'onSelectionOnlySettingChange_(settings.selectionOnly.value)',
   ],
 
+  /** @private {!Map<string, ?number>} */
+  timeouts_: new Map(),
+
+  /** @private {!Map<string, boolean>} */
+  previousValues_: new Map(),
+
+  /**
+   * @param {string} settingName The name of the setting to updated.
+   * @param {boolean} newValue The new value for the setting.
+   */
+  updateSettingWithTimeout_: function(settingName, newValue) {
+    const timeout = this.timeouts_.get(settingName);
+    if (timeout != null)
+      clearTimeout(timeout);
+
+    this.timeouts_.set(settingName, setTimeout(() => {
+                         this.timeouts_.delete(settingName);
+                         if (this.previousValues_.get(settingName) == newValue)
+                           return;
+                         this.previousValues_.set(settingName, newValue);
+                         this.setSetting(settingName, newValue);
+
+                         // For tests only
+                         this.fire('update-checkbox-setting', settingName);
+                       }, 100));
+  },
+
   /**
    * @param {boolean} value The new value of the header footer setting.
    * @private
    */
   onHeaderFooterSettingChange_: function(value) {
-    this.$$('#header-footer').checked = value;
+    this.$.headerFooter.checked = value;
   },
 
   /**
@@ -28,7 +59,7 @@ Polymer({
    * @private
    */
   onDuplexSettingChange_: function(value) {
-    this.$$('#duplex').checked = value;
+    this.$.duplex.checked = value;
   },
 
   /**
@@ -36,7 +67,7 @@ Polymer({
    * @private
    */
   onCssBackgroundSettingChange_: function(value) {
-    this.$$('#css-background').checked = value;
+    this.$.cssBackground.checked = value;
   },
 
   /**
@@ -44,7 +75,7 @@ Polymer({
    * @private
    */
   onRasterizeSettingChange_: function(value) {
-    this.$$('#rasterize').checked = value;
+    this.$.rasterize.checked = value;
   },
 
   /**
@@ -52,31 +83,33 @@ Polymer({
    * @private
    */
   onSelectionOnlySettingChange_: function(value) {
-    this.$$('#selection-only').checked = value;
+    this.$.selectionOnly.checked = value;
   },
 
   /** @private */
   onHeaderFooterChange_: function() {
-    this.setSetting('headerFooter', this.$$('#header-footer').checked);
+    this.updateSettingWithTimeout_('headerFooter', this.$.headerFooter.checked);
   },
 
   /** @private */
   onDuplexChange_: function() {
-    this.setSetting('duplex', this.$$('#duplex').checked);
+    this.updateSettingWithTimeout_('duplex', this.$.duplex.checked);
   },
 
   /** @private */
   onCssBackgroundChange_: function() {
-    this.setSetting('cssBackground', this.$$('#css-background').checked);
+    this.updateSettingWithTimeout_(
+        'cssBackground', this.$.cssBackground.checked);
   },
 
   /** @private */
   onRasterizeChange_: function() {
-    this.setSetting('rasterize', this.$$('#rasterize').checked);
+    this.updateSettingWithTimeout_('rasterize', this.$.rasterize.checked);
   },
 
   /** @private */
   onSelectionOnlyChange_: function() {
-    this.setSetting('selectionOnly', this.$$('#selection-only').checked);
+    this.updateSettingWithTimeout_(
+        'selectionOnly', this.$.selectionOnly.checked);
   },
 });

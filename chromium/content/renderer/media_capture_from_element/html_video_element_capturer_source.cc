@@ -11,14 +11,14 @@
 #include "base/trace_event/trace_event.h"
 #include "cc/paint/skia_paint_canvas.h"
 #include "content/public/renderer/render_thread.h"
-#include "content/renderer/media/media_stream_video_source.h"
-#include "content/renderer/media/webrtc_uma_histograms.h"
+#include "content/renderer/media/stream/media_stream_video_source.h"
+#include "content/renderer/media/webrtc/webrtc_uma_histograms.h"
 #include "media/base/limits.h"
 #include "media/blink/webmediaplayer_impl.h"
 #include "skia/ext/platform_canvas.h"
-#include "third_party/WebKit/public/platform/WebMediaPlayer.h"
-#include "third_party/WebKit/public/platform/WebRect.h"
-#include "third_party/WebKit/public/platform/WebSize.h"
+#include "third_party/blink/public/platform/web_media_player.h"
+#include "third_party/blink/public/platform/web_rect.h"
+#include "third_party/blink/public/platform/web_size.h"
 #include "third_party/libyuv/include/libyuv.h"
 
 namespace {
@@ -35,7 +35,7 @@ HtmlVideoElementCapturerSource::CreateFromWebMediaPlayerImpl(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   // Save histogram data so we can see how much HTML Video capture is used.
   // The histogram counts the number of calls to the JS API.
-  UpdateWebRTCMethodCount(WEBKIT_VIDEO_CAPTURE_STREAM);
+  UpdateWebRTCMethodCount(blink::WebRTCAPIName::kVideoCaptureStream);
 
   return base::WrapUnique(new HtmlVideoElementCapturerSource(
       static_cast<media::WebMediaPlayerImpl*>(player)->AsWeakPtr(),
@@ -118,7 +118,7 @@ void HtmlVideoElementCapturerSource::StopCapture() {
 
 void HtmlVideoElementCapturerSource::sendNewFrame() {
   DVLOG(3) << __func__;
-  TRACE_EVENT0("video", "HtmlVideoElementCapturerSource::sendNewFrame");
+  TRACE_EVENT0("media", "HtmlVideoElementCapturerSource::sendNewFrame");
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!web_media_player_ || new_frame_callback_.is_null())
@@ -151,13 +151,13 @@ void HtmlVideoElementCapturerSource::sendNewFrame() {
       media::PIXEL_FORMAT_I420, resolution, gfx::Rect(resolution), resolution,
       current_time - start_capture_time_);
 
-  const uint32 source_pixel_format =
+  const uint32_t source_pixel_format =
       (kN32_SkColorType == kRGBA_8888_SkColorType) ? libyuv::FOURCC_ABGR
                                                    : libyuv::FOURCC_ARGB;
 
   if (frame &&
       libyuv::ConvertToI420(
-          static_cast<uint8*>(bitmap_.getPixels()), bitmap_.computeByteSize(),
+          static_cast<uint8_t*>(bitmap_.getPixels()), bitmap_.computeByteSize(),
           frame->visible_data(media::VideoFrame::kYPlane),
           frame->stride(media::VideoFrame::kYPlane),
           frame->visible_data(media::VideoFrame::kUPlane),

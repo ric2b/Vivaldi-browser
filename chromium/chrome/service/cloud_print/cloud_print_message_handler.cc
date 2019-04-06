@@ -24,7 +24,7 @@ void CloudPrintMessageHandler::Create(
     CloudPrintProxy::Provider* proxy_provider,
     cloud_print::mojom::CloudPrintRequest request) {
   mojo::MakeStrongBinding(
-      base::MakeUnique<CloudPrintMessageHandler>(proxy_provider),
+      std::make_unique<CloudPrintMessageHandler>(proxy_provider),
       std::move(request));
 }
 
@@ -32,9 +32,9 @@ void CloudPrintMessageHandler::EnableCloudPrintProxyWithRobot(
     const std::string& robot_auth_code,
     const std::string& robot_email,
     const std::string& user_email,
-    std::unique_ptr<base::DictionaryValue> user_settings) {
+    base::Value user_settings) {
   proxy_provider_->GetCloudPrintProxy()->EnableForUserWithRobot(
-      robot_auth_code, robot_email, user_email, *user_settings);
+      robot_auth_code, robot_email, user_email, std::move(user_settings));
 }
 
 void CloudPrintMessageHandler::GetCloudPrintProxyInfo(

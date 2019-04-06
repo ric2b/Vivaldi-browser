@@ -685,10 +685,12 @@ public class PersonalDataManager {
     /**
      * Gets the credit cards to suggest when filling a form or completing a transaction. The cards
      * will have been processed to be more relevant to the user.
+     * @param includeServerCards Whether server cards should be included in the response.
      */
-    public List<CreditCard> getCreditCardsToSuggest() {
+    public List<CreditCard> getCreditCardsToSuggest(boolean includeServerCards) {
         ThreadUtils.assertOnUiThread();
-        return getCreditCards(nativeGetCreditCardGUIDsToSuggest(mPersonalDataManagerAndroid));
+        return getCreditCards(
+                nativeGetCreditCardGUIDsToSuggest(mPersonalDataManagerAndroid, includeServerCards));
     }
 
     private List<CreditCard> getCreditCards(String[] creditCardGUIDs) {
@@ -947,6 +949,11 @@ public class PersonalDataManager {
         sRequestTimeoutSeconds = timeout;
     }
 
+    @VisibleForTesting
+    public void setSyncServiceForTesting() {
+        nativeSetSyncServiceForTesting(mPersonalDataManagerAndroid);
+    }
+
     /**
      * @return The sub-key request timeout in milliseconds.
      */
@@ -978,7 +985,7 @@ public class PersonalDataManager {
     private native String[] nativeGetCreditCardGUIDsForSettings(
             long nativePersonalDataManagerAndroid);
     private native String[] nativeGetCreditCardGUIDsToSuggest(
-            long nativePersonalDataManagerAndroid);
+            long nativePersonalDataManagerAndroid, boolean includeServerCards);
     private native CreditCard nativeGetCreditCardByGUID(long nativePersonalDataManagerAndroid,
             String guid);
     private native CreditCard nativeGetCreditCardForNumber(long nativePersonalDataManagerAndroid,
@@ -1030,4 +1037,6 @@ public class PersonalDataManager {
     private static native void nativeSetPaymentsIntegrationEnabled(boolean enable);
     private static native String nativeToCountryCode(String countryName);
     private static native void nativeCancelPendingGetSubKeys(long nativePersonalDataManagerAndroid);
+    private static native void nativeSetSyncServiceForTesting(
+            long nativePersonalDataManagerAndroid);
 }

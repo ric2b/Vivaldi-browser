@@ -5,8 +5,14 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NON_CLIENT_FRAME_VIEW_MAC_H_
 #define CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_NON_CLIENT_FRAME_VIEW_MAC_H_
 
+#include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
+#include "chrome/browser/ui/views/frame/avatar_button_manager.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
+#include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
+#include "components/prefs/pref_change_registrar.h"
+
+@class FullscreenToolbarControllerViews;
 
 class BrowserNonClientFrameViewMac : public BrowserNonClientFrameView {
  public:
@@ -15,10 +21,15 @@ class BrowserNonClientFrameViewMac : public BrowserNonClientFrameView {
   ~BrowserNonClientFrameViewMac() override;
 
   // BrowserNonClientFrameView:
+  void OnFullscreenStateChanged() override;
+  bool CaptionButtonsOnLeadingEdge() const override;
   gfx::Rect GetBoundsForTabStrip(views::View* tabstrip) const override;
   int GetTopInset(bool restored) const override;
   int GetThemeBackgroundXInset() const override;
+  void UpdateFullscreenTopUI(bool is_exiting_fullscreen) override;
+  bool ShouldHideTopUIForFullscreen() const override;
   void UpdateThrobber(bool running) override;
+  int GetTabStripLeftInset() const override;
 
   // views::NonClientFrameView:
   gfx::Rect GetBoundsForClientView() const override;
@@ -32,6 +43,7 @@ class BrowserNonClientFrameViewMac : public BrowserNonClientFrameView {
   void SizeConstraintsChanged() override;
 
   // views::View:
+  void Layout() override;
   gfx::Size GetMinimumSize() const override;
 
  protected:
@@ -39,10 +51,25 @@ class BrowserNonClientFrameViewMac : public BrowserNonClientFrameView {
   void OnPaint(gfx::Canvas* canvas) override;
 
   // BrowserNonClientFrameView:
-  void UpdateProfileIcons() override;
+  AvatarButtonStyle GetAvatarButtonStyle() const override;
 
  private:
   void PaintThemedFrame(gfx::Canvas* canvas);
+
+  // Returns the width taken by any items after the tabstrip, to the edge of the
+  // window.  Does not include any padding between the tabstrip and these items.
+  int GetAfterTabstripItemWidth() const;
+  CGFloat FullscreenBackingBarHeight() const;
+
+  // Calculate the y offset the top UI needs to shift down due to showing the
+  // slide down menu bar at the very top in full screen.
+  int TopUIFullscreenYOffset() const;
+
+  // Used to keep track of the update of kShowFullscreenToolbar preference.
+  PrefChangeRegistrar pref_registrar_;
+
+  base::scoped_nsobject<FullscreenToolbarControllerViews>
+      fullscreen_toolbar_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserNonClientFrameViewMac);
 };

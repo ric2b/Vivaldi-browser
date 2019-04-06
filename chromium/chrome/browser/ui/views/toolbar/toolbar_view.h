@@ -13,7 +13,11 @@
 #include "chrome/browser/command_observer.h"
 #include "chrome/browser/ui/toolbar/app_menu_icon_controller.h"
 #include "chrome/browser/ui/toolbar/back_forward_menu_model.h"
+#include "chrome/browser/ui/views/frame/browser_root_view.h"
+#include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/profiles/avatar_toolbar_button.h"
+#include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
 #include "chrome/browser/upgrade_observer.h"
 #include "components/prefs/pref_member.h"
 #include "components/translate/core/browser/translate_step.h"
@@ -32,8 +36,9 @@
 #endif  // defined(OS_CHROMEOS)
 
 class AppMenuButton;
+class AvatarToolbarButton;
+class BrowserAppMenuButton;
 class Browser;
-class BrowserActionsContainer;
 class HomeButton;
 class ReloadButton;
 class ToolbarButton;
@@ -47,15 +52,18 @@ class ToolbarView : public views::AccessiblePaneView,
                     public views::MenuButtonListener,
                     public ui::AcceleratorProvider,
                     public LocationBarView::Delegate,
+                    public BrowserActionsContainer::Delegate,
                     public CommandObserver,
                     public views::ButtonListener,
                     public AppMenuIconController::Delegate,
-                    public UpgradeObserver {
+                    public UpgradeObserver,
+                    public ToolbarButtonProvider,
+                    public BrowserRootView::DropTarget {
  public:
   // The view class name.
   static const char kViewClassName[];
 
-  explicit ToolbarView(Browser* browser);
+  explicit ToolbarView(Browser* browser, BrowserView* browser_view);
   ~ToolbarView() override;
 
   // Create the contents of the Browser Toolbar.
@@ -78,11 +86,10 @@ class ToolbarView : public views::AccessiblePaneView,
   // Returns true if the app menu is focused.
   bool IsAppMenuFocused();
 
-  virtual bool GetAcceleratorInfo(int id, ui::Accelerator* accel);
-
 #if defined(OS_CHROMEOS)
   void ShowIntentPickerBubble(
-      const std::vector<IntentPickerBubbleView::AppInfo>& app_info,
+      std::vector<IntentPickerBubbleView::AppInfo> app_info,
+      bool disable_stay_in_chrome,
       IntentPickerResponse callback);
 #endif  // defined(OS_CHROMEOS)
 
@@ -97,15 +104,14 @@ class ToolbarView : public views::AccessiblePaneView,
                            translate::TranslateErrors::Type error_type,
                            bool is_user_gesture);
 
-  // Returns the maximum width the browser actions container can have.
-  int GetMaxBrowserActionsWidth() const;
-
   // Accessors.
   Browser* browser() const { return browser_; }
   BrowserActionsContainer* browser_actions() const { return browser_actions_; }
+  ToolbarButton* back_button() const { return back_; }
   ReloadButton* reload_button() const { return reload_; }
   LocationBarView* location_bar() const { return location_bar_; }
-  AppMenuButton* app_menu_button() const { return app_menu_button_; }
+  AvatarToolbarButton* avatar_button() const { return avatar_; }
+  BrowserAppMenuButton* app_menu_button() const { return app_menu_button_; }
   HomeButton* home_button() const { return home_; }
   AppMenuIconController* app_menu_icon_controller() {
     return &app_menu_icon_controller_;
@@ -126,13 +132,21 @@ class ToolbarView : public views::AccessiblePaneView,
   ContentSettingBubbleModelDelegate* GetContentSettingBubbleModelDelegate()
       override;
 
+  // BrowserActionsContainer::Delegate:
+  views::MenuButton* GetOverflowReferenceView() override;
+  base::Optional<int> GetMaxBrowserActionsWidth() const override;
+  std::unique_ptr<ToolbarActionsBar> CreateToolbarActionsBar(
+      ToolbarActionsBarDelegate* delegate,
+      Browser* browser,
+      ToolbarActionsBar* main_bar) const override;
+
   // CommandObserver:
   void EnabledStateChangedForCommand(int id, bool enabled) override;
 
   // views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
-  // UpgradeObserver implementation.
+  // UpgradeObserver toolbar_button_view_provider.
   void OnOutdatedInstall() override;
   void OnOutdatedInstallNoAutoUpdate() override;
   void OnCriticalUpgradeInstalled() override;
@@ -145,14 +159,20 @@ class ToolbarView : public views::AccessiblePaneView,
   gfx::Size CalculatePreferredSize() const override;
   gfx::Size GetMinimumSize() const override;
   void Layout() override;
+  void OnPaintBackground(gfx::Canvas* canvas) override;
   void OnThemeChanged() override;
   const char* GetClassName() const override;
   bool AcceleratorPressed(const ui::Accelerator& acc) override;
+  void ChildPreferredSizeChanged(views::View* child) override;
 
  protected:
   // AccessiblePaneView:
   bool SetPaneFocusAndFocusDefault() override;
   void RemovePaneFocus() override;
+
+  bool is_display_mode_normal() const {
+    return display_mode_ == DISPLAYMODE_NORMAL;
+  }
 
  private:
   // Types of display mode this toolbar can have.
@@ -167,6 +187,19 @@ class ToolbarView : public views::AccessiblePaneView,
                       AppMenuIconController::Severity severity,
                       bool animate) override;
 
+  // ToolbarButtonProvider:
+  BrowserActionsContainer* GetBrowserActionsContainer() override;
+  PageActionIconContainerView* GetPageActionIconContainerView() override;
+  AppMenuButton* GetAppMenuButton() override;
+  gfx::Rect GetFindBarBoundingBox(int contents_height) const override;
+  void FocusToolbar() override;
+  views::AccessiblePaneView* GetAsAccessiblePaneView() override;
+
+  // BrowserRootView::DropTarget
+  BrowserRootView::DropIndex GetDropIndex(
+      const ui::DropTargetEvent& event) override;
+  views::View* GetViewForDrop() override;
+
   // Used to avoid duplicating the near-identical logic of
   // ToolbarView::CalculatePreferredSize() and ToolbarView::GetMinimumSize().
   // These two functions call through to GetSizeInternal(), passing themselves
@@ -178,10 +211,6 @@ class ToolbarView : public views::AccessiblePaneView,
 
   // Loads the images for all the child views.
   void LoadImages();
-
-  bool is_display_mode_normal() const {
-    return display_mode_ == DISPLAYMODE_NORMAL;
-  }
 
   // Shows the critical notification bubble against the app menu.
   void ShowCriticalNotification();
@@ -201,9 +230,11 @@ class ToolbarView : public views::AccessiblePaneView,
   HomeButton* home_ = nullptr;
   LocationBarView* location_bar_ = nullptr;
   BrowserActionsContainer* browser_actions_ = nullptr;
-  AppMenuButton* app_menu_button_ = nullptr;
+  AvatarToolbarButton* avatar_ = nullptr;
+  BrowserAppMenuButton* app_menu_button_ = nullptr;
 
   Browser* const browser_;
+  BrowserView* const browser_view_;
 
   AppMenuIconController app_menu_icon_controller_;
 
@@ -212,6 +243,9 @@ class ToolbarView : public views::AccessiblePaneView,
 
   // The display mode used when laying out the toolbar.
   const DisplayMode display_mode_;
+
+  // Whether this toolbar has been initialized.
+  bool initialized_ = false;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(ToolbarView);
 };

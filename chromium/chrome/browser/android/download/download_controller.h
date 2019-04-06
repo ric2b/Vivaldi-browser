@@ -20,6 +20,7 @@
 #define CHROME_BROWSER_ANDROID_DOWNLOAD_DOWNLOAD_CONTROLLER_H_
 
 #include <map>
+#include <string>
 #include <utility>
 
 #include "base/android/scoped_java_ref.h"
@@ -37,11 +38,11 @@ class DownloadController : public DownloadControllerBase {
   // DownloadControllerBase implementation.
   void AcquireFileAccessPermission(
       const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
-      const AcquireFileAccessPermissionCallback& callback) override;
+      AcquireFileAccessPermissionCallback callback) override;
   void CreateAndroidDownload(
       const content::ResourceRequestInfo::WebContentsGetter& wc_getter,
       const DownloadInfo& info) override;
-  void AboutToResumeDownload(content::DownloadItem* download_item) override;
+  void AboutToResumeDownload(download::DownloadItem* download_item) override;
 
   // UMA histogram enum for download cancellation reasons. Keep this
   // in sync with MobileDownloadCancelReason in histograms.xml. This should be
@@ -56,6 +57,7 @@ class DownloadController : public DownloadControllerBase {
     CANCEL_REASON_NO_EXTERNAL_STORAGE,
     CANCEL_REASON_CANNOT_DETERMINE_DOWNLOAD_TARGET,
     CANCEL_REASON_OTHER_NATIVE_RESONS,
+    CANCEL_REASON_USER_CANCELED,
     CANCEL_REASON_MAX
   };
   static void RecordDownloadCancelReason(DownloadCancelReason reason);
@@ -75,8 +77,8 @@ class DownloadController : public DownloadControllerBase {
 
   // Callback when user permission prompt finishes. Args: whether file access
   // permission is acquired, which permission to update.
-  typedef base::Callback<void(bool, const std::string&)>
-      AcquirePermissionCallback;
+  using AcquirePermissionCallback =
+      base::OnceCallback<void(bool, const std::string&)>;
 
  private:
   friend struct base::DefaultSingletonTraits<DownloadController>;
@@ -87,17 +89,17 @@ class DownloadController : public DownloadControllerBase {
   bool HasFileAccessPermission();
 
   // DownloadControllerBase implementation.
-  void OnDownloadStarted(content::DownloadItem* download_item) override;
+  void OnDownloadStarted(download::DownloadItem* download_item) override;
   void StartContextMenuDownload(const content::ContextMenuParams& params,
                                 content::WebContents* web_contents,
                                 bool is_link,
                                 const std::string& extra_headers) override;
 
   // DownloadItem::Observer interface.
-  void OnDownloadUpdated(content::DownloadItem* item) override;
+  void OnDownloadUpdated(download::DownloadItem* item) override;
 
   // The download item contains dangerous file types.
-  void OnDangerousDownload(content::DownloadItem *item);
+  void OnDangerousDownload(download::DownloadItem* item);
 
   base::android::ScopedJavaLocalRef<jobject> GetContentViewCoreFromWebContents(
       content::WebContents* web_contents);
@@ -111,7 +113,8 @@ class DownloadController : public DownloadControllerBase {
       const DownloadInfo& info, bool allowed);
 
   // Check if an interrupted download item can be auto resumed.
-  bool IsInterruptedDownloadAutoResumable(content::DownloadItem* download_item);
+  bool IsInterruptedDownloadAutoResumable(
+      download::DownloadItem* download_item);
 
   std::string default_file_name_;
 

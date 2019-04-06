@@ -14,6 +14,7 @@
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/test/test_shared_bitmap_manager.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 
 namespace base {
@@ -58,7 +59,6 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   TestLayerTreeFrameSink(
       scoped_refptr<ContextProvider> compositor_context_provider,
       scoped_refptr<RasterContextProvider> worker_context_provider,
-      SharedBitmapManager* shared_bitmap_manager,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       const RendererSettings& renderer_settings,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
@@ -92,15 +92,16 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   void SetLocalSurfaceId(const LocalSurfaceId& local_surface_id) override;
   void SubmitCompositorFrame(CompositorFrame frame) override;
   void DidNotProduceFrame(const BeginFrameAck& ack) override;
+  void DidAllocateSharedBitmap(mojo::ScopedSharedBufferHandle buffer,
+                               const SharedBitmapId& id) override;
+  void DidDeleteSharedBitmap(const SharedBitmapId& id) override;
 
   // mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
       const std::vector<ReturnedResource>& resources) override;
-  void DidPresentCompositorFrame(uint32_t presentation_token,
-                                 base::TimeTicks time,
-                                 base::TimeDelta refresh,
-                                 uint32_t flags) override;
-  void DidDiscardCompositorFrame(uint32_t presentation_token) override;
+  void DidPresentCompositorFrame(
+      uint32_t presentation_token,
+      const gfx::PresentationFeedback& feedback) override;
   void OnBeginFrame(const BeginFrameArgs& args) override;
   void ReclaimResources(
       const std::vector<ReturnedResource>& resources) override;
@@ -113,6 +114,13 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   void DisplayDidDrawAndSwap() override;
   void DisplayDidReceiveCALayerParams(
       const gfx::CALayerParams& ca_layer_params) override;
+  void DisplayDidCompleteSwapWithSize(const gfx::Size& pixel_size) override;
+  void DidSwapAfterSnapshotRequestReceived(
+      const std::vector<ui::LatencyInfo>& latency_info) override {}
+
+  const std::set<SharedBitmapId>& owned_bitmaps() const {
+    return owned_bitmaps_;
+  }
 
  private:
   // ExternalBeginFrameSource implementation.
@@ -128,10 +136,10 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   FrameSinkId frame_sink_id_;
   // TODO(danakj): These don't need to be stored in unique_ptrs when
   // LayerTreeFrameSink is owned/destroyed on the compositor thread.
+  std::unique_ptr<TestSharedBitmapManager> shared_bitmap_manager_;
   std::unique_ptr<FrameSinkManagerImpl> frame_sink_manager_;
   std::unique_ptr<ParentLocalSurfaceIdAllocator>
       parent_local_surface_id_allocator_;
-  LocalSurfaceId local_surface_id_;
   gfx::Size display_size_;
   float device_scale_factor_ = 0;
   gfx::ColorSpace blending_color_space_ = gfx::ColorSpace::CreateSRGB();
@@ -145,13 +153,17 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   BeginFrameSource* display_begin_frame_source_ = nullptr;  // Not owned.
   ExternalBeginFrameSource external_begin_frame_source_;
 
-  // Uses surface_manager_ and begin_frame_source_.
+  // Uses surface_manager_, begin_frame_source_, shared_bitmap_manager_.
   std::unique_ptr<Display> display_;
 
   TestLayerTreeFrameSinkClient* test_client_ = nullptr;
   gfx::Size enlarge_pass_texture_amount_;
 
   std::vector<std::unique_ptr<CopyOutputRequest>> copy_requests_;
+  // The set of SharedBitmapIds that have been reported as allocated to this
+  // interface. On closing this interface, the display compositor should drop
+  // ownership of the bitmaps with these ids to avoid leaking them.
+  std::set<SharedBitmapId> owned_bitmaps_;
 
   base::WeakPtrFactory<TestLayerTreeFrameSink> weak_ptr_factory_;
 };

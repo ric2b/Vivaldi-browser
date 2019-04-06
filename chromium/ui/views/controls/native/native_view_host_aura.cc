@@ -10,6 +10,7 @@
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/aura/window_occlusion_tracker.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/hit_test.h"
 #include "ui/compositor/paint_recorder.h"
@@ -18,6 +19,7 @@
 #include "ui/views/view_constants_aura.h"
 #include "ui/views/view_properties.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/core/window_util.h"
 
 namespace views {
 
@@ -106,6 +108,11 @@ void NativeViewHostAura::AttachNativeView() {
 }
 
 void NativeViewHostAura::NativeViewDetaching(bool destroyed) {
+  // This method causes a succession of window tree changes.
+  // ScopedPauseOcclusionTracking ensures that occlusion is recomputed at the
+  // end of the method instead of after each change.
+  aura::WindowOcclusionTracker::ScopedPauseOcclusionTracking pause_occlusion;
+
   clipping_window_delegate_->set_native_view(NULL);
   RemoveClippingWindow();
   if (!destroyed) {
@@ -142,15 +149,16 @@ void NativeViewHostAura::RemovedFromWidget() {
   }
 }
 
-bool NativeViewHostAura::SetCornerRadius(int corner_radius) {
+bool NativeViewHostAura::SetCustomMask(std::unique_ptr<ui::LayerOwner> mask) {
 #if defined(OS_WIN)
-  // Layer masks don't work on Windows. See crbug.com/713359
+  // TODO(crbug/843250): On Aura, layer masks don't play with HiDPI. Fix this
+  // and enable this on Windows.
   return false;
 #else
-  mask_ = views::Painter::CreatePaintedLayer(
-      views::Painter::CreateSolidRoundRectPainter(SK_ColorBLACK,
-                                                  corner_radius));
-  mask_->layer()->SetFillsBoundsOpaquely(false);
+  UninstallMask();
+  mask_ = std::move(mask);
+  if (mask_)
+    mask_->layer()->SetFillsBoundsOpaquely(false);
   InstallMask();
   return true;
 #endif
@@ -230,8 +238,15 @@ void NativeViewHostAura::OnWindowBoundsChanged(
     const gfx::Rect& old_bounds,
     const gfx::Rect& new_bounds,
     ui::PropertyChangeReason reason) {
-  if (mask_)
+  if (mask_) {
+    // Having a mask means this layer has a render surface of its own. This
+    // means we want this layer snapped as the render surface uses this layer
+    // (its primary layer) to snap to the physical pixel grid.
+    // See https://crbug.com/843250 for more details.
+    wm::SnapWindowToPixelBoundary(window);
+
     mask_->layer()->SetBounds(gfx::Rect(host_->native_view()->bounds().size()));
+  }
 }
 
 void NativeViewHostAura::OnWindowDestroying(aura::Window* window) {
@@ -285,9 +300,24 @@ void NativeViewHostAura::InstallMask() {
   if (!mask_)
     return;
   if (host_->native_view()) {
+    // Setting a mask triggers this layer to have a render surface of its own.
+    // This means we cannot skip computing its subpixel offset positioning as
+    // the render surface uses this layer (its primary layer) to snap to the
+    // physical pixel grid.
+    // See https://crbug.com/843250 for more details.
+    wm::SnapWindowToPixelBoundary(host_->native_view());
+
     mask_->layer()->SetBounds(gfx::Rect(host_->native_view()->bounds().size()));
     host_->native_view()->layer()->SetMaskLayer(mask_->layer());
   }
+}
+
+void NativeViewHostAura::UninstallMask() {
+  if (!host_->native_view() || !mask_)
+    return;
+
+  host_->native_view()->layer()->SetMaskLayer(nullptr);
+  mask_.reset();
 }
 
 }  // namespace views

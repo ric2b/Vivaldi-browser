@@ -4,6 +4,7 @@
 
 #include "components/subresource_filter/content/renderer/subresource_filter_agent.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/feature_list.h"
@@ -24,10 +25,10 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "ipc/ipc_message.h"
-#include "third_party/WebKit/public/platform/WebWorkerFetchContext.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebDocumentLoader.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/web_worker_fetch_context.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_document_loader.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 #include "url/url_constants.h"
 
 namespace subresource_filter {
@@ -69,6 +70,19 @@ void SubresourceFilterAgent::SendDocumentLoadStatistics(
       render_frame()->GetRoutingID(), statistics));
 }
 
+void SubresourceFilterAgent::SendFrameIsAdSubframe() {
+  render_frame()->Send(new SubresourceFilterHostMsg_FrameIsAdSubframe(
+      render_frame()->GetRoutingID()));
+}
+
+bool SubresourceFilterAgent::IsAdSubframe() {
+  return render_frame()->GetWebFrame()->IsAdSubframe();
+}
+
+void SubresourceFilterAgent::SetIsAdSubframe() {
+  render_frame()->GetWebFrame()->SetIsAdSubframe();
+}
+
 // static
 ActivationState SubresourceFilterAgent::GetParentActivationState(
     content::RenderFrame* render_frame) {
@@ -84,8 +98,11 @@ ActivationState SubresourceFilterAgent::GetParentActivationState(
 }
 
 void SubresourceFilterAgent::OnActivateForNextCommittedLoad(
-    const ActivationState& activation_state) {
+    const ActivationState& activation_state,
+    bool is_ad_subframe) {
   activation_state_for_next_commit_ = activation_state;
+  if (is_ad_subframe)
+    SetIsAdSubframe();
 }
 
 void SubresourceFilterAgent::RecordHistogramsOnLoadCommitted(
@@ -146,13 +163,26 @@ void SubresourceFilterAgent::RecordHistogramsOnLoadFinished() {
   SendDocumentLoadStatistics(statistics);
 }
 
-void SubresourceFilterAgent::ResetActivatonStateForNextCommit() {
+void SubresourceFilterAgent::ResetInfoForNextCommit() {
   activation_state_for_next_commit_ =
       ActivationState(ActivationLevel::DISABLED);
 }
 
 void SubresourceFilterAgent::OnDestruct() {
   delete this;
+}
+
+void SubresourceFilterAgent::DidCreateNewDocument() {
+  if (!first_document_)
+    return;
+  first_document_ = false;
+
+  // Local subframes will first navigate to kAboutBlankURL. Frames created by
+  // the browser initialize the LocalFrame before creating
+  // RenderFrameObservers, so the about:blank document isn't observed. We only
+  // care about local subframes.
+  if (IsAdSubframe() && GetDocumentURL() == url::kAboutBlankURL)
+    SendFrameIsAdSubframe();
 }
 
 void SubresourceFilterAgent::DidCommitProvisionalLoad(
@@ -173,7 +203,7 @@ void SubresourceFilterAgent::DidCommitProvisionalLoad(
       use_parent_activation ? GetParentActivationState(render_frame())
                             : activation_state_for_next_commit_;
 
-  ResetActivatonStateForNextCommit();
+  ResetInfoForNextCommit();
 
   // Do not pollute the histograms for empty main frame documents.
   if (IsMainFrame() && !url.SchemeIsHTTPOrHTTPS() && !url.SchemeIsFile())
@@ -186,10 +216,7 @@ void SubresourceFilterAgent::DidCommitProvisionalLoad(
 
   scoped_refptr<const MemoryMappedRuleset> ruleset =
       ruleset_dealer_->GetRuleset();
-  DCHECK(ruleset);
-  // Data can be null even if the original file is valid, if there is a
-  // memory mapping issue.
-  if (!ruleset->data())
+  if (!ruleset)
     return;
 
   base::OnceClosure first_disallowed_load_callback(base::BindOnce(
@@ -197,7 +224,7 @@ void SubresourceFilterAgent::DidCommitProvisionalLoad(
       AsWeakPtr()));
   auto filter = std::make_unique<WebDocumentSubresourceFilterImpl>(
       url::Origin::Create(url), activation_state, std::move(ruleset),
-      std::move(first_disallowed_load_callback));
+      std::move(first_disallowed_load_callback), IsAdSubframe());
 
   filter_for_last_committed_load_ = filter->AsWeakPtr();
   SetSubresourceFilterForCommittedLoad(std::move(filter));
@@ -206,7 +233,7 @@ void SubresourceFilterAgent::DidCommitProvisionalLoad(
 void SubresourceFilterAgent::DidFailProvisionalLoad(
     const blink::WebURLError& error) {
   // TODO(engedy): Add a test with `frame-ancestor` violation to exercise this.
-  ResetActivatonStateForNextCommit();
+  ResetInfoForNextCommit();
 }
 
 void SubresourceFilterAgent::DidFinishLoad() {
@@ -234,6 +261,7 @@ void SubresourceFilterAgent::WillCreateWorkerFetchContext(
   base::File ruleset_file = ruleset_dealer_->DuplicateRulesetFile();
   if (!ruleset_file.IsValid())
     return;
+
   worker_fetch_context->SetSubresourceFilterBuilder(
       std::make_unique<WebDocumentSubresourceFilterImpl::BuilderImpl>(
           url::Origin::Create(GetDocumentURL()),
@@ -241,7 +269,8 @@ void SubresourceFilterAgent::WillCreateWorkerFetchContext(
           std::move(ruleset_file),
           base::BindOnce(&SubresourceFilterAgent::
                              SignalFirstSubresourceDisallowedForCommittedLoad,
-                         AsWeakPtr())));
+                         AsWeakPtr()),
+          IsAdSubframe()));
 }
 
 }  // namespace subresource_filter

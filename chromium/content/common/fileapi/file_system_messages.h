@@ -9,9 +9,12 @@
 
 #include <stdint.h>
 
+#include <string>
+#include <vector>
+
+#include "components/services/filesystem/public/interfaces/types.mojom.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_platform_file.h"
-#include "storage/common/fileapi/directory_entry.h"
 #include "storage/common/fileapi/file_system_info.h"
 #include "storage/common/fileapi/file_system_types.h"
 #include "storage/common/quota/quota_limit_type.h"
@@ -21,9 +24,9 @@
 #define IPC_MESSAGE_EXPORT CONTENT_EXPORT
 #define IPC_MESSAGE_START FileSystemMsgStart
 
-IPC_STRUCT_TRAITS_BEGIN(storage::DirectoryEntry)
+IPC_STRUCT_TRAITS_BEGIN(filesystem::mojom::DirectoryEntry)
   IPC_STRUCT_TRAITS_MEMBER(name)
-  IPC_STRUCT_TRAITS_MEMBER(is_directory)
+  IPC_STRUCT_TRAITS_MEMBER(type)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(storage::FileSystemInfo)
@@ -32,13 +35,15 @@ IPC_STRUCT_TRAITS_BEGIN(storage::FileSystemInfo)
   IPC_STRUCT_TRAITS_MEMBER(mount_type)
 IPC_STRUCT_TRAITS_END()
 
+IPC_ENUM_TRAITS_MAX_VALUE(filesystem::mojom::FsFileType,
+                          filesystem::mojom::FsFileType::DIRECTORY)
 IPC_ENUM_TRAITS_MAX_VALUE(storage::FileSystemType,
                           storage::FileSystemType::kFileSystemTypeLast)
 IPC_ENUM_TRAITS_MAX_VALUE(storage::QuotaLimitType, storage::kQuotaLimitTypeLast)
 
 // File system messages sent from the browser to the child process.
 
-// WebFrameClient::openFileSystem response messages.
+// WebLocalFrameClient::openFileSystem response messages.
 IPC_MESSAGE_CONTROL3(FileSystemMsg_DidOpenFileSystem,
                      int /* request_id */,
                      std::string /* name */,
@@ -59,10 +64,11 @@ IPC_MESSAGE_CONTROL3(FileSystemMsg_DidCreateSnapshotFile,
                      int /* request_id */,
                      base::File::Info,
                      base::FilePath /* true platform path */)
-IPC_MESSAGE_CONTROL3(FileSystemMsg_DidReadDirectory,
-                     int /* request_id */,
-                     std::vector<storage::DirectoryEntry> /* entries */,
-                     bool /* has_more */)
+IPC_MESSAGE_CONTROL3(
+    FileSystemMsg_DidReadDirectory,
+    int /* request_id */,
+    std::vector<filesystem::mojom::DirectoryEntry> /* entries */,
+    bool /* has_more */)
 IPC_MESSAGE_CONTROL3(FileSystemMsg_DidWrite,
                      int /* request_id */,
                      int64_t /* byte count */,
@@ -73,7 +79,7 @@ IPC_MESSAGE_CONTROL2(FileSystemMsg_DidFail,
 
 // File system messages sent from the child process to the browser.
 
-// WebFrameClient::openFileSystem() message.
+// WebLocalFrameClient::openFileSystem() message.
 IPC_MESSAGE_CONTROL3(FileSystemHostMsg_OpenFileSystem,
                      int /* request_id */,
                      GURL /* origin_url */,

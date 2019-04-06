@@ -65,12 +65,6 @@ void VertexAttrib::SetInfo(
   integer_ = integer;
 }
 
-void VertexAttrib::Unbind(Buffer* buffer) {
-  if (buffer_.get() == buffer) {
-    buffer_ = NULL;
-  }
-}
-
 bool VertexAttrib::CanAccess(GLuint index) const {
   if (!enabled_) {
     return true;
@@ -90,21 +84,25 @@ bool VertexAttrib::CanAccess(GLuint index) const {
   return index < num_elements;
 }
 
-VertexAttribManager::VertexAttribManager()
+VertexAttribManager::VertexAttribManager(bool do_buffer_refcounting)
     : num_fixed_attribs_(0),
       element_array_buffer_(NULL),
       manager_(NULL),
       deleted_(false),
-      service_id_(0) {
-}
+      is_bound_(false),
+      do_buffer_refcounting_(do_buffer_refcounting),
+      service_id_(0) {}
 
 VertexAttribManager::VertexAttribManager(VertexArrayManager* manager,
                                          GLuint service_id,
-                                         uint32_t num_vertex_attribs)
+                                         uint32_t num_vertex_attribs,
+                                         bool do_buffer_refcounting)
     : num_fixed_attribs_(0),
       element_array_buffer_(NULL),
       manager_(manager),
       deleted_(false),
+      is_bound_(false),
+      do_buffer_refcounting_(do_buffer_refcounting),
       service_id_(service_id) {
   manager_->StartTracking(this);
   Initialize(num_vertex_attribs, false);
@@ -144,7 +142,11 @@ void VertexAttribManager::Initialize(uint32_t max_vertex_attribs,
 }
 
 void VertexAttribManager::SetElementArrayBuffer(Buffer* buffer) {
+  if (do_buffer_refcounting_ && is_bound_ && element_array_buffer_)
+    element_array_buffer_->OnUnbind(GL_ELEMENT_ARRAY_BUFFER, false);
   element_array_buffer_ = buffer;
+  if (do_buffer_refcounting_ && is_bound_ && buffer)
+    buffer->OnBind(GL_ELEMENT_ARRAY_BUFFER, false);
 }
 
 bool VertexAttribManager::Enable(GLuint index, bool enable) {
@@ -166,12 +168,69 @@ bool VertexAttribManager::Enable(GLuint index, bool enable) {
   return true;
 }
 
-void VertexAttribManager::Unbind(Buffer* buffer) {
+void VertexAttribManager::Unbind(Buffer* buffer, Buffer* bound_array_buffer) {
+  DCHECK(buffer);
+  DCHECK(is_bound_);
   if (element_array_buffer_.get() == buffer) {
-    element_array_buffer_ = NULL;
+    if (do_buffer_refcounting_)
+      buffer->OnUnbind(GL_ELEMENT_ARRAY_BUFFER, false);
+    if (manager_ && manager_->have_context_)
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    element_array_buffer_ = nullptr;
   }
+  // When a vertex array object is bound, some drivers (AMD Linux,
+  // Qualcomm, etc.) have a bug where it incorrectly generates an
+  // GL_INVALID_OPERATION on glVertexAttribPointer() if pointer is
+  // NULL, no buffer is bound on GL_ARRAY_BUFFER.  Therefore, in order
+  // to clear the buffer bindings, we create a new array buffer,
+  // redirect all bindings to the new buffer, and then delete the
+  // buffer.
+  GLuint new_buffer = 0;
   for (uint32_t vv = 0; vv < vertex_attribs_.size(); ++vv) {
-    vertex_attribs_[vv].Unbind(buffer);
+    if (vertex_attribs_[vv].buffer_ == buffer) {
+      if (do_buffer_refcounting_)
+        buffer->OnUnbind(GL_ARRAY_BUFFER, true);
+      vertex_attribs_[vv].buffer_ = nullptr;
+      if (manager_ && manager_->have_context_) {
+        if (!new_buffer) {
+          glGenBuffersARB(1, &new_buffer);
+          DCHECK_NE(0u, new_buffer);
+          glBindBuffer(GL_ARRAY_BUFFER, new_buffer);
+          // TODO(zmo): Do we need to also call glBufferData() here?
+        }
+        glVertexAttribPointer(
+            vv, vertex_attribs_[vv].size_, vertex_attribs_[vv].type_,
+            vertex_attribs_[vv].normalized_, vertex_attribs_[vv].gl_stride_, 0);
+      }
+    }
+  }
+  if (new_buffer) {
+    glDeleteBuffersARB(1, &new_buffer);
+    glBindBuffer(GL_ARRAY_BUFFER,
+                 bound_array_buffer ? bound_array_buffer->service_id() : 0u);
+  }
+}
+
+void VertexAttribManager::SetIsBound(bool is_bound) {
+  if (is_bound == is_bound_)
+    return;
+  is_bound_ = is_bound;
+  if (do_buffer_refcounting_) {
+    if (element_array_buffer_) {
+      if (is_bound)
+        element_array_buffer_->OnBind(GL_ELEMENT_ARRAY_BUFFER, false);
+      else
+        element_array_buffer_->OnUnbind(GL_ELEMENT_ARRAY_BUFFER, false);
+    }
+    for (const auto& va : vertex_attribs_) {
+      if (va.buffer_) {
+        if (is_bound) {
+          va.buffer_->OnBind(GL_ARRAY_BUFFER, true);
+        } else {
+          va.buffer_->OnUnbind(GL_ARRAY_BUFFER, true);
+        }
+      }
+    }
   }
 }
 
@@ -201,10 +260,9 @@ bool VertexAttribManager::ValidateBindings(
        it != enabled_vertex_attribs_.end(); ++it) {
     VertexAttrib* attrib = *it;
     Buffer* buffer = attrib->buffer();
-    if (!buffer_manager->RequestBufferAccess(
-            error_state, buffer, function_name,
-            "attached to enabled attrib %u",
-            attrib->index())) {
+    if (!buffer_manager->RequestBufferAccess(error_state, buffer, function_name,
+                                             "attached to enabled attrib %u",
+                                             attrib->index())) {
       return false;
     }
     const Program::VertexAttrib* attrib_info =

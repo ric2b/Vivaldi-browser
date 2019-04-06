@@ -44,8 +44,7 @@ class ProfileDownloaderMock : public ProfileDownloader {
       : ProfileDownloader(delegate) {
   }
 
-  virtual ~ProfileDownloaderMock() {
-  }
+  ~ProfileDownloaderMock() override {}
 
   MOCK_CONST_METHOD0(GetProfileFullName, base::string16());
   MOCK_CONST_METHOD0(GetProfileGivenName, base::string16());
@@ -62,8 +61,7 @@ class GAIAInfoUpdateServiceMock : public GAIAInfoUpdateService {
       : GAIAInfoUpdateService(profile) {
   }
 
-  virtual ~GAIAInfoUpdateServiceMock() {
-  }
+  ~GAIAInfoUpdateServiceMock() override {}
 
   MOCK_METHOD0(Update, void());
 };
@@ -200,8 +198,9 @@ TEST_F(GAIAInfoUpdateServiceTest, DownloadSuccess) {
   EXPECT_EQ(given_name, entry->GetGAIAGivenName());
   EXPECT_TRUE(gfx::test::AreImagesEqual(image, *entry->GetGAIAPicture()));
   EXPECT_EQ(url, service()->GetCachedPictureURL());
-  EXPECT_EQ(Profile::kNoHostedDomainFound, profile()->GetPrefs()->
-      GetString(prefs::kGoogleServicesHostedDomain));
+  EXPECT_EQ(
+      AccountTrackerService::kNoHostedDomainFound,
+      profile()->GetPrefs()->GetString(prefs::kGoogleServicesHostedDomain));
 }
 
 TEST_F(GAIAInfoUpdateServiceTest, DownloadFailure) {

@@ -7,6 +7,7 @@ package org.chromium.components.invalidation;
 import android.accounts.Account;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.test.ServiceTestCase;
 
@@ -71,7 +72,7 @@ public class InvalidationClientServiceTest extends
     public void setUp() throws Exception {
         super.setUp();
         mStartServiceIntents = new ArrayList<>();
-        setContext(new AdvancedMockContext(getContext()) {
+        setContext(new AdvancedMockContext(InstrumentationRegistry.getTargetContext()) {
             @Override
             public ComponentName startService(Intent intent) {
                 mStartServiceIntents.add(intent);
@@ -80,7 +81,7 @@ public class InvalidationClientServiceTest extends
         });
         ContextUtils.initApplicationContextForTests(getContext().getApplicationContext());
         PathUtils.setPrivateDataDirectorySuffix(PRIVATE_DATA_DIRECTORY_SUFFIX);
-        LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER).ensureInitialized();
+        LibraryLoader.getInstance().ensureInitialized(LibraryProcessType.PROCESS_BROWSER);
         setupService();
     }
 

@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/values.h"
-#include "chrome/browser/chromeos/arc/arc_auth_notification.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -25,7 +24,7 @@
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_manager.h"
-#include "ui/message_center/notification.h"
+#include "ui/message_center/public/cpp/notification.h"
 
 namespace arc {
 
@@ -42,8 +41,7 @@ class ArcProvisionNotificationServiceTest : public BrowserWithTestWindowTest {
   void SetUp() override {
     SetArcAvailableCommandLineForTesting(
         base::CommandLine::ForCurrentProcess());
-    ArcSessionManager::DisableUIForTesting();
-    ArcAuthNotification::DisableForTesting();
+    ArcSessionManager::SetUiEnabledForTesting(false);
 
     arc_service_manager_ = std::make_unique<ArcServiceManager>();
     arc_session_manager_ = std::make_unique<ArcSessionManager>(

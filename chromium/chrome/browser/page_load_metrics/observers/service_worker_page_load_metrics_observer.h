@@ -16,6 +16,7 @@ extern const char kHistogramServiceWorkerParseStart[];
 extern const char kBackgroundHistogramServiceWorkerParseStart[];
 extern const char kHistogramServiceWorkerParseStartForwardBack[];
 extern const char kHistogramServiceWorkerParseStartForwardBackNoStore[];
+extern const char kHistogramServiceWorkerFirstPaint[];
 extern const char kHistogramServiceWorkerFirstContentfulPaint[];
 extern const char kBackgroundHistogramServiceWorkerFirstContentfulPaint[];
 extern const char kHistogramServiceWorkerFirstContentfulPaintForwardBack[];
@@ -29,6 +30,7 @@ extern const char kHistogramServiceWorkerLoad[];
 
 extern const char kHistogramServiceWorkerParseStartInbox[];
 extern const char kHistogramServiceWorkerFirstContentfulPaintInbox[];
+extern const char kHistogramServiceWorkerFirstInputDelay[];
 extern const char kHistogramServiceWorkerFirstMeaningfulPaintInbox[];
 extern const char
     kHistogramServiceWorkerParseStartToFirstMeaningfulPaintInbox[];
@@ -46,7 +48,6 @@ extern const char
     kHistogramServiceWorkerParseStartToFirstContentfulPaintSearch[];
 extern const char kHistogramServiceWorkerDomContentLoadedSearch[];
 extern const char kHistogramServiceWorkerLoadSearch[];
-extern const char kUkmServiceWorkerName[];
 
 extern const char kHistogramNoServiceWorkerFirstContentfulPaintSearch[];
 extern const char kHistogramNoServiceWorkerFirstMeaningfulPaintSearch[];
@@ -66,7 +67,13 @@ class ServiceWorkerPageLoadMetricsObserver
   // page_load_metrics::PageLoadMetricsObserver implementation:
   ObservePolicy OnCommit(content::NavigationHandle* navigation_handle,
                          ukm::SourceId source_id) override;
+  void OnFirstInputInPage(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
   void OnParseStart(
+      const page_load_metrics::mojom::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+  void OnFirstPaintInPage(
       const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
   void OnFirstContentfulPaintInPage(

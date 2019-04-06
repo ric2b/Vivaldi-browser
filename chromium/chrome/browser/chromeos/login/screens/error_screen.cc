@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/login/screens/error_screen.h"
 
+#include "ash/public/cpp/ash_features.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/captive_portal_window_proxy.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host_mojo.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -33,9 +35,12 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "chromeos/network/network_connection_handler.h"
+#include "chromeos/network/network_handler.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "chromeos/network/portal_detector/network_portal_detector_strategy.h"
 #include "components/session_manager/core/session_manager.h"
+#include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
@@ -77,8 +82,6 @@ constexpr const char
 constexpr const char ErrorScreen::kUserActionRebootButtonClicked[] = "reboot";
 constexpr const char ErrorScreen::kUserActionShowCaptivePortalClicked[] =
     "show-captive-portal";
-constexpr const char ErrorScreen::kUserActionConnectRequested[] =
-    "connect-requested";
 
 ErrorScreen::ErrorScreen(BaseScreenDelegate* base_screen_delegate,
                          NetworkErrorView* view)
@@ -87,11 +90,13 @@ ErrorScreen::ErrorScreen(BaseScreenDelegate* base_screen_delegate,
       weak_factory_(this) {
   network_state_informer_ = new NetworkStateInformer();
   network_state_informer_->Init();
+  NetworkHandler::Get()->network_connection_handler()->AddObserver(this);
   if (view_)
     view_->Bind(this);
 }
 
 ErrorScreen::~ErrorScreen() {
+  NetworkHandler::Get()->network_connection_handler()->RemoveObserver(this);
   if (view_)
     view_->Unbind();
 }
@@ -107,11 +112,13 @@ void ErrorScreen::AllowOfflineLogin(bool allowed) {
 void ErrorScreen::FixCaptivePortal() {
   if (!captive_portal_window_proxy_.get()) {
     content::WebContents* web_contents =
-        LoginDisplayHost::default_host()->GetWebUILoginView()->GetWebContents();
+        LoginDisplayHost::default_host()->GetOobeWebContents();
     captive_portal_window_proxy_.reset(new CaptivePortalWindowProxy(
         network_state_informer_.get(), web_contents));
   }
   captive_portal_window_proxy_->ShowIfRedirected();
+
+  LoginDisplayHost::default_host()->ShowDialogForCaptivePortal();
 }
 
 NetworkError::UIState ErrorScreen::GetUIState() const {
@@ -207,6 +214,7 @@ void ErrorScreen::OnHide() {
   }
   network_portal_detector::GetInstance()->SetStrategy(
       PortalDetectorStrategy::STRATEGY_ID_LOGIN_SCREEN);
+  LoginDisplayHost::default_host()->HideDialogForCaptivePortal();
 }
 
 void ErrorScreen::OnUserAction(const std::string& action_id) {
@@ -222,8 +230,6 @@ void ErrorScreen::OnUserAction(const std::string& action_id) {
     OnLocalStateErrorPowerwashButtonClicked();
   else if (action_id == kUserActionRebootButtonClicked)
     OnRebootButtonClicked();
-  else if (action_id == kUserActionConnectRequested)
-    OnConnectRequested();
   else
     BaseScreen::OnUserAction(action_id);
 }
@@ -284,7 +290,7 @@ void ErrorScreen::OnConfigureCerts() {
 
 void ErrorScreen::OnDiagnoseButtonClicked() {
   Profile* profile = GetAppProfile();
-  ExtensionService* extension_service =
+  extensions::ExtensionService* extension_service =
       extensions::ExtensionSystem::Get(profile)->extension_service();
 
   std::string extension_id = extension_service->component_loader()->Add(
@@ -319,7 +325,7 @@ void ErrorScreen::OnRebootButtonClicked() {
       power_manager::REQUEST_RESTART_FOR_USER, "login error screen");
 }
 
-void ErrorScreen::OnConnectRequested() {
+void ErrorScreen::ConnectToNetworkRequested(const std::string& service_path) {
   connect_request_callbacks_.Notify();
 }
 

@@ -24,10 +24,6 @@
 #include "ui/keyboard/keyboard_controller_observer.h"
 #include "ui/wm/public/activation_change_observer.h"
 
-namespace keyboard {
-class KeyboardController;
-}
-
 namespace ui {
 class ImplicitAnimationObserver;
 class MouseEvent;
@@ -123,7 +119,9 @@ class ASH_EXPORT ShelfLayoutManager
   }
   ShelfAutoHideState auto_hide_state() const { return state_.auto_hide_state; }
 
-  int chromevox_panel_height() const { return chromevox_panel_height_; }
+  int accessibility_panel_height() const { return accessibility_panel_height_; }
+
+  int docked_magnifier_height() const { return docked_magnifier_height_; }
 
   ShelfWidget* shelf_widget() { return shelf_widget_; }
 
@@ -148,10 +146,10 @@ class ASH_EXPORT ShelfLayoutManager
   // Overridden from ShellObserver:
   void OnShelfAutoHideBehaviorChanged(aura::Window* root_window) override;
   void OnPinnedStateChanged(aura::Window* pinned_window) override;
-  void OnVirtualKeyboardStateChanged(bool activated,
-                                     aura::Window* root_window) override;
   void OnAppListVisibilityChanged(bool shown,
                                   aura::Window* root_window) override;
+  void OnSplitViewModeStarted() override;
+  void OnSplitViewModeEnded() override;
 
   // Overridden from wm::ActivationChangeObserver:
   void OnWindowActivated(ActivationReason reason,
@@ -159,10 +157,9 @@ class ASH_EXPORT ShelfLayoutManager
                          aura::Window* lost_active) override;
 
   // Overridden from keyboard::KeyboardControllerObserver:
-  void OnKeyboardAppearanceChanging(
+  void OnKeyboardAppearanceChanged(
       const keyboard::KeyboardStateDescriptor& state) override;
-  void OnKeyboardAvailabilityChanging(const bool is_available) override;
-  void OnKeyboardClosed() override;
+  void OnKeyboardVisibilityStateChanged(bool is_visible) override;
 
   // Overridden from LockStateObserver:
   void OnLockStateEvent(LockStateObserver::EventType event) override;
@@ -196,15 +193,22 @@ class ASH_EXPORT ShelfLayoutManager
   // Returns how the shelf background should be painted.
   ShelfBackgroundType GetShelfBackgroundType() const;
 
-  // Set the height of the ChromeVox panel, which takes away space from the
-  // available work area from the top of the screen.
-  void SetChromeVoxPanelHeight(int height);
+  // Set the height of the accessibility panel, which takes away space from the
+  // available work area from the top of the screen. Used by ChromeVox.
+  void SetAccessibilityPanelHeight(int height);
+
+  // Set the height of the Docked Magnifier viewport at the top of the screen,
+  // which will reduce the available screen work area similarly to the ChromeVox
+  // panel height. The Docked Magnifier appears above the ChromeVox panel.
+  void SetDockedMagnifierHeight(int height);
+
+  gfx::Rect keyboard_bounds() const { return keyboard_bounds_; }
 
  private:
   class UpdateShelfObserver;
   friend class PanelLayoutManagerTest;
   friend class ShelfLayoutManagerTest;
-  friend class WebNotificationTrayTest;
+  friend class NotificationTrayTest;
 
   struct TargetBounds {
     TargetBounds();
@@ -225,6 +229,9 @@ class ASH_EXPORT ShelfLayoutManager
     bool IsAddingSecondaryUser() const;
 
     bool IsScreenLocked() const;
+
+    // Returns whether the session is in an active state.
+    bool IsActiveSessionState() const;
 
     // Returns true if the two states are considered equal. As
     // |auto_hide_state| only matters if |visibility_state| is
@@ -386,9 +393,14 @@ class ASH_EXPORT ShelfLayoutManager
   // keyboard.
   gfx::Rect user_work_area_bounds_;
 
-  // The height of the ChromeVox panel at the top of the screen, which
-  // needs to be removed from the available work area.
-  int chromevox_panel_height_ = 0;
+  // The height of the accessibility panel at the top of the screen, which
+  // needs to be removed from the available work area. Used by ChromeVox.
+  int accessibility_panel_height_ = 0;
+
+  // The height of the Docked Magnifier viewport at the top of the screen, which
+  // similarly to |accessibility_panel_height_| needs to be removed from the
+  // available work area.
+  int docked_magnifier_height_ = 0;
 
   // Whether background blur is enabled.
   const bool is_background_blur_enabled_;
@@ -403,9 +415,6 @@ class ASH_EXPORT ShelfLayoutManager
   ShelfBackgroundType shelf_background_type_before_drag_ =
       SHELF_BACKGROUND_OVERLAP;
 
-  ScopedObserver<keyboard::KeyboardController,
-                 keyboard::KeyboardControllerObserver>
-      keyboard_observer_;
   ScopedSessionObserver scoped_session_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(ShelfLayoutManager);

@@ -35,7 +35,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
-#include "chrome/browser/ui/user_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -48,7 +47,7 @@
 #include "components/signin/core/browser/signin_pref_names.h"
 #include "components/signin/core/browser/signin_switches.h"
 #include "content/public/browser/browser_thread.h"
-#include "extensions/features/features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "net/base/escape.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -67,6 +66,10 @@
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #endif  // !defined (OS_ANDROID)
 
+#if !defined(OS_CHROMEOS)
+#include "chrome/browser/ui/user_manager.h"
+#endif  // !defined(OS_CHROMEOS)
+
 using base::UserMetricsAction;
 using content::BrowserThread;
 
@@ -74,13 +77,13 @@ namespace {
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 void BlockExtensions(Profile* profile) {
-  ExtensionService* extension_service =
+  extensions::ExtensionService* extension_service =
       extensions::ExtensionSystem::Get(profile)->extension_service();
   extension_service->BlockAllExtensions();
 }
 
 void UnblockExtensions(Profile* profile) {
-  ExtensionService* extension_service =
+  extensions::ExtensionService* extension_service =
       extensions::ExtensionSystem::Get(profile)->extension_service();
   extension_service->UnblockAllExtensions();
 }
@@ -156,9 +159,6 @@ void OnUserManagerSystemProfileCreated(
   } else if (user_manager_action ==
              profiles::USER_MANAGER_SELECT_PROFILE_CHROME_SETTINGS) {
     page += profiles::kUserManagerSelectProfileChromeSettings;
-  } else if (user_manager_action ==
-             profiles::USER_MANAGER_SELECT_PROFILE_APP_LAUNCHER) {
-    page += profiles::kUserManagerSelectProfileAppLauncher;
   }
   callback.Run(system_profile, page);
 }
@@ -186,7 +186,6 @@ const char kUserManagerOpenCreateUserPage[] = "#create-user";
 const char kUserManagerSelectProfileTaskManager[] = "#task-manager";
 const char kUserManagerSelectProfileAboutChrome[] = "#about-chrome";
 const char kUserManagerSelectProfileChromeSettings[] = "#chrome-settings";
-const char kUserManagerSelectProfileAppLauncher[] = "#app-launcher";
 
 base::FilePath GetPathOfProfileWithEmail(ProfileManager* profile_manager,
                                          const std::string& email) {
@@ -354,8 +353,10 @@ void CreateAndSwitchToNewProfile(ProfileManager::CreateCallback callback,
 }
 
 void ProfileBrowserCloseSuccess(const base::FilePath& profile_path) {
+#if !defined(OS_CHROMEOS)
   UserManager::Show(base::FilePath(),
                     profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
+#endif  // !defined(OS_CHROMEOS)
 }
 
 void CloseGuestProfileWindows() {
@@ -384,8 +385,10 @@ void LockBrowserCloseSuccess(const base::FilePath& profile_path) {
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   chrome::HideTaskManager();
+#if !defined(OS_CHROMEOS)
   UserManager::Show(profile_path,
                     profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
+#endif  // !defined(OS_CHROMEOS)
 }
 
 void LockProfile(Profile* profile) {
@@ -415,7 +418,7 @@ bool IsLockAvailable(Profile* profile) {
   }
   // TODO(mlerman): Prohibit only users who authenticate using SAML. Until then,
   // prohibited users who use hosted domains (aside from google.com).
-  if (hosted_domain != Profile::kNoHostedDomainFound &&
+  if (hosted_domain != AccountTrackerService::kNoHostedDomainFound &&
       hosted_domain != "google.com") {
     return false;
   }

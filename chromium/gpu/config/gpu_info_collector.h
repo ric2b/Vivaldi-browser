@@ -15,38 +15,39 @@ namespace angle {
 struct SystemInfo;
 }
 
+namespace base {
+class CommandLine;
+}
+
 namespace gpu {
+struct GpuPreferences;
 
 // Collects basic GPU info without creating a GL/DirectX context (and without
 // the danger of crashing), including vendor_id and device_id.
 // This is called at browser process startup time.
 // The subset each platform collects may be different.
-GPU_EXPORT CollectInfoResult CollectBasicGraphicsInfo(GPUInfo* gpu_info);
+GPU_EXPORT bool CollectBasicGraphicsInfo(GPUInfo* gpu_info);
+
+// Similar to above, except it handles the case where the software renderer of
+// the platform is used.
+GPU_EXPORT bool CollectBasicGraphicsInfo(const base::CommandLine* command_line,
+                                         GPUInfo* gpu_info);
 
 // Create a GL/DirectX context and collect related info.
 // This is called at GPU process startup time.
-GPU_EXPORT CollectInfoResult CollectContextGraphicsInfo(GPUInfo* gpu_info);
+GPU_EXPORT bool CollectContextGraphicsInfo(
+    GPUInfo* gpu_info,
+    const GpuPreferences& gpu_preferences);
 
 #if defined(OS_WIN)
 // Collect the DirectX Disagnostics information about the attached displays.
 GPU_EXPORT bool GetDxDiagnostics(DxDiagNode* output);
+GPU_EXPORT void RecordGpuSupportedRuntimeVersionHistograms(GPUInfo* gpu_info);
 #endif  // OS_WIN
 
 // Create a GL context and collect GL strings and versions.
-GPU_EXPORT CollectInfoResult CollectGraphicsInfoGL(GPUInfo* gpu_info);
-
-// Each platform stores the driver version on the GL_VERSION string differently
-GPU_EXPORT CollectInfoResult CollectDriverInfoGL(GPUInfo* gpu_info);
-
-// Merge GPUInfo from CollectContextGraphicsInfo into basic GPUInfo.
-// This is platform specific, depending on which info are collected at which
-// stage.
-GPU_EXPORT void MergeGPUInfo(GPUInfo* basic_gpu_info,
-                             const GPUInfo& context_gpu_info);
-
-// MergeGPUInfo() when GL driver is used.
-GPU_EXPORT void MergeGPUInfoGL(GPUInfo* basic_gpu_info,
-                               const GPUInfo& context_gpu_info);
+GPU_EXPORT bool CollectGraphicsInfoGL(GPUInfo* gpu_info,
+                                      const GpuPreferences& gpu_preferences);
 
 // If more than one GPUs are identified, and GL strings are available,
 // identify the active GPU based on GL strings.
@@ -56,6 +57,10 @@ GPU_EXPORT void IdentifyActiveGPU(GPUInfo* gpu_info);
 // into a GPUInfo
 void FillGPUInfoFromSystemInfo(GPUInfo* gpu_info,
                                angle::SystemInfo* system_info);
+
+// On Android, this calls CollectContextGraphicsInfo().
+// On other platforms, this calls CollectBasicGraphicsInfo().
+GPU_EXPORT void CollectGraphicsInfoForTesting(GPUInfo* gpu_info);
 
 }  // namespace gpu
 

@@ -45,14 +45,15 @@ FileGrid.prototype = {
 
 /**
  * Decorates an HTML element to be a FileGrid.
- * @param {!Element} self The grid to decorate.
+ * @param {!Element} element The grid to decorate.
  * @param {!MetadataModel} metadataModel File system metadata.
  * @param {VolumeManagerWrapper} volumeManager Volume manager instance.
  * @param {!importer.HistoryLoader} historyLoader
  */
 FileGrid.decorate = function(
-    self, metadataModel, volumeManager, historyLoader) {
-  cr.ui.Grid.decorate(self);
+    element, metadataModel, volumeManager, historyLoader) {
+  cr.ui.Grid.decorate(element);
+  var self = /** @type {!FileGrid} */ (element);
   self.__proto__ = FileGrid.prototype;
   self.metadataModel_ = metadataModel;
   self.volumeManager_ = volumeManager;
@@ -116,7 +117,6 @@ FileGrid.GridSize = 180; // px
 /**
  * Sets list thumbnail loader.
  * @param {ListThumbnailLoader} listThumbnailLoader A list thumbnail loader.
- * @private
  */
 FileGrid.prototype.setListThumbnailLoader = function(listThumbnailLoader) {
   if (this.listThumbnailLoader_) {
@@ -555,12 +555,12 @@ FileGrid.prototype.decorateThumbnail_ = function(li, entry) {
 
   var isDirectory = entry && entry.isDirectory;
   if (!isDirectory) {
-    var active_checkmark = li.ownerDocument.createElement('div');
-    active_checkmark.className = 'checkmark active';
-    frame.appendChild(active_checkmark);
-    var inactive_checkmark = li.ownerDocument.createElement('div');
-    inactive_checkmark.className = 'checkmark inactive';
-    frame.appendChild(inactive_checkmark);
+    var activeCheckmark = li.ownerDocument.createElement('div');
+    activeCheckmark.className = 'checkmark active';
+    frame.appendChild(activeCheckmark);
+    var inactiveCheckmark = li.ownerDocument.createElement('div');
+    inactiveCheckmark.className = 'checkmark inactive';
+    frame.appendChild(inactiveCheckmark);
   }
 
   var badge = li.ownerDocument.createElement('div');
@@ -811,6 +811,22 @@ FileGrid.Item.prototype.decorate = function() {
   // Override the default role 'listitem' to 'option' to match the parent's
   // role (listbox).
   this.setAttribute('role', 'option');
+  var nameId = this.id + '-entry-name';
+  this.querySelector('.entry-name').setAttribute('id', nameId);
+  this.querySelector('.img-container').setAttribute('aria-labelledby', nameId);
+  this.setAttribute('aria-labelledby', nameId);
+};
+
+/**
+ * Returns whether the drag event is inside a file entry in the list (and not
+ * the background padding area).
+ * @param {MouseEvent} event Drag start event.
+ * @return {boolean} True if the mouse is over an element in the list, False if
+ *                   it is in the background.
+ */
+FileGrid.prototype.hasDragHitElement = function(event) {
+  var pos = DragSelector.getScrolledPosition(this, event);
+  return this.getHitElements(pos.x, pos.y).length !== 0;
 };
 
 /**
@@ -820,8 +836,8 @@ FileGrid.Item.prototype.decorate = function() {
  * @return {boolean} True if the mouse is hit to the background of the list.
  */
 FileGrid.prototype.shouldStartDragSelection = function(event) {
-  var pos = DragSelector.getScrolledPosition(this, event);
-  return this.getHitElements(pos.x, pos.y).length === 0;
+  // Start dragging area if the drag starts outside of the contents of the grid.
+  return !this.hasDragHitElement(event);
 };
 
 /**
@@ -962,13 +978,14 @@ FileGridSelectionController.prototype.getIndexBelow = function(index) {
   if (index === this.getLastIndex())
     return -1;
 
-  var row = this.grid_.getItemRow(index);
-  var col = this.grid_.getItemColumn(index);
-  var nextIndex = this.grid_.getItemIndex(row + 1, col);
+  var grid = /** @type {!FileGrid} */ (this.grid_);
+  var row = grid.getItemRow(index);
+  var col = grid.getItemColumn(index);
+  var nextIndex = grid.getItemIndex(row + 1, col);
   if (nextIndex === -1) {
-    return row + 1 < this.grid_.getFolderRowCount() ?
-        this.grid_.dataModel.getFolderCount() - 1 :
-        this.grid_.dataModel.length - 1;
+    return row + 1 < grid.getFolderRowCount() ?
+        grid.dataModel.getFolderCount() - 1 :
+        grid.dataModel.length - 1;
   }
   return nextIndex;
 };
@@ -980,15 +997,16 @@ FileGridSelectionController.prototype.getIndexAbove = function(index) {
   if (index == 0)
     return -1;
 
-  var row = this.grid_.getItemRow(index);
+  var grid = /** @type {!FileGrid} */ (this.grid_);
+  var row = grid.getItemRow(index);
   if (row - 1 < 0)
     return 0;
-  var col = this.grid_.getItemColumn(index);
-  var nextIndex = this.grid_.getItemIndex(row - 1, col);
+  var col = grid.getItemColumn(index);
+  var nextIndex = grid.getItemIndex(row - 1, col);
   if (nextIndex === -1) {
-    return row - 1 < this.grid_.getFolderRowCount() ?
-        this.grid_.dataModel.getFolderCount() - 1 :
-        this.grid_.dataModel.length - 1;
+    return row - 1 < grid.getFolderRowCount() ?
+        grid.dataModel.getFolderCount() - 1 :
+        grid.dataModel.length - 1;
   }
   return nextIndex;
 };

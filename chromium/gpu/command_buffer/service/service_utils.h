@@ -11,6 +11,7 @@
 
 namespace gpu {
 struct ContextCreationAttribs;
+struct GpuPreferences;
 
 namespace gles2 {
 class ContextGroup;
@@ -19,12 +20,19 @@ GPU_GLES2_EXPORT gl::GLContextAttribs GenerateGLContextAttribs(
     const ContextCreationAttribs& attribs_helper,
     const ContextGroup* context_group);
 
+GPU_GLES2_EXPORT gl::GLContextAttribs GenerateGLContextAttribs(
+    const ContextCreationAttribs& attribs_helper,
+    bool use_passthrough_cmd_decoder);
+
 // Returns true if the passthrough command decoder has been requested
 GPU_GLES2_EXPORT bool UsePassthroughCommandDecoder(
     const base::CommandLine* command_line);
 
 // Returns true if the driver supports creating passthrough command decoders
 GPU_GLES2_EXPORT bool PassthroughCommandDecoderSupported();
+
+GPU_GLES2_EXPORT GpuPreferences
+ParseGpuPreferences(const base::CommandLine* command_line);
 
 }  // namespace gles2
 }  // namespace gpu

@@ -14,8 +14,6 @@
 
 namespace payments {
 
-const char kIso4217CurrencySystem[] = "urn:iso:std:iso:4217";
-
 namespace {
 
 // Support a maximum of 10 fractional digits, similar to the ISO20022 standard.
@@ -33,11 +31,8 @@ const static size_t kMaxCurrencyCodeDisplayedChars = 6;
 const char kEllipsis[] = "\xE2\x80\xA6";
 
 // Returns whether the |currency_code| is valid to be used in ICU.
-bool ShouldUseCurrencyCode(const std::string& currency_code,
-                           const std::string& currency_system) {
-  return (currency_system.empty() ||
-          currency_system == kIso4217CurrencySystem) &&
-         !currency_code.empty() &&
+bool ShouldUseCurrencyCode(const std::string& currency_code) {
+  return !currency_code.empty() &&
          currency_code.size() <= kMaxCurrencyCodeLength;
 }
 
@@ -51,7 +46,6 @@ std::string FormatCurrencyCode(const std::string& currency_code) {
 }  // namespace
 
 CurrencyFormatter::CurrencyFormatter(const std::string& currency_code,
-                                     const std::string& currency_system,
                                      const std::string& locale_name)
     : locale_(locale_name.c_str()),
       formatted_currency_code_(FormatCurrencyCode(currency_code)) {
@@ -64,7 +58,7 @@ CurrencyFormatter::CurrencyFormatter(const std::string& currency_code,
     return;
   }
 
-  if (ShouldUseCurrencyCode(currency_code, currency_system)) {
+  if (ShouldUseCurrencyCode(currency_code)) {
     currency_code_.reset(new icu::UnicodeString(
         currency_code.c_str(),
         base::checked_cast<int32_t>(currency_code.size())));
@@ -121,6 +115,16 @@ base::string16 CurrencyFormatter::Format(const std::string& amount) {
   output.findAndReplace(tmp_currency_code, "");
   tmp_currency_code.truncate(1);
   output.findAndReplace(tmp_currency_code, "");
+
+  // In some locales, "-" sign comes before 3-letter currency code followed by
+  // a space and the amount, removing currency code leaves a space between '-'
+  // and the amount. e.g. In en-AU, -4.56 (USD) is formatted as '-USD 4.56'.
+  // This change is a temporary work-around for updating ICU to 62.1/CLDR 33.1.
+  // A rather peculiar requirement/behavior of CurrencyFormatter needs to be
+  // reviewed. See  https://crbug.com/856113 .
+  output.findAndReplace("- ", "-");
+  output.findAndReplace(icu::UnicodeString::fromUTF8(u8"-\u00a0"), "-");
+
   // Trims any unicode whitespace (including non-breaking space).
   if (u_isUWhiteSpace(output[0])) {
     output.remove(0, 1);

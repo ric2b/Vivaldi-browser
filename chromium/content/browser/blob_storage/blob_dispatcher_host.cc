@@ -13,6 +13,7 @@
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/common/fileapi/webblob_messages.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_features.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "url/gurl.h"
@@ -89,25 +90,6 @@ void BlobDispatcherHost::OnRegisterPublicBlobURL(const GURL& public_url,
   public_blob_urls_.insert(public_url);
 }
 
-namespace {
-
-void RevokePublicBlobURLHelperIO(
-    scoped_refptr<ChromeBlobStorageContext> context,
-    const GURL& public_url) {
-  context->context()->RevokePublicBlobURL(public_url);
-}
-
-void RevokePublicBlobURLHelperUI(
-    scoped_refptr<ChromeBlobStorageContext> context,
-    const GURL& public_url) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::BindOnce(&RevokePublicBlobURLHelperIO,
-                                         std::move(context), public_url));
-}
-
-}  // namespace
-
 void BlobDispatcherHost::OnRevokePublicBlobURL(const GURL& public_url) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (!public_url.is_valid()) {
@@ -122,10 +104,8 @@ void BlobDispatcherHost::OnRevokePublicBlobURL(const GURL& public_url) {
                               BDH_TRACING_ENUM_LAST);
     return;
   }
+  context()->RevokePublicBlobURL(public_url);
   public_blob_urls_.erase(public_url);
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::BindOnce(&RevokePublicBlobURLHelperUI,
-                                         blob_storage_context_, public_url));
 }
 
 storage::BlobStorageContext* BlobDispatcherHost::context() {

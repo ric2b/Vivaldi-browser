@@ -35,9 +35,7 @@ static bool IsBoringSwitch(const std::string& flag) {
     switches::kProcessType,
     switches::kV,
     switches::kVModule,
-#if defined(OS_WIN)
-    switches::kForceFieldTrials,
-#elif defined(OS_MACOSX)
+#if defined(OS_MACOSX)
     switches::kMetricsClientID,
 #elif defined(OS_CHROMEOS)
     switches::kPpapiFlashArgs,
@@ -57,8 +55,6 @@ static bool IsBoringSwitch(const std::string& flag) {
     "enterprise-enrollment-modulus-limit",
     "login-profile",
     "login-user",
-    "max-unused-resource-memory-usage-percentage",
-    "termination-message-file",
     "use-cras",
 #endif
   };
@@ -110,31 +106,6 @@ void SetActiveExtensions(const std::set<std::string>& extensions) {
       extension_ids[i].Set(*it);
       ++it;
     }
-  }
-}
-
-using PrinterInfoKey = crash_reporter::CrashKeyString<64>;
-static PrinterInfoKey printer_info_keys[] = {
-    {"prn-info-1", PrinterInfoKey::Tag::kArray},
-    {"prn-info-2", PrinterInfoKey::Tag::kArray},
-    {"prn-info-3", PrinterInfoKey::Tag::kArray},
-    {"prn-info-4", PrinterInfoKey::Tag::kArray},
-};
-
-ScopedPrinterInfo::ScopedPrinterInfo(const base::StringPiece& data) {
-  std::vector<std::string> info = base::SplitString(
-      data.as_string(), ";", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  for (size_t i = 0; i < arraysize(printer_info_keys); ++i) {
-    std::string value;
-    if (i < info.size())
-      value = info[i];
-    printer_info_keys[i].Set(value);
-  }
-}
-
-ScopedPrinterInfo::~ScopedPrinterInfo() {
-  for (auto& crash_key : printer_info_keys) {
-    crash_key.Clear();
   }
 }
 

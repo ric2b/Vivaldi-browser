@@ -10,6 +10,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <iterator>
 #include <memory>
 
 #include "base/atomic_sequence_num.h"
@@ -18,14 +19,16 @@
 #include "base/mac/mac_logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_byteorder.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_manager.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "base/version.h"
 #include "media/base/limits.h"
-#include "media/gpu/shared_memory_region.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_image_io_surface.h"
@@ -67,11 +70,24 @@ const VideoCodecProfile kSupportedProfiles[] = {
 // Size to use for NALU length headers in AVC format (can be 1, 2, or 4).
 const int kNALUHeaderLength = 4;
 
-// We request 5 picture buffers from the client, each of which has a texture ID
-// that we can bind decoded frames to. We need enough to satisfy preroll, and
-// enough to avoid unnecessary stalling, but no more than that. The resource
-// requirements are low, as we don't need the textures to be backed by storage.
-const int kNumPictureBuffers = limits::kMaxVideoFrames + 1;
+// We request 16 picture buffers from the client, each of which has a texture ID
+// that we can bind decoded frames to. The resource requirements are low, as we
+// don't need the textures to be backed by storage.
+//
+// The lower limit is |limits::kMaxVideoFrames + 1|, enough to have one
+// composited frame plus |limits::kMaxVideoFrames| frames to satisfy preroll.
+//
+// However, there can be pathological behavior where VideoRendererImpl will
+// continue to call Decode() as long as it is willing to queue more output
+// frames, which is variable but starts at |limits::kMaxVideoFrames +
+// GetMaxDecodeRequests()|. If we don't have enough picture buffers, it will
+// continue to call Decode() until we stop calling NotifyEndOfBistreamBuffer(),
+// which for VTVDA is when the reorder queue is full. In testing this results in
+// ~20 extra frames held by VTVDA.
+//
+// Allocating more picture buffers than VideoRendererImpl is willing to queue
+// counterintuitively reduces memory usage in this case.
+const int kNumPictureBuffers = limits::kMaxVideoFrames * 4;
 
 // Maximum number of frames to queue for reordering. (Also controls the maximum
 // number of in-flight frames, since NotifyEndOfBitstreamBuffer() is called when
@@ -196,7 +212,7 @@ bool InitializeVideoToolboxInternal() {
   const uint8_t pps_normal[] = {0x68, 0xe9, 0x7b, 0xcb};
   if (!CreateVideoToolboxSession(sps_normal, arraysize(sps_normal), pps_normal,
                                  arraysize(pps_normal), true)) {
-    DLOG(WARNING) << "Failed to create hardware VideoToolbox session";
+    DLOG(WARNING) << "Hardware decoding with VideoToolbox is not supported";
     return false;
   }
 
@@ -208,7 +224,7 @@ bool InitializeVideoToolboxInternal() {
   const uint8_t pps_small[] = {0x68, 0xe9, 0x79, 0x72, 0xc0};
   if (!CreateVideoToolboxSession(sps_small, arraysize(sps_small), pps_small,
                                  arraysize(pps_small), false)) {
-    DLOG(WARNING) << "Failed to create software VideoToolbox session";
+    DLOG(WARNING) << "Software decoding with VideoToolbox is not supported";
     return false;
   }
 
@@ -278,7 +294,7 @@ bool GetImageBufferProperty(CVImageBufferRef image_buffer,
 }
 
 gfx::ColorSpace GetImageBufferColorSpace(CVImageBufferRef image_buffer) {
-  // The named primaries. Default to BT708.
+  // The named primaries. Default to BT709.
   gfx::ColorSpace::PrimaryID primary_id = gfx::ColorSpace::PrimaryID::BT709;
   struct {
     const CFStringRef cfstr;
@@ -311,7 +327,7 @@ gfx::ColorSpace GetImageBufferColorSpace(CVImageBufferRef image_buffer) {
   } transfers[] = {
       {
           kCVImageBufferTransferFunction_ITU_R_709_2,
-          gfx::ColorSpace::TransferID::BT709,
+          gfx::ColorSpace::TransferID::BT709_APPLE,
       },
       {
           kCVImageBufferTransferFunction_SMPTE_240M_1995,
@@ -403,7 +419,8 @@ VTVideoDecodeAccelerator::Frame::~Frame() {}
 
 VTVideoDecodeAccelerator::PictureInfo::PictureInfo(uint32_t client_texture_id,
                                                    uint32_t service_texture_id)
-    : client_texture_id(client_texture_id),
+    : bitstream_id(0),
+      client_texture_id(client_texture_id),
       service_texture_id(service_texture_id) {}
 
 VTVideoDecodeAccelerator::PictureInfo::~PictureInfo() {}
@@ -420,13 +437,15 @@ bool VTVideoDecodeAccelerator::FrameOrder::operator()(
 }
 
 VTVideoDecodeAccelerator::VTVideoDecodeAccelerator(
-    const MakeGLContextCurrentCallback& make_context_current_cb,
-    const BindGLImageCallback& bind_image_cb)
-    : make_context_current_cb_(make_context_current_cb),
-      bind_image_cb_(bind_image_cb),
+    const BindGLImageCallback& bind_image_cb,
+    MediaLog* media_log)
+    : bind_image_cb_(bind_image_cb),
+      media_log_(media_log),
       gpu_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       decoder_thread_("VTDecoderThread"),
       weak_this_factory_(this) {
+  DCHECK(!bind_image_cb_.is_null());
+
   callback_.decompressionOutputCallback = OutputThunk;
   callback_.decompressionOutputRefCon = this;
   weak_this_ = weak_this_factory_.GetWeakPtr();
@@ -447,16 +466,70 @@ VTVideoDecodeAccelerator::~VTVideoDecodeAccelerator() {
 bool VTVideoDecodeAccelerator::OnMemoryDump(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
+  DCHECK(gpu_task_runner_->BelongsToCurrentThread());
+
+  // Dump output pictures (decoded frames for which PictureReady() has been
+  // called already).
   for (const auto& it : picture_info_map_) {
-    int32_t picture_id = it.first;
     PictureInfo* picture_info = it.second.get();
     if (picture_info->gl_image) {
       std::string dump_name =
           base::StringPrintf("media/vt_video_decode_accelerator_%d/picture_%d",
-                             memory_dump_id_, picture_id);
+                             memory_dump_id_, picture_info->bitstream_id);
       picture_info->gl_image->OnMemoryDump(pmd, 0, dump_name);
     }
   }
+
+  // Dump the output queue (decoded frames for which
+  // NotifyEndOfBitstreamBuffer() has not been called yet).
+  {
+    uint64_t total_count = 0;
+    uint64_t total_size = 0;
+    for (const auto& it : base::GetUnderlyingContainer(task_queue_)) {
+      if (it.frame.get() && it.frame->image) {
+        IOSurfaceRef io_surface = CVPixelBufferGetIOSurface(it.frame->image);
+        if (io_surface) {
+          ++total_count;
+          total_size += IOSurfaceGetAllocSize(io_surface);
+        }
+      }
+    }
+    base::trace_event::MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(
+        base::StringPrintf("media/vt_video_decode_accelerator_%d/output_queue",
+                           memory_dump_id_));
+    dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameObjectCount,
+                    base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                    total_count);
+    dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                    base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                    total_size);
+  }
+
+  // Dump the reorder queue (decoded frames for which
+  // NotifyEndOfBitstreamBuffer() has been called already).
+  {
+    uint64_t total_count = 0;
+    uint64_t total_size = 0;
+    for (const auto& it : base::GetUnderlyingContainer(reorder_queue_)) {
+      if (it.get() && it->image) {
+        IOSurfaceRef io_surface = CVPixelBufferGetIOSurface(it->image);
+        if (io_surface) {
+          ++total_count;
+          total_size += IOSurfaceGetAllocSize(io_surface);
+        }
+      }
+    }
+    base::trace_event::MemoryAllocatorDump* dump = pmd->CreateAllocatorDump(
+        base::StringPrintf("media/vt_video_decode_accelerator_%d/reorder_queue",
+                           memory_dump_id_));
+    dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameObjectCount,
+                    base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                    total_count);
+    dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                    base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                    total_size);
+  }
+
   return true;
 }
 
@@ -465,39 +538,36 @@ bool VTVideoDecodeAccelerator::Initialize(const Config& config,
   DVLOG(1) << __func__;
   DCHECK(gpu_task_runner_->BelongsToCurrentThread());
 
-  if (make_context_current_cb_.is_null() || bind_image_cb_.is_null()) {
-    NOTREACHED() << "GL callbacks are required for this VDA";
+  // All of these checks should be handled by the caller inspecting
+  // SupportedProfiles(). PPAPI does not do that, however.
+  if (config.output_mode != Config::OutputMode::ALLOCATE) {
+    DVLOG(2) << "Output mode must be ALLOCATE";
     return false;
   }
 
   if (config.is_encrypted()) {
-    NOTREACHED() << "Encrypted streams are not supported for this VDA";
+    DVLOG(2) << "Encrypted streams are not supported";
     return false;
   }
 
-  if (config.output_mode != Config::OutputMode::ALLOCATE) {
-    NOTREACHED() << "Only ALLOCATE OutputMode is supported by this VDA";
+  if (std::find(std::begin(kSupportedProfiles), std::end(kSupportedProfiles),
+                config.profile) == std::end(kSupportedProfiles)) {
+    DVLOG(2) << "Unsupported profile";
+    return false;
+  }
+
+  if (!InitializeVideoToolbox()) {
+    DVLOG(2) << "VideoToolbox is unavailable";
     return false;
   }
 
   client_ = client;
 
-  if (!InitializeVideoToolbox())
-    return false;
-
-  bool profile_supported = false;
-  for (const auto& supported_profile : kSupportedProfiles) {
-    if (config.profile == supported_profile) {
-      profile_supported = true;
-      break;
-    }
-  }
-  if (!profile_supported)
-    return false;
-
   // Spawn a thread to handle parsing and calling VideoToolbox.
-  if (!decoder_thread_.Start())
+  if (!decoder_thread_.Start()) {
+    DLOG(ERROR) << "Failed to start decoder thread";
     return false;
+  }
 
   // Count the session as successfully initialized.
   UMA_HISTOGRAM_ENUMERATION("Media.VTVDA.SessionFailureReason",
@@ -625,19 +695,10 @@ bool VTVideoDecodeAccelerator::ConfigureDecoder() {
   return true;
 }
 
-void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
+void VTVideoDecodeAccelerator::DecodeTask(scoped_refptr<DecoderBuffer> buffer,
                                           Frame* frame) {
   DVLOG(2) << __func__ << "(" << frame->bitstream_id << ")";
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
-
-  // Map the bitstream buffer.
-  SharedMemoryRegion memory(bitstream, true);
-  if (!memory.Map()) {
-    DLOG(ERROR) << "Failed to map bitstream buffer";
-    NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
-    return;
-  }
-  const uint8_t* buf = static_cast<uint8_t*>(memory.memory());
 
   // NALUs are stored with Annex B format in the bitstream buffer (start codes),
   // but VideoToolbox expects AVC format (length headers), so we must rewrite
@@ -647,19 +708,19 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
   // record parameter sets for VideoToolbox initialization.
   size_t data_size = 0;
   std::vector<H264NALU> nalus;
-  parser_.SetStream(buf, memory.size());
+  parser_.SetStream(buffer->data(), buffer->data_size());
   H264NALU nalu;
   while (true) {
     H264Parser::Result result = parser_.AdvanceToNextNALU(&nalu);
     if (result == H264Parser::kEOStream)
       break;
     if (result == H264Parser::kUnsupportedStream) {
-      DLOG(ERROR) << "Unsupported H.264 stream";
+      WriteToMediaLog(MediaLog::MEDIALOG_ERROR, "Unsupported H.264 stream");
       NotifyError(PLATFORM_FAILURE, SFT_UNSUPPORTED_STREAM);
       return;
     }
     if (result != H264Parser::kOk) {
-      DLOG(ERROR) << "Failed to parse H.264 stream";
+      WriteToMediaLog(MediaLog::MEDIALOG_ERROR, "Failed to parse H.264 stream");
       NotifyError(UNREADABLE_INPUT, SFT_INVALID_STREAM);
       return;
     }
@@ -667,12 +728,12 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
       case H264NALU::kSPS:
         result = parser_.ParseSPS(&last_sps_id_);
         if (result == H264Parser::kUnsupportedStream) {
-          DLOG(ERROR) << "Unsupported SPS";
+          WriteToMediaLog(MediaLog::MEDIALOG_ERROR, "Unsupported SPS");
           NotifyError(PLATFORM_FAILURE, SFT_UNSUPPORTED_STREAM);
           return;
         }
         if (result != H264Parser::kOk) {
-          DLOG(ERROR) << "Could not parse SPS";
+          WriteToMediaLog(MediaLog::MEDIALOG_ERROR, "Could not parse SPS");
           NotifyError(UNREADABLE_INPUT, SFT_INVALID_STREAM);
           return;
         }
@@ -687,12 +748,12 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
       case H264NALU::kPPS:
         result = parser_.ParsePPS(&last_pps_id_);
         if (result == H264Parser::kUnsupportedStream) {
-          DLOG(ERROR) << "Unsupported PPS";
+          WriteToMediaLog(MediaLog::MEDIALOG_ERROR, "Unsupported PPS");
           NotifyError(PLATFORM_FAILURE, SFT_UNSUPPORTED_STREAM);
           return;
         }
         if (result != H264Parser::kOk) {
-          DLOG(ERROR) << "Could not parse PPS";
+          WriteToMediaLog(MediaLog::MEDIALOG_ERROR, "Could not parse PPS");
           NotifyError(UNREADABLE_INPUT, SFT_INVALID_STREAM);
           return;
         }
@@ -711,12 +772,14 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
           H264SliceHeader slice_hdr;
           result = parser_.ParseSliceHeader(nalu, &slice_hdr);
           if (result == H264Parser::kUnsupportedStream) {
-            DLOG(ERROR) << "Unsupported slice header";
+            WriteToMediaLog(MediaLog::MEDIALOG_ERROR,
+                            "Unsupported slice header");
             NotifyError(PLATFORM_FAILURE, SFT_UNSUPPORTED_STREAM);
             return;
           }
           if (result != H264Parser::kOk) {
-            DLOG(ERROR) << "Could not parse slice header";
+            WriteToMediaLog(MediaLog::MEDIALOG_ERROR,
+                            "Could not parse slice header");
             NotifyError(UNREADABLE_INPUT, SFT_INVALID_STREAM);
             return;
           }
@@ -725,7 +788,8 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
           DCHECK_EQ(slice_hdr.pic_parameter_set_id, last_pps_id_);
           const H264PPS* pps = parser_.GetPPS(slice_hdr.pic_parameter_set_id);
           if (!pps) {
-            DLOG(ERROR) << "Mising PPS referenced by slice";
+            WriteToMediaLog(MediaLog::MEDIALOG_ERROR,
+                            "Missing PPS referenced by slice");
             NotifyError(UNREADABLE_INPUT, SFT_INVALID_STREAM);
             return;
           }
@@ -733,7 +797,8 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
           DCHECK_EQ(pps->seq_parameter_set_id, last_sps_id_);
           const H264SPS* sps = parser_.GetSPS(pps->seq_parameter_set_id);
           if (!sps) {
-            DLOG(ERROR) << "Mising SPS referenced by PPS";
+            WriteToMediaLog(MediaLog::MEDIALOG_ERROR,
+                            "Missing SPS referenced by PPS");
             NotifyError(UNREADABLE_INPUT, SFT_INVALID_STREAM);
             return;
           }
@@ -750,7 +815,7 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
           base::Optional<int32_t> pic_order_cnt =
               poc_.ComputePicOrderCnt(sps, slice_hdr);
           if (!pic_order_cnt.has_value()) {
-            DLOG(ERROR) << "Unable to compute POC";
+            WriteToMediaLog(MediaLog::MEDIALOG_ERROR, "Unable to compute POC");
             NotifyError(UNREADABLE_INPUT, SFT_INVALID_STREAM);
             return;
           }
@@ -761,8 +826,8 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
           frame->pic_order_cnt = *pic_order_cnt;
           frame->reorder_window = ComputeReorderWindow(sps);
         }
+        FALLTHROUGH;
 
-      // Intentional fallthrough.
       default:
         nalus.push_back(nalu);
         data_size += kNALUHeaderLength + nalu.size;
@@ -778,8 +843,9 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
   // error messages for those.
   if (frame->has_slice && waiting_for_idr_) {
     if (!missing_idr_logged_) {
-      LOG(ERROR) << "Illegal attempt to decode without IDR. "
-                 << "Discarding decode requests until next IDR.";
+      WriteToMediaLog(MediaLog::MEDIALOG_ERROR,
+                      ("Illegal attempt to decode without IDR. "
+                       "Discarding decode requests until the next IDR."));
       missing_idr_logged_ = true;
     }
     frame->has_slice = false;
@@ -800,12 +866,14 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
       (configured_sps_ != active_sps_ || configured_spsext_ != active_spsext_ ||
        configured_pps_ != active_pps_)) {
     if (active_sps_.empty()) {
-      DLOG(ERROR) << "Invalid configuration; no SPS";
+      WriteToMediaLog(MediaLog::MEDIALOG_ERROR,
+                      "Invalid configuration (no SPS)");
       NotifyError(INVALID_ARGUMENT, SFT_INVALID_STREAM);
       return;
     }
     if (active_pps_.empty()) {
-      DLOG(ERROR) << "Invalid configuration; no PPS";
+      WriteToMediaLog(MediaLog::MEDIALOG_ERROR,
+                      "Invalid configuration (no PPS)");
       NotifyError(INVALID_ARGUMENT, SFT_INVALID_STREAM);
       return;
     }
@@ -817,7 +885,8 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
 
   // If the session is not configured by this point, fail.
   if (!session_) {
-    DLOG(ERROR) << "Cannot decode without configuration";
+    WriteToMediaLog(MediaLog::MEDIALOG_ERROR,
+                    "Cannot decode without configuration");
     NotifyError(INVALID_ARGUMENT, SFT_INVALID_STREAM);
     return;
   }
@@ -1000,25 +1069,33 @@ void VTVideoDecodeAccelerator::FlushDone(TaskType type) {
 }
 
 void VTVideoDecodeAccelerator::Decode(const BitstreamBuffer& bitstream) {
-  DVLOG(2) << __func__ << "(" << bitstream.id() << ")";
+  Decode(bitstream.ToDecoderBuffer(), bitstream.id());
+}
+
+void VTVideoDecodeAccelerator::Decode(scoped_refptr<DecoderBuffer> buffer,
+                                      int32_t bitstream_id) {
+  DVLOG(2) << __func__ << "(" << bitstream_id << ")";
   DCHECK(gpu_task_runner_->BelongsToCurrentThread());
 
-  if (bitstream.id() < 0) {
-    DLOG(ERROR) << "Invalid bitstream, id: " << bitstream.id();
-    if (base::SharedMemory::IsHandleValid(bitstream.handle()))
-      base::SharedMemory::CloseHandle(bitstream.handle());
+  if (bitstream_id < 0) {
+    DLOG(ERROR) << "Invalid bitstream, id: " << bitstream_id;
     NotifyError(INVALID_ARGUMENT, SFT_INVALID_STREAM);
     return;
   }
 
-  DCHECK_EQ(0u, assigned_bitstream_ids_.count(bitstream.id()));
-  assigned_bitstream_ids_.insert(bitstream.id());
+  if (!buffer) {
+    client_->NotifyEndOfBitstreamBuffer(bitstream_id);
+    return;
+  }
 
-  Frame* frame = new Frame(bitstream.id());
-  pending_frames_[frame->bitstream_id] = make_linked_ptr(frame);
+  DCHECK_EQ(0u, assigned_bitstream_ids_.count(bitstream_id));
+  assigned_bitstream_ids_.insert(bitstream_id);
+
+  Frame* frame = new Frame(bitstream_id);
+  pending_frames_[bitstream_id] = make_linked_ptr(frame);
   decoder_thread_.task_runner()->PostTask(
       FROM_HERE, base::Bind(&VTVideoDecodeAccelerator::DecodeTask,
-                            base::Unretained(this), bitstream, frame));
+                            base::Unretained(this), std::move(buffer), frame));
 }
 
 void VTVideoDecodeAccelerator::AssignPictureBuffers(
@@ -1051,20 +1128,24 @@ void VTVideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_id) {
   DVLOG(2) << __func__ << "(" << picture_id << ")";
   DCHECK(gpu_task_runner_->BelongsToCurrentThread());
 
-  auto it = picture_info_map_.find(picture_id);
-  if (it != picture_info_map_.end()) {
-    PictureInfo* picture_info = it->second.get();
-    picture_info->cv_image.reset();
-    picture_info->gl_image = nullptr;
-  }
-
   // It's possible there was a ReusePictureBuffer() request in flight when we
   // called DismissPictureBuffer(), in which case we won't find it. In that case
   // we should just drop the ReusePictureBuffer() request.
-  if (assigned_picture_ids_.count(picture_id)) {
-    available_picture_ids_.push_back(picture_id);
-    ProcessWorkQueues();
-  }
+  auto it = picture_info_map_.find(picture_id);
+  if (it == picture_info_map_.end())
+    return;
+
+  // Drop references to allow the underlying buffer to be released.
+  PictureInfo* picture_info = it->second.get();
+  bind_image_cb_.Run(picture_info->client_texture_id, GL_TEXTURE_RECTANGLE_ARB,
+                     nullptr, false);
+  picture_info->gl_image = nullptr;
+  picture_info->bitstream_id = 0;
+
+  // Mark the picture as available and try to complete pending output work.
+  DCHECK(assigned_picture_ids_.count(picture_id));
+  available_picture_ids_.push_back(picture_id);
+  ProcessWorkQueues();
 }
 
 void VTVideoDecodeAccelerator::ProcessWorkQueues() {
@@ -1205,6 +1286,7 @@ bool VTVideoDecodeAccelerator::ProcessFrame(const Frame& frame) {
         client_->DismissPictureBuffer(picture_id);
       }
       assigned_picture_ids_.clear();
+      picture_info_map_.clear();
       available_picture_ids_.clear();
 
       // Request new pictures.
@@ -1236,14 +1318,7 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
   auto it = picture_info_map_.find(picture_id);
   DCHECK(it != picture_info_map_.end());
   PictureInfo* picture_info = it->second.get();
-  DCHECK(!picture_info->cv_image);
   DCHECK(!picture_info->gl_image);
-
-  if (!make_context_current_cb_.Run()) {
-    DLOG(ERROR) << "Failed to make GL context current";
-    NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
-    return false;
-  }
 
   scoped_refptr<gl::GLImageIOSurface> gl_image(
       gl::GLImageIOSurface::Create(frame.image_size, GL_BGRA_EXT));
@@ -1254,6 +1329,8 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
     NOTIFY_STATUS("Failed to initialize GLImageIOSurface", PLATFORM_FAILURE,
                   SFT_PLATFORM_ERROR);
   }
+  gfx::ColorSpace color_space = GetImageBufferColorSpace(frame.image);
+  gl_image->SetColorSpaceForYUVToRGBConversion(color_space);
 
   if (!bind_image_cb_.Run(picture_info->client_texture_id,
                           GL_TEXTURE_RECTANGLE_ARB, gl_image, false)) {
@@ -1261,12 +1338,8 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
     NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
     return false;
   }
-  gfx::ColorSpace color_space = GetImageBufferColorSpace(frame.image);
-  gl_image->SetColorSpaceForYUVToRGBConversion(color_space);
-
-  // Assign the new image(s) to the the picture info.
   picture_info->gl_image = gl_image;
-  picture_info->cv_image = frame.image;
+  picture_info->bitstream_id = frame.bitstream_id;
   available_picture_ids_.pop_back();
 
   DVLOG(3) << "PictureReady(picture_id=" << picture_id << ", "
@@ -1292,6 +1365,21 @@ void VTVideoDecodeAccelerator::NotifyError(
                               session_failure_type, SFT_MAX + 1);
     client_->NotifyError(vda_error_type);
   }
+}
+
+void VTVideoDecodeAccelerator::WriteToMediaLog(MediaLog::MediaLogLevel level,
+                                               const std::string& message) {
+  if (!gpu_task_runner_->BelongsToCurrentThread()) {
+    gpu_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&VTVideoDecodeAccelerator::WriteToMediaLog,
+                                  weak_this_, level, message));
+    return;
+  }
+
+  DVLOG(1) << __func__ << "(" << level << ") " << message;
+
+  if (media_log_)
+    media_log_->AddLogEvent(level, message);
 }
 
 void VTVideoDecodeAccelerator::QueueFlush(TaskType type) {
@@ -1330,13 +1418,14 @@ void VTVideoDecodeAccelerator::Destroy() {
 
   // For a graceful shutdown, return assigned buffers and flush before
   // destructing |this|.
-  // TODO(sandersd): Prevent the decoder from reading buffers before discarding
-  // them.
   for (int32_t bitstream_id : assigned_bitstream_ids_)
     client_->NotifyEndOfBitstreamBuffer(bitstream_id);
   assigned_bitstream_ids_.clear();
   state_ = STATE_DESTROYING;
   QueueFlush(TASK_DESTROY);
+
+  // Prevent calling into a deleted MediaLog.
+  media_log_ = nullptr;
 }
 
 bool VTVideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
@@ -1349,6 +1438,9 @@ bool VTVideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
 VideoDecodeAccelerator::SupportedProfiles
 VTVideoDecodeAccelerator::GetSupportedProfiles() {
   SupportedProfiles profiles;
+  if (!InitializeVideoToolbox())
+    return profiles;
+
   for (const auto& supported_profile : kSupportedProfiles) {
     SupportedProfile profile;
     profile.profile = supported_profile;

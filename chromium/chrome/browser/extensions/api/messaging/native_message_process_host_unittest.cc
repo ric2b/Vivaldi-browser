@@ -17,14 +17,12 @@
 #include "base/files/scoped_file.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
-#include "base/message_loop/message_loop.h"
 #include "base/process/process_metrics.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/platform_thread.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/messaging/native_messaging_test_util.h"
@@ -107,9 +105,6 @@ class NativeMessagingTest : public ::testing::Test,
   NativeMessagingTest()
       : current_channel_(version_info::Channel::DEV),
         thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
-#if defined(OS_POSIX)
-        file_descriptor_watcher_(base::MessageLoopForIO::current()),
-#endif
         channel_closed_(false) {}
 
   void SetUp() override { ASSERT_TRUE(temp_dir_.CreateUniqueTempDir()); }
@@ -172,10 +167,6 @@ class NativeMessagingTest : public ::testing::Test,
   std::unique_ptr<NativeMessageHost> native_message_host_;
   std::unique_ptr<base::RunLoop> run_loop_;
   content::TestBrowserThreadBundle thread_bundle_;
-#if defined(OS_POSIX)
-  // Required to watch a file descriptor from NativeMessageProcessHost.
-  base::FileDescriptorWatcher file_descriptor_watcher_;
-#endif
 
   std::string last_message_;
   std::unique_ptr<base::DictionaryValue> last_message_parsed_;
@@ -224,15 +215,17 @@ TEST_F(NativeMessagingTest, SingleSendMessageWrite) {
 #if defined(OS_WIN)
   base::string16 pipe_name = base::StringPrintf(
       L"\\\\.\\pipe\\chrome.nativeMessaging.out.%llx", base::RandUint64());
-  base::File write_handle = base::File::CreateForAsyncHandle(
-      CreateNamedPipeW(pipe_name.c_str(),
-                       PIPE_ACCESS_OUTBOUND | FILE_FLAG_OVERLAPPED |
-                           FILE_FLAG_FIRST_PIPE_INSTANCE,
-                       PIPE_TYPE_BYTE, 1, 0, 0, 5000, NULL));
+  base::File write_handle =
+      base::File(CreateNamedPipeW(pipe_name.c_str(),
+                                  PIPE_ACCESS_OUTBOUND | FILE_FLAG_OVERLAPPED |
+                                      FILE_FLAG_FIRST_PIPE_INSTANCE,
+                                  PIPE_TYPE_BYTE, 1, 0, 0, 5000, NULL),
+                 true /* async */);
   ASSERT_TRUE(write_handle.IsValid());
-  base::File read_handle = base::File::CreateForAsyncHandle(
+  base::File read_handle = base::File(
       CreateFileW(pipe_name.c_str(), GENERIC_READ, 0, NULL, OPEN_EXISTING,
-                  FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, NULL));
+                  FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, NULL),
+      true /* async */);
   ASSERT_TRUE(read_handle.IsValid());
 
   read_file = std::move(read_handle);

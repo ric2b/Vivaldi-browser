@@ -61,7 +61,8 @@ content::SSLHostStateDelegate* FakeProfile::GetSSLHostStateDelegate() {
   return nullptr;
 }
 
-content::PermissionManager* FakeProfile::GetPermissionManager() {
+content::PermissionControllerDelegate*
+FakeProfile::GetPermissionControllerDelegate() {
   return nullptr;
 }
 
@@ -160,10 +161,6 @@ net::URLRequestContextGetter* FakeProfile::GetRequestContext() {
 }
 
 net::URLRequestContextGetter* FakeProfile::GetRequestContextForExtensions() {
-  return nullptr;
-}
-
-net::SSLConfigService* FakeProfile::GetSSLConfigService() {
   return nullptr;
 }
 

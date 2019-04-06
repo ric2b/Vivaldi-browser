@@ -14,6 +14,8 @@ enum OverviewAnimationType {
   OVERVIEW_ANIMATION_NONE,
   // Used to fade in the close button and label.
   OVERVIEW_ANIMATION_ENTER_OVERVIEW_MODE_FADE_IN,
+  // Used to fade in the close button and label, in tablet mode.
+  OVERVIEW_ANIMATION_ENTER_OVERVIEW_MODE_TABLET_FADE_IN,
   // Used to fade out the label.
   OVERVIEW_ANIMATION_EXIT_OVERVIEW_MODE_FADE_OUT,
   // Used to position windows when entering/exiting overview mode and when a
@@ -28,9 +30,6 @@ enum OverviewAnimationType {
   // Used to animate hiding of a window that is closed while overview mode is
   // active.
   OVERVIEW_ANIMATION_CLOSE_SELECTOR_ITEM,
-  // Used to animate scaling up of a window that is about to get dragged while
-  // overview mode is active.
-  OVERVIEW_ANIMATION_DRAGGING_SELECTOR_ITEM,
 };
 
 }  // namespace ash

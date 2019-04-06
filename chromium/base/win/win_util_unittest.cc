@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <windows.h>
+#include "base/win/win_util.h"
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/scoped_native_library.h"
-#include "base/win/win_util.h"
+#include "base/stl_util.h"
+#include "base/win/win_client_metrics.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -67,8 +68,7 @@ TEST(BaseWinUtilTest, TestGetLoadedModulesSnapshot) {
   ASSERT_NE(static_cast<HMODULE>(NULL), new_dll.get());
   ASSERT_TRUE(GetLoadedModulesSnapshot(::GetCurrentProcess(), &snapshot));
   ASSERT_GT(snapshot.size(), original_snapshot_size);
-  ASSERT_NE(snapshot.end(),
-            std::find(snapshot.begin(), snapshot.end(), new_dll.get()));
+  ASSERT_TRUE(base::ContainsValue(snapshot, new_dll.get()));
 }
 
 TEST(BaseWinUtilTest, TestUint32ToInvalidHandle) {

@@ -33,7 +33,7 @@ class BrowserLiveTabContext : public sessions::LiveTabContext {
 
   // Overridden from LiveTabContext:
   void ShowBrowserWindow() override;
-  const SessionID& GetSessionID() const override;
+  SessionID GetSessionID() const override;
   int GetTabCount() const override;
   int GetSelectedIndex() const override;
   std::string GetExtData() const override;
@@ -81,8 +81,7 @@ class BrowserLiveTabContext : public sessions::LiveTabContext {
   // see chrome::FindBrowserWithID
   // Returns the LiveTabContext of the Browser with |desired_id| if
   // such a Browser exists.
-  static sessions::LiveTabContext* FindContextWithID(
-      SessionID::id_type desired_id);
+  static sessions::LiveTabContext* FindContextWithID(SessionID desired_id);
 
  private:
   Browser* const browser_;

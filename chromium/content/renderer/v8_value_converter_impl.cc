@@ -16,7 +16,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "v8/include/v8.h"
 
@@ -460,7 +459,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Array(
                    base::Unretained(this),
                    base::Unretained(state));
     std::unique_ptr<base::Value> out;
-    if (strategy_->FromV8Array(val, &out, isolate, callback))
+    if (strategy_->FromV8Array(val, &out, isolate, std::move(callback)))
       return out;
   }
 
@@ -540,7 +539,7 @@ std::unique_ptr<base::Value> V8ValueConverterImpl::FromV8Object(
                    base::Unretained(this),
                    base::Unretained(state));
     std::unique_ptr<base::Value> out;
-    if (strategy_->FromV8Object(val, &out, isolate, callback))
+    if (strategy_->FromV8Object(val, &out, isolate, std::move(callback)))
       return out;
   }
 

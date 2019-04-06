@@ -36,6 +36,9 @@ class CONTENT_EXPORT DevToolsManagerDelegate {
   // Returns DevToolsAgentHost title to use for given |web_contents| target.
   virtual std::string GetTargetDescription(WebContents* web_contents);
 
+  // Returns whether embedder allows to inspect given |web_contents|.
+  virtual bool AllowInspectingWebContents(WebContents* web_contents);
+
   // Returns all targets embedder would like to report as debuggable
   // remotely.
   virtual DevToolsAgentHost::List RemoteDebuggingTargets();
@@ -54,20 +57,12 @@ class CONTENT_EXPORT DevToolsManagerDelegate {
                              DevToolsAgentHostClient* client,
                              base::DictionaryValue* command);
 
-  // Returns true if the command has been handled, false otherwise.
-  using CommandCallback =
-      base::Callback<void(std::unique_ptr<base::DictionaryValue> response)>;
-  virtual bool HandleAsyncCommand(DevToolsAgentHost* agent_host,
-                                  DevToolsAgentHostClient* client,
-                                  base::DictionaryValue* command,
-                                  const CommandCallback& callback);
-
   // Should return discovery page HTML that should list available tabs
   // and provide attach links.
   virtual std::string GetDiscoveryPageHTML();
 
-  // Returns frontend resource data by |path|.
-  virtual std::string GetFrontendResource(const std::string& path);
+  // Returns whether frontend resources are bundled within the binary.
+  virtual bool HasBundledFrontendResources();
 
   // Makes browser target easily discoverable for remote debugging.
   // This should only return true when remote debugging endpoint is not

@@ -8,12 +8,11 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/shell_integration_win.h"
 #include "chrome/browser/ui/views/apps/app_window_desktop_native_widget_aura_win.h"
 #include "chrome/browser/ui/views/apps/glass_app_window_frame_view_win.h"
-#include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/extensions/web_app_extension_helpers.h"
 #include "chrome/browser/web_applications/web_app_win.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/browser_thread.h"
@@ -81,16 +80,12 @@ void ChromeNativeAppWindowViewsWin::InitializeDefaultWindow(
 
 views::NonClientFrameView*
 ChromeNativeAppWindowViewsWin::CreateStandardDesktopAppFrame() {
-#if defined(VIVALDI_BUILD)
-  return ChromeNativeAppWindowViewsAura::CreateStandardDesktopAppFrame();
-#else
   glass_frame_view_ = NULL;
   if (ui::win::IsAeroGlassEnabled()) {
     glass_frame_view_ = new GlassAppWindowFrameViewWin(widget());
     return glass_frame_view_;
   }
   return ChromeNativeAppWindowViewsAura::CreateStandardDesktopAppFrame();
-#endif
 }
 
 bool ChromeNativeAppWindowViewsWin::CanMinimize() const {
@@ -98,8 +93,4 @@ bool ChromeNativeAppWindowViewsWin::CanMinimize() const {
   // See http://crbug.com/417947.
   return ChromeNativeAppWindowViewsAura::CanMinimize() &&
          !(WidgetHasHitTestMask() && is_translucent_);
-}
-
-void ChromeNativeAppWindowViewsWin::UpdateEventTargeterWithInset() {
-  ChromeNativeAppWindowViews::UpdateEventTargeterWithInset();
 }

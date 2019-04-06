@@ -11,6 +11,8 @@
 #include <memory>
 #include <string>
 
+#include "ash/public/interfaces/app_list.mojom.h"
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -24,10 +26,12 @@
 #include "components/sync/model/syncable_service.h"
 #include "components/sync/protocol/app_list_specifics.pb.h"
 
+class AppListModelUpdater;
 class ArcAppModelBuilder;
-class ChromeAppListModelUpdater;
 class ChromeAppListItem;
+class CrostiniAppModelBuilder;
 class ExtensionAppModelBuilder;
+class InternalAppModelBuilder;
 class Profile;
 
 namespace extensions {
@@ -43,12 +47,6 @@ class PrefRegistrySyncable;
 }
 
 namespace app_list {
-
-// TODO(hejq): Remove AppListItem when we have a mojo struct for this.
-class AppListItem;
-// TODO(hejq): Remove these when we get rid of |GetModel| and |GetSearchModel|.
-class AppListModel;
-class SearchModel;
 
 // Keyed Service that owns, stores, and syncs an AppListModel for a profile.
 class AppListSyncableService : public syncer::SyncableService,
@@ -77,6 +75,23 @@ class AppListSyncableService : public syncer::SyncableService,
     virtual ~Observer() = default;
   };
 
+  // An app list model updater factory function used by tests.
+  using ModelUpdaterFactoryCallback =
+      base::Callback<std::unique_ptr<AppListModelUpdater>()>;
+
+  // Sets and resets an app list model updater factory function for tests.
+  class ScopedModelUpdaterFactoryForTest {
+   public:
+    explicit ScopedModelUpdaterFactoryForTest(
+        const ModelUpdaterFactoryCallback& factory);
+    ~ScopedModelUpdaterFactoryForTest();
+
+   private:
+    ModelUpdaterFactoryCallback factory_;
+
+    DISALLOW_COPY_AND_ASSIGN(ScopedModelUpdaterFactoryForTest);
+  };
+
   using SyncItemMap = std::map<std::string, std::unique_ptr<SyncItem>>;
 
   // Populates the model when |extension_system| is ready.
@@ -84,8 +99,6 @@ class AppListSyncableService : public syncer::SyncableService,
                          extensions::ExtensionSystem* extension_system);
 
   ~AppListSyncableService() override;
-
-  static const char kOemFolderId[];
 
   // Registers prefs to support local storage.
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
@@ -101,7 +114,7 @@ class AppListSyncableService : public syncer::SyncableService,
   void RemoveUninstalledItem(const std::string& id);
 
   // Called when properties of an item may have changed, e.g. default/oem state.
-  void UpdateItem(AppListItem* app_item);
+  void UpdateItem(const ChromeAppListItem* app_item);
 
   // Returns the existing sync item matching |id| or NULL.
   const SyncItem* GetSyncItem(const std::string& id) const;
@@ -120,15 +133,7 @@ class AppListSyncableService : public syncer::SyncableService,
                       const syncer::StringOrdinal& item_pin_ordinal);
 
   // Gets the app list model updater.
-  ChromeAppListModelUpdater* GetModelUpdater();
-
-  // Gets the app list model.
-  // Note: This will be removed. Use |GetModelUpdater| instead.
-  AppListModel* GetModel();
-
-  // Gets the search model.
-  // Note: This will be removed. Use |GetModelUpdater| instead.
-  SearchModel* GetSearchModel();
+  AppListModelUpdater* GetModelUpdater();
 
   // Returns true if this service was initialized.
   bool IsInitialized() const;
@@ -157,6 +162,9 @@ class AppListSyncableService : public syncer::SyncableService,
       const base::Location& from_here,
       const syncer::SyncChangeList& change_list) override;
 
+  // KeyedService
+  void Shutdown() override;
+
  private:
   class ModelUpdaterDelegate;
 
@@ -169,25 +177,25 @@ class AppListSyncableService : public syncer::SyncableService,
   // If |app_item| matches an existing sync item, returns it. Otherwise adds
   // |app_item| to |sync_items_| and returns the new item. If |app_item| is
   // invalid returns NULL.
-  SyncItem* FindOrAddSyncItem(AppListItem* app_item);
+  SyncItem* FindOrAddSyncItem(const ChromeAppListItem* app_item);
 
   // Creates a sync item for |app_item| and sends an ADD SyncChange event.
-  SyncItem* CreateSyncItemFromAppItem(AppListItem* app_item);
+  SyncItem* CreateSyncItemFromAppItem(const ChromeAppListItem* app_item);
 
   // If a sync item for |app_item| already exists, update |app_item| from the
   // sync item, otherwise create a new sync item from |app_item|.
-  void AddOrUpdateFromSyncItem(AppListItem* app_item);
+  void AddOrUpdateFromSyncItem(const ChromeAppListItem* app_item);
 
   // Either uninstalling a default app or remove the REMOVE_DEFAULT sync item.
   // Returns true if the app is removed. Otherwise deletes the existing sync
   // item and returns false.
-  bool RemoveDefaultApp(AppListItem* item, SyncItem* sync_item);
+  bool RemoveDefaultApp(const ChromeAppListItem* item, SyncItem* sync_item);
 
   // Deletes a sync item from |sync_items_| and sends a DELETE action.
   void DeleteSyncItem(const std::string& item_id);
 
   // Updates existing entry in |sync_items_| from |app_item|.
-  void UpdateSyncItem(AppListItem* app_item);
+  void UpdateSyncItem(const ChromeAppListItem* app_item);
 
   // Removes sync item matching |id|.
   void RemoveSyncItem(const std::string& id);
@@ -248,25 +256,25 @@ class AppListSyncableService : public syncer::SyncableService,
   // Returns true if extension service is ready.
   bool IsExtensionServiceReady() const;
 
-  // Play Store app id is changed in the app launcher and now unified with shelf
-  // id. This copies position from the legacy Play Store item in case the legacy
-  // position was modified and differs from the default position and the new
-  // position is still default. Don't remove the legacy sync item once user may
-  // use old and new versions at the same time.
-  // TODO(khmel): Remove import of legacy Play Store sync item after few
-  // releases http://crbug.com/722675.
-  void MaybeImportLegacyPlayStorePosition(syncer::SyncChangeList* change_list);
-
   // Remove sync data of Drive apps.
   // TODO(http://crbug.com/794724): Remove after M65 goes stable.
   void RemoveDriveAppItems();
 
+  // Returns a list of sync items sorted by item ordinal.
+  std::vector<SyncItem*> GetSortedTopLevelSyncItems() const;
+
+  // Remove leading, trailing and duplicate "page break" items in sorted top
+  // level item list.
+  void PruneRedundantPageBreakItems();
+
   Profile* profile_;
   extensions::ExtensionSystem* extension_system_;
-  std::unique_ptr<ChromeAppListModelUpdater> model_updater_;
+  std::unique_ptr<AppListModelUpdater> model_updater_;
   std::unique_ptr<ModelUpdaterDelegate> model_updater_delegate_;
   std::unique_ptr<ExtensionAppModelBuilder> apps_builder_;
   std::unique_ptr<ArcAppModelBuilder> arc_apps_builder_;
+  std::unique_ptr<CrostiniAppModelBuilder> crostini_apps_builder_;
+  std::unique_ptr<InternalAppModelBuilder> internal_apps_builder_;
   std::unique_ptr<syncer::SyncChangeProcessor> sync_processor_;
   std::unique_ptr<syncer::SyncErrorFactory> sync_error_handler_;
   SyncItemMap sync_items_;

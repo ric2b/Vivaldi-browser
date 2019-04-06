@@ -5,10 +5,10 @@
 
 <org.chromium.chrome.browser.toolbar.CustomTabToolbar
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:chrome="http://schemas.android.com/apk/res-auto"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/toolbar"
     android:layout_width="match_parent"
-    android:layout_height="@dimen/custom_tabs_control_container_height" >
+    android:layout_height="@dimen/custom_tabs_control_container_height">
     <ImageButton
         android:id="@+id/close_button"
         style="@style/ToolbarButton"
@@ -27,7 +27,8 @@
             android:layout_gravity="center_vertical"
             android:contentDescription="@string/accessibility_toolbar_btn_site_info"
             android:scaleType="center"
-            android:visibility="invisible" />
+            android:visibility="invisible"
+            app:chrometint="@color/dark_mode_tint" />
         <view
             class="org.chromium.chrome.browser.toolbar.CustomTabToolbar$InterceptTouchLayout"
             android:id="@+id/title_url_container"
@@ -60,19 +61,14 @@
                 android:textSize="@dimen/location_bar_url_text_size" />
         </view>
     </FrameLayout>
-    <ImageButton
-        android:id="@+id/action_button"
-        style="@style/ToolbarButton"
+    <LinearLayout
+        android:id="@+id/action_buttons"
         android:layout_width="wrap_content"
-        android:maxWidth="@dimen/custom_tabs_toolbar_maxWidth"
-        android:paddingTop="@dimen/custom_tabs_toolbar_vertical_padding"
-        android:paddingBottom="@dimen/custom_tabs_toolbar_vertical_padding"
-        android:adjustViewBounds="true"
-        android:scaleType="centerInside"
+        android:layout_height="match_parent"
         android:layout_marginEnd="42dp"
         android:layout_gravity="center_vertical|end"
-        android:visibility="gone"
-        android:contentDescription="@null" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal" />
     <org.chromium.chrome.browser.widget.TintedImageButton
         android:id="@+id/menu_button"
         style="@style/ToolbarButton"
@@ -81,5 +77,6 @@
         android:paddingEnd="4dp"
         android:src="@drawable/ic_more_vert_black_24dp"
         android:contentDescription="@string/accessibility_toolbar_btn_menu"
-        android:background="@null" />
+        android:background="@null"
+        app:chrometint="@color/dark_mode_tint" />
 </org.chromium.chrome.browser.toolbar.CustomTabToolbar>

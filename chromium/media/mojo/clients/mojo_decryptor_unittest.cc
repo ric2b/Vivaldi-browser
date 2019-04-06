@@ -20,6 +20,7 @@
 #include "media/mojo/common/mojo_shared_buffer_video_frame.h"
 #include "media/mojo/interfaces/decryptor.mojom.h"
 #include "media/mojo/services/mojo_decryptor_service.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -44,10 +45,12 @@ class MojoDecryptorTest : public ::testing::Test {
     decryptor_.reset(new StrictMock<MockDecryptor>());
 
     mojom::DecryptorPtr remote_decryptor;
-    mojo_decryptor_service_.reset(new MojoDecryptorService(
-        decryptor_.get(), mojo::MakeRequest(&remote_decryptor),
-        base::Bind(&MojoDecryptorTest::OnConnectionClosed,
-                   base::Unretained(this))));
+    mojo_decryptor_service_.reset(
+        new MojoDecryptorService(decryptor_.get(), nullptr));
+    binding_ = std::make_unique<mojo::Binding<mojom::Decryptor>>(
+        mojo_decryptor_service_.get(), MakeRequest(&remote_decryptor));
+    binding_->set_connection_error_handler(base::BindOnce(
+        &MojoDecryptorTest::OnConnectionClosed, base::Unretained(this)));
 
     mojo_decryptor_.reset(
         new MojoDecryptor(std::move(remote_decryptor), writer_capacity_));
@@ -61,11 +64,12 @@ class MojoDecryptorTest : public ::testing::Test {
   void DestroyService() {
     // MojoDecryptor has no way to notify callers that the connection is closed.
     // TODO(jrummell): Determine if notification is needed.
+    binding_.reset();
     mojo_decryptor_service_.reset();
   }
 
   void ReturnSharedBufferVideoFrame(
-      const scoped_refptr<DecoderBuffer>& encrypted,
+      scoped_refptr<DecoderBuffer> encrypted,
       const Decryptor::VideoDecodeCB& video_decode_cb) {
     // We don't care about the encrypted data, just create a simple VideoFrame.
     scoped_refptr<VideoFrame> frame(
@@ -80,7 +84,7 @@ class MojoDecryptorTest : public ::testing::Test {
     video_decode_cb.Run(Decryptor::kSuccess, std::move(frame));
   }
 
-  void ReturnAudioFrames(const scoped_refptr<DecoderBuffer>& encrypted,
+  void ReturnAudioFrames(scoped_refptr<DecoderBuffer> encrypted,
                          const Decryptor::AudioDecodeCB& audio_decode_cb) {
     const ChannelLayout kChannelLayout = CHANNEL_LAYOUT_4_0;
     const int kSampleRate = 48000;
@@ -93,7 +97,7 @@ class MojoDecryptorTest : public ::testing::Test {
     audio_decode_cb.Run(Decryptor::kSuccess, audio_frames);
   }
 
-  void ReturnEOSVideoFrame(const scoped_refptr<DecoderBuffer>& encrypted,
+  void ReturnEOSVideoFrame(scoped_refptr<DecoderBuffer> encrypted,
                            const Decryptor::VideoDecodeCB& video_decode_cb) {
     // Simply create and return an End-Of-Stream VideoFrame.
     video_decode_cb.Run(Decryptor::kSuccess, VideoFrame::CreateEOSFrame());
@@ -119,6 +123,7 @@ class MojoDecryptorTest : public ::testing::Test {
 
   // The matching MojoDecryptorService for |mojo_decryptor_|.
   std::unique_ptr<MojoDecryptorService> mojo_decryptor_service_;
+  std::unique_ptr<mojo::Binding<mojom::Decryptor>> binding_;
 
   // The actual Decryptor object used by |mojo_decryptor_service_|.
   std::unique_ptr<StrictMock<MockDecryptor>> decryptor_;
@@ -254,7 +259,7 @@ TEST_F(MojoDecryptorTest, Reset_DuringDecryptAndDecode_AudioAndVideo) {
   scoped_refptr<DecoderBuffer> buffer(new DecoderBuffer(100));
 
   mojo_decryptor_->DecryptAndDecodeAudio(
-      std::move(buffer),
+      buffer,
       base::Bind(&MojoDecryptorTest::AudioDecoded, base::Unretained(this)));
   mojo_decryptor_->DecryptAndDecodeVideo(
       std::move(buffer),

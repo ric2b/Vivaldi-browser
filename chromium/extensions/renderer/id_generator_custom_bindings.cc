@@ -7,14 +7,17 @@
 #include <stdint.h>
 
 #include "base/bind.h"
+#include "base/callback.h"
 
 namespace extensions {
 
 IdGeneratorCustomBindings::IdGeneratorCustomBindings(ScriptContext* context)
-    : ObjectBackedNativeHandler(context) {
-  RouteFunction("GetNextId",
-                base::Bind(&IdGeneratorCustomBindings::GetNextId,
-                           base::Unretained(this)));
+    : ObjectBackedNativeHandler(context) {}
+
+void IdGeneratorCustomBindings::AddRoutes() {
+  RouteHandlerFunction("GetNextId",
+                       base::Bind(&IdGeneratorCustomBindings::GetNextId,
+                                  base::Unretained(this)));
 }
 
 void IdGeneratorCustomBindings::GetNextId(

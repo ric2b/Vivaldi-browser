@@ -15,12 +15,16 @@
 #include "media/base/android/media_codec_bridge_impl.h"
 #include "media/base/android/media_codec_util.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/cdm_context.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_codecs.h"
 #include "media/base/video_decoder_config.h"
+#include "media/base/video_frame.h"
+#include "media/base/video_util.h"
 #include "media/gpu/android/android_video_surface_chooser.h"
 #include "media/gpu/android/avda_codec_allocator.h"
+#include "media/media_buildflags.h"
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
 #include "media/base/android/extract_sps_and_pps.h"
@@ -72,11 +76,13 @@ bool ConfigSupported(const VideoDecoderConfig& config,
 
       return true;
     }
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
     case kCodecH264:
       return true;
 #if BUILDFLAG(ENABLE_HEVC_DEMUXING)
     case kCodecHEVC:
       return true;
+#endif
 #endif
     default:
       return false;
@@ -87,13 +93,12 @@ bool ConfigSupported(const VideoDecoderConfig& config,
 
 // static
 PendingDecode PendingDecode::CreateEos() {
-  auto nop = [](DecodeStatus s) {};
-  return {DecoderBuffer::CreateEOSBuffer(), base::Bind(nop)};
+  return {DecoderBuffer::CreateEOSBuffer(), base::DoNothing()};
 }
 
 PendingDecode::PendingDecode(scoped_refptr<DecoderBuffer> buffer,
                              VideoDecoder::DecodeCB decode_cb)
-    : buffer(buffer), decode_cb(decode_cb) {}
+    : buffer(std::move(buffer)), decode_cb(std::move(decode_cb)) {}
 PendingDecode::PendingDecode(PendingDecode&& other) = default;
 PendingDecode::~PendingDecode() = default;
 
@@ -132,20 +137,19 @@ MediaCodecVideoDecoder::~MediaCodecVideoDecoder() {
   ReleaseCodec();
   codec_allocator_->StopThread(this);
 
-  if (!media_drm_bridge_cdm_context_)
+  if (!media_crypto_context_)
     return;
 
-  DCHECK(cdm_registration_id_);
-
   // Cancel previously registered callback (if any).
-  media_drm_bridge_cdm_context_->SetMediaCryptoReadyCB(
-      MediaDrmBridgeCdmContext::MediaCryptoReadyCB());
+  media_crypto_context_->SetMediaCryptoReadyCB(
+      MediaCryptoContext::MediaCryptoReadyCB());
 
-  media_drm_bridge_cdm_context_->UnregisterPlayer(cdm_registration_id_);
+  if (cdm_registration_id_)
+    media_crypto_context_->UnregisterPlayer(cdm_registration_id_);
 }
 
 void MediaCodecVideoDecoder::Destroy() {
-  DVLOG(2) << __func__;
+  DVLOG(1) << __func__;
   // Mojo callbacks require that they're run before destruction.
   if (reset_cb_)
     std::move(reset_cb_).Run();
@@ -155,14 +159,17 @@ void MediaCodecVideoDecoder::Destroy() {
   StartDrainingCodec(DrainType::kForDestroy);
 }
 
-void MediaCodecVideoDecoder::Initialize(const VideoDecoderConfig& config,
-                                        bool low_delay,
-                                        CdmContext* cdm_context,
-                                        const InitCB& init_cb,
-                                        const OutputCB& output_cb) {
+void MediaCodecVideoDecoder::Initialize(
+    const VideoDecoderConfig& config,
+    bool low_delay,
+    CdmContext* cdm_context,
+    const InitCB& init_cb,
+    const OutputCB& output_cb,
+    const WaitingForDecryptionKeyCB& /* waiting_for_decryption_key_cb */) {
   const bool first_init = !decoder_config_.IsValidConfig();
-  DVLOG(2) << (first_init ? "Initializing" : "Reinitializing")
-           << " MCVD with config: " << config.AsHumanReadableString();
+  DVLOG(1) << (first_init ? "Initializing" : "Reinitializing")
+           << " MCVD with config: " << config.AsHumanReadableString()
+           << ", cdm_context = " << cdm_context;
 
   InitCB bound_init_cb = BindToCurrentLoop(init_cb);
   if (!ConfigSupported(config, device_info_)) {
@@ -178,6 +185,8 @@ void MediaCodecVideoDecoder::Initialize(const VideoDecoderConfig& config,
   }
   decoder_config_ = config;
 
+  surface_chooser_helper_.SetVideoRotation(decoder_config_.video_rotation());
+
   output_cb_ = output_cb;
 
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
@@ -185,9 +194,18 @@ void MediaCodecVideoDecoder::Initialize(const VideoDecoderConfig& config,
     ExtractSpsAndPps(config.extra_data(), &csd0_, &csd1_);
 #endif
 
-  // For encrypted content, defer signalling success until the Cdm is ready.
-  if (config.is_encrypted()) {
+  // We only support setting CDM at first initialization. Even if the initial
+  // config is clear, we'll still try to set CDM since we may switch to an
+  // encrypted config later.
+  if (first_init && cdm_context && cdm_context->GetMediaCryptoContext()) {
+    DCHECK(media_crypto_.is_null());
     SetCdm(cdm_context, init_cb);
+    return;
+  }
+
+  if (config.is_encrypted() && media_crypto_.is_null()) {
+    DVLOG(1) << "No MediaCrypto to handle encrypted config";
+    bound_init_cb.Run(false);
     return;
   }
 
@@ -197,31 +215,15 @@ void MediaCodecVideoDecoder::Initialize(const VideoDecoderConfig& config,
 
 void MediaCodecVideoDecoder::SetCdm(CdmContext* cdm_context,
                                     const InitCB& init_cb) {
-  if (!cdm_context) {
-    LOG(ERROR) << "No CDM provided";
-    EnterTerminalState(State::kError);
-    init_cb.Run(false);
-    return;
-  }
+  DVLOG(1) << __func__;
+  DCHECK(cdm_context) << "No CDM provided";
+  DCHECK(cdm_context->GetMediaCryptoContext());
 
-  // On Android platform the CdmContext must be a MediaDrmBridgeCdmContext.
-  media_drm_bridge_cdm_context_ =
-      static_cast<media::MediaDrmBridgeCdmContext*>(cdm_context);
+  media_crypto_context_ = cdm_context->GetMediaCryptoContext();
 
   // Register CDM callbacks. The callbacks registered will be posted back to
   // this thread via BindToCurrentLoop.
-
-  // Since |this| holds a reference to the |cdm_|, by the time the CDM is
-  // destructed, UnregisterPlayer() must have been called and |this| has been
-  // destructed as well. So the |cdm_unset_cb| will never have a chance to be
-  // called.
-  // TODO(xhwang): Remove |cdm_unset_cb| after it's not used on all platforms.
-  cdm_registration_id_ = media_drm_bridge_cdm_context_->RegisterPlayer(
-      media::BindToCurrentLoop(base::Bind(&MediaCodecVideoDecoder::OnKeyAdded,
-                                          weak_factory_.GetWeakPtr())),
-      base::Bind(&base::DoNothing));
-
-  media_drm_bridge_cdm_context_->SetMediaCryptoReadyCB(media::BindToCurrentLoop(
+  media_crypto_context_->SetMediaCryptoReadyCB(media::BindToCurrentLoop(
       base::Bind(&MediaCodecVideoDecoder::OnMediaCryptoReady,
                  weak_factory_.GetWeakPtr(), init_cb)));
 }
@@ -230,22 +232,46 @@ void MediaCodecVideoDecoder::OnMediaCryptoReady(
     const InitCB& init_cb,
     JavaObjectPtr media_crypto,
     bool requires_secure_video_codec) {
-  DVLOG(1) << __func__;
+  DVLOG(1) << __func__
+           << ": requires_secure_video_codec = " << requires_secure_video_codec;
 
   DCHECK(state_ == State::kInitializing);
+  DCHECK(media_crypto);
 
-  if (!media_crypto || media_crypto->is_null()) {
-    LOG(ERROR) << "MediaCrypto is not available";
-    EnterTerminalState(State::kError);
-    init_cb.Run(false);
+  if (media_crypto->is_null()) {
+    media_crypto_context_->SetMediaCryptoReadyCB(
+        MediaCryptoContext::MediaCryptoReadyCB());
+    media_crypto_context_ = nullptr;
+
+    if (decoder_config_.is_encrypted()) {
+      LOG(ERROR) << "MediaCrypto is not available";
+      EnterTerminalState(State::kError);
+      init_cb.Run(false);
+      return;
+    }
+
+    // MediaCrypto is not available, but the stream is clear. So we can still
+    // play the current stream. But if we switch to an encrypted stream playback
+    // will fail.
+    init_cb.Run(true);
     return;
   }
 
   media_crypto_ = *media_crypto;
   requires_secure_codec_ = requires_secure_video_codec;
 
+  // Since |this| holds a reference to the |cdm_|, by the time the CDM is
+  // destructed, UnregisterPlayer() must have been called and |this| has been
+  // destructed as well. So the |cdm_unset_cb| will never have a chance to be
+  // called.
+  // TODO(xhwang): Remove |cdm_unset_cb| after it's not used on all platforms.
+  cdm_registration_id_ = media_crypto_context_->RegisterPlayer(
+      media::BindToCurrentLoop(base::Bind(&MediaCodecVideoDecoder::OnKeyAdded,
+                                          weak_factory_.GetWeakPtr())),
+      base::DoNothing());
+
   // Request a secure surface in all cases.  For L3, it's okay if we fall back
-  // to SurfaceTexture rather than fail composition.  For L1, it's required.
+  // to TextureOwner rather than fail composition.  For L1, it's required.
   surface_chooser_helper_.SetSecureSurfaceMode(
       requires_secure_video_codec
           ? SurfaceChooserHelper::SecureSurfaceMode::kRequired
@@ -278,13 +304,13 @@ void MediaCodecVideoDecoder::StartLazyInit() {
 }
 
 void MediaCodecVideoDecoder::OnVideoFrameFactoryInitialized(
-    scoped_refptr<SurfaceTextureGLOwner> surface_texture) {
+    scoped_refptr<TextureOwner> texture_owner) {
   DVLOG(2) << __func__;
-  if (!surface_texture) {
+  if (!texture_owner) {
     EnterTerminalState(State::kError);
     return;
   }
-  surface_texture_bundle_ = new AVDASurfaceBundle(std::move(surface_texture));
+  texture_owner_bundle_ = new AVDASurfaceBundle(std::move(texture_owner));
 
   // Overlays are disabled when |enable_threaded_texture_mailboxes| is true
   // (http://crbug.com/582170).
@@ -330,7 +356,7 @@ void MediaCodecVideoDecoder::OnSurfaceChosen(
                    weak_factory_.GetWeakPtr()));
     target_surface_bundle_ = new AVDASurfaceBundle(std::move(overlay));
   } else {
-    target_surface_bundle_ = surface_texture_bundle_;
+    target_surface_bundle_ = texture_owner_bundle_;
   }
 
   // If we were waiting for our first surface during initialization, then
@@ -357,8 +383,10 @@ void MediaCodecVideoDecoder::OnSurfaceDestroyed(AndroidOverlay* overlay) {
   }
 
   // Reset the target bundle if it is the one being destroyed.
-  if (target_surface_bundle_->overlay.get() == overlay)
-    target_surface_bundle_ = surface_texture_bundle_;
+  if (target_surface_bundle_ &&
+      target_surface_bundle_->overlay.get() == overlay) {
+    target_surface_bundle_ = texture_owner_bundle_;
+  }
 
   // Transition the codec away from the overlay if necessary.
   if (SurfaceTransitionPending())
@@ -434,14 +462,14 @@ void MediaCodecVideoDecoder::OnCodecConfigured(
   StartTimer();
 }
 
-void MediaCodecVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
+void MediaCodecVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
                                     const DecodeCB& decode_cb) {
-  DVLOG(2) << __func__ << ": " << buffer->AsHumanReadableString();
+  DVLOG(3) << __func__ << ": " << buffer->AsHumanReadableString();
   if (state_ == State::kError) {
     decode_cb.Run(DecodeStatus::DECODE_ERROR);
     return;
   }
-  pending_decodes_.emplace_back(buffer, std::move(decode_cb));
+  pending_decodes_.emplace_back(std::move(buffer), std::move(decode_cb));
 
   if (state_ == State::kInitializing) {
     if (lazy_init_pending_)
@@ -453,6 +481,10 @@ void MediaCodecVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
 
 void MediaCodecVideoDecoder::FlushCodec() {
   DVLOG(2) << __func__;
+
+  // If a deferred flush was pending, then it isn't anymore.
+  deferred_flush_pending_ = false;
+
   if (!codec_ || codec_->IsFlushed())
     return;
 
@@ -531,7 +563,10 @@ bool MediaCodecVideoDecoder::QueueInput() {
   // If the codec is drained, flush it when there is a pending decode and no
   // unreleased output buffers. This lets us avoid both unbacking frames when we
   // flush, and flushing unnecessarily, like at EOS.
-  if (codec_->IsDrained()) {
+  //
+  // Often, we'll elide the eos to drain the codec, but we want to pretend that
+  // we did.  In this case, we should also flush.
+  if (codec_->IsDrained() || deferred_flush_pending_) {
     if (!codec_->HasUnreleasedOutputBuffers() && !pending_decodes_.empty()) {
       FlushCodec();
       return true;
@@ -545,7 +580,10 @@ bool MediaCodecVideoDecoder::QueueInput() {
   PendingDecode& pending_decode = pending_decodes_.front();
   auto status = codec_->QueueInputBuffer(*pending_decode.buffer,
                                          decoder_config_.encryption_scheme());
-  DVLOG((status == CodecWrapper::QueueStatus::kTryAgainLater ? 3 : 2))
+  DVLOG((status == CodecWrapper::QueueStatus::kTryAgainLater ||
+                 status == CodecWrapper::QueueStatus::kOk
+             ? 3
+             : 2))
       << "QueueInput(" << pending_decode.buffer->AsHumanReadableString()
       << ") status=" << static_cast<int>(status);
 
@@ -609,7 +647,7 @@ bool MediaCodecVideoDecoder::DequeueOutput() {
       EnterTerminalState(State::kError);
       return false;
   }
-  DVLOG(2) << "DequeueOutputBuffer(): pts="
+  DVLOG(3) << "DequeueOutputBuffer(): pts="
            << (eos ? "EOS"
                    : std::to_string(presentation_time.InMilliseconds()));
 
@@ -628,8 +666,9 @@ bool MediaCodecVideoDecoder::DequeueOutput() {
   }
 
   // If we're draining for reset or destroy we can discard |output_buffer|
-  // without rendering it.
-  if (drain_type_)
+  // without rendering it.  This is also true if we elided the drain itself,
+  // and deferred a flush that would have happened when the drain completed.
+  if (drain_type_ || deferred_flush_pending_)
     return true;
 
   // Record the frame type that we're sending and some information about why.
@@ -639,9 +678,11 @@ bool MediaCodecVideoDecoder::DequeueOutput() {
           SurfaceChooserHelper::FrameInformation::FRAME_INFORMATION_MAX) +
           1);  // PRESUBMIT_IGNORE_UMA_MAX
 
+  gfx::Rect visible_rect(output_buffer->size());
   video_frame_factory_->CreateVideoFrame(
       std::move(output_buffer), presentation_time,
-      decoder_config_.natural_size(), CreatePromotionHintCB(),
+      GetNaturalSize(visible_rect, decoder_config_.GetPixelAspectRatio()),
+      CreatePromotionHintCB(),
       base::Bind(&MediaCodecVideoDecoder::ForwardVideoFrame,
                  weak_factory_.GetWeakPtr(), reset_generation_));
   return true;
@@ -660,8 +701,12 @@ void MediaCodecVideoDecoder::RunEosDecodeCb(int reset_generation) {
 void MediaCodecVideoDecoder::ForwardVideoFrame(
     int reset_generation,
     const scoped_refptr<VideoFrame>& frame) {
-  if (reset_generation == reset_generation_)
+  if (reset_generation == reset_generation_) {
+    // TODO(liberato): We might actually have a SW decoder.  Consider setting
+    // this to false if so, especially for higher bitrates.
+    frame->metadata()->SetBoolean(VideoFrameMetadata::POWER_EFFICIENT, true);
     output_cb_.Run(frame);
+  }
 }
 
 // Our Reset() provides a slightly stronger guarantee than VideoDecoder does.
@@ -684,6 +729,16 @@ void MediaCodecVideoDecoder::StartDrainingCodec(DrainType drain_type) {
   // the codec isn't already draining.
   drain_type_ = drain_type;
 
+  // We can safely invalidate outstanding buffers for both types of drain, and
+  // doing so can only make the drain complete quicker.  Note that we do this
+  // even if we're eliding the drain, since we're either going to flush the
+  // codec or destroy it.  While we're not required to do this, it might affect
+  // stability if we don't (https://crbug.com/869365).  AVDA, in particular,
+  // dropped all pending codec output buffers when starting a reset (seek) or
+  // a destroy.
+  if (codec_)
+    codec_->DiscardOutputBuffers();
+
   // Skip the drain if possible. Only VP8 codecs need draining because
   // they can hang in release() or flush() otherwise
   // (http://crbug.com/598963).
@@ -691,6 +746,11 @@ void MediaCodecVideoDecoder::StartDrainingCodec(DrainType drain_type) {
   // instead. Draining is responsible for a lot of complexity.
   if (decoder_config_.codec() != kCodecVP8 || !codec_ || codec_->IsFlushed() ||
       codec_->IsDrained()) {
+    // If the codec isn't already drained or flushed, then we have to remember
+    // that we owe it a flush.  We also have to remember not to deliver any
+    // output buffers that might still be in progress in the codec.
+    deferred_flush_pending_ =
+        codec_ && !codec_->IsDrained() && !codec_->IsFlushed();
     OnCodecDrained();
     return;
   }
@@ -699,9 +759,6 @@ void MediaCodecVideoDecoder::StartDrainingCodec(DrainType drain_type) {
   if (!codec_->IsDraining())
     pending_decodes_.push_back(PendingDecode::CreateEos());
 
-  // We can safely invalidate outstanding buffers for both types of drain, and
-  // doing so can only make the drain complete quicker.
-  codec_->DiscardOutputBuffers();
   PumpCodec(true);
 }
 
@@ -717,7 +774,14 @@ void MediaCodecVideoDecoder::OnCodecDrained() {
   }
 
   std::move(reset_cb_).Run();
-  FlushCodec();
+
+  // Flush the codec unless (a) it's already flushed, (b) it's drained and the
+  // flush will be handled automatically on the next decode, or (c) we've
+  // elided the eos and want to defer the flush.
+  if (codec_ && !codec_->IsFlushed() && !codec_->IsDrained() &&
+      !deferred_flush_pending_) {
+    FlushCodec();
+  }
 }
 
 void MediaCodecVideoDecoder::EnterTerminalState(State state) {
@@ -731,7 +795,7 @@ void MediaCodecVideoDecoder::EnterTerminalState(State state) {
   pump_codec_timer_.Stop();
   ReleaseCodec();
   target_surface_bundle_ = nullptr;
-  surface_texture_bundle_ = nullptr;
+  texture_owner_bundle_ = nullptr;
   if (state == State::kError)
     CancelPendingDecodes(DecodeStatus::DECODE_ERROR);
   if (drain_type_)
@@ -760,7 +824,6 @@ void MediaCodecVideoDecoder::ReleaseCodec() {
 }
 
 AndroidOverlayFactoryCB MediaCodecVideoDecoder::CreateOverlayFactoryCb() {
-  DCHECK(!overlay_info_.HasValidSurfaceId());
   if (!overlay_factory_cb_ || !overlay_info_.HasValidRoutingToken())
     return AndroidOverlayFactoryCB();
 

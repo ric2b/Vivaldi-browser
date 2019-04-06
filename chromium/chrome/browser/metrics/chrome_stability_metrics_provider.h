@@ -17,7 +17,7 @@
 #include "content/public/browser/notification_registrar.h"
 
 #if defined(OS_ANDROID)
-#include "components/crash/content/browser/crash_dump_manager_android.h"
+#include "components/crash/content/browser/crash_metrics_reporter_android.h"
 #endif  // defined(OS_ANDROID)
 
 class PrefService;
@@ -28,7 +28,7 @@ class ChromeStabilityMetricsProvider
     : public metrics::MetricsProvider,
       public content::BrowserChildProcessObserver,
 #if defined(OS_ANDROID)
-      public breakpad::CrashDumpManager::Observer,
+      public crash_reporter::CrashMetricsReporter::Observer,
 #endif
       public content::NotificationObserver {
  public:
@@ -44,7 +44,9 @@ class ChromeStabilityMetricsProvider
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ChromeStabilityMetricsProviderTest,
-                           BrowserChildProcessObserver);
+                           BrowserChildProcessObserverGpu);
+  FRIEND_TEST_ALL_PREFIXES(ChromeStabilityMetricsProviderTest,
+                           BrowserChildProcessObserverUtility);
   FRIEND_TEST_ALL_PREFIXES(ChromeStabilityMetricsProviderTest,
                            NotificationObserver);
 
@@ -56,15 +58,19 @@ class ChromeStabilityMetricsProvider
   // content::BrowserChildProcessObserver:
   void BrowserChildProcessCrashed(
       const content::ChildProcessData& data,
-      int exit_code) override;
+      const content::ChildProcessTerminationInfo& info) override;
+  void BrowserChildProcessLaunchedAndConnected(
+      const content::ChildProcessData& data) override;
 
 #if defined(OS_ANDROID)
-  // breakpad::CrashDumpManager::Observer:
+  // crash_reporter::CrashMetricsReporter::Observer:
   void OnCrashDumpProcessed(
-      const breakpad::CrashDumpManager::CrashDumpDetails& details) override;
+      int rph_id,
+      const crash_reporter::CrashMetricsReporter::ReportedCrashTypeSet&
+          reported_counts) override;
 
-  ScopedObserver<breakpad::CrashDumpManager,
-                 breakpad::CrashDumpManager::Observer>
+  ScopedObserver<crash_reporter::CrashMetricsReporter,
+                 crash_reporter::CrashMetricsReporter::Observer>
       scoped_observer_;
 #endif  // defined(OS_ANDROID)
 

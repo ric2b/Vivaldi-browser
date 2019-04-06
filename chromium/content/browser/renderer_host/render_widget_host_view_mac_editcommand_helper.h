@@ -10,6 +10,7 @@
 #include "base/containers/hash_tables.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#import "content/browser/renderer_host/render_widget_host_view_cocoa.h"
 #include "content/browser/renderer_host/render_widget_host_view_mac.h"
 
 namespace content {
@@ -43,7 +44,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMacEditCommandHelper {
   // Each selector is connected to a single c method which forwards the message
   // to WebCore's ExecuteEditCommand() function.
   // This method is idempotent.
-  // The class passed in must conform to the RenderWidgetHostViewMacOwner
+  // The class passed in must conform to the RenderWidgetHostNSViewClientOwner
   // protocol.
   void AddEditingSelectorsToClass(Class klass);
 
@@ -52,7 +53,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMacEditCommandHelper {
   // owner - An object we can retrieve a RenderWidgetHostViewMac from to
   // determine the command states.
   bool IsMenuItemEnabled(SEL item_action,
-                         id<RenderWidgetHostViewMacOwner> owner);
+                         id<RenderWidgetHostNSViewClientOwner> owner);
 
   // Converts an editing selector into a command name that can be sent to
   // webkit.

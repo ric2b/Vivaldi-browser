@@ -19,7 +19,7 @@ SRC_DIR = os.path.abspath(
     os.path.join(SCRIPT_DIR, os.path.pardir, os.path.pardir))
 
 
-# run-webkit-tests returns the number of failures as the return
+# run_web_tests.py returns the number of failures as the return
 # code, but caps the return code at 101 to avoid overflow or colliding
 # with reserved values from the shell.
 MAX_FAILURES_EXIT_STATUS = 101
@@ -73,24 +73,6 @@ def run_command(argv, env=None, cwd=None):
   return rc
 
 
-def run_command_with_output(argv, stdoutfile, env=None, cwd=None):
-  """ Run command and stream its stdout/stderr to the console & |stdoutfile|.
-  """
-  print 'Running %r in %r (env: %r)' % (argv, cwd, env)
-  assert stdoutfile
-  with io.open(stdoutfile, 'w') as writer, io.open(stdoutfile, 'r', 1) as \
-      reader:
-    process = subprocess.Popen(argv, env=env, cwd=cwd, stdout=writer,
-        stderr=subprocess.STDOUT)
-    while process.poll() is None:
-      sys.stdout.write(reader.read())
-      time.sleep(0.1)
-    # Read the remaining
-    sys.stdout.write(reader.read())
-    print 'Command %r returned exit code %d' % (argv, process.returncode)
-    return process.returncode
-
-
 def run_runtest(cmd_args, runtest_args):
   env = os.environ.copy()
   env['CHROME_HEADLESS'] = '1'
@@ -107,6 +89,7 @@ def run_runtest(cmd_args, runtest_args):
       sys.executable,
       cmd_args.paths['runit.py'],
       '--show-path',
+      '--with-third-party-lib',
       sys.executable,
       cmd_args.paths['runtest.py'],
     ]
@@ -132,7 +115,7 @@ def temporary_file():
 
 def parse_common_test_results(json_results, test_separator='/'):
   def convert_trie_to_flat_paths(trie, prefix=None):
-    # Also see webkitpy.layout_tests.layout_package.json_results_generator
+    # Also see blinkpy.web_tests.layout_package.json_results_generator
     result = {}
     for name, data in trie.iteritems():
       if prefix:
@@ -155,8 +138,7 @@ def parse_common_test_results(json_results, test_separator='/'):
   # TODO(dpranke): crbug.com/357866 - we should simplify the handling of
   # both the return code and parsing the actual results, below.
 
-  passing_statuses = ('PASS', 'SLOW', 'NEEDSREBASELINE',
-                        'NEEDSMANUALREBASELINE')
+  passing_statuses = ('PASS', 'SLOW', 'NEEDSREBASELINE')
 
   for test, result in convert_trie_to_flat_paths(
       json_results['tests']).iteritems():
@@ -180,6 +162,32 @@ def parse_common_test_results(json_results, test_separator='/'):
     results[key][test] = data
 
   return results
+
+
+def get_gtest_summary_passes(output):
+  """Returns a mapping of test to boolean indicating if the test passed.
+
+  Only partially parses the format. This code is based on code in tools/build,
+  specifically
+  https://chromium.googlesource.com/chromium/tools/build/+/17fef98756c5f250b20bf716829a0004857235ff/scripts/slave/recipe_modules/test_utils/util.py#189
+  """
+  if not output:
+    return {}
+
+  mapping = {}
+
+  for cur_iteration_data in output.get('per_iteration_data', []):
+    for test_fullname, results in cur_iteration_data.iteritems():
+      # Results is a list with one entry per test try. Last one is the final
+      # result.
+      last_result = results[-1]
+
+      if last_result['status'] == 'SUCCESS':
+        mapping[test_fullname] = True
+      elif last_result['status'] != 'SKIPPED':
+        mapping[test_fullname] = False
+
+  return mapping
 
 
 def extract_filter_list(filter_list):

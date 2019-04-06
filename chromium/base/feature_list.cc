@@ -23,7 +23,7 @@ namespace {
 // Pointer to the FeatureList instance singleton that was set via
 // FeatureList::SetInstance(). Does not use base/memory/singleton.h in order to
 // have more control over initialization timing. Leaky.
-FeatureList* g_instance = nullptr;
+FeatureList* g_feature_list_instance = nullptr;
 
 // Tracks whether the FeatureList instance was initialized via an accessor.
 bool g_initialized_from_accessor = false;
@@ -76,10 +76,10 @@ bool IsValidFeatureOrFieldTrialName(const std::string& name) {
 
 }  // namespace
 
-#if DCHECK_IS_ON() && defined(SYZYASAN)
-const Feature kSyzyAsanDCheckIsFatalFeature{"DcheckIsFatal",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // defined(SYZYASAN)
+#if DCHECK_IS_CONFIGURABLE
+const Feature kDCheckIsFatalFeature{"DcheckIsFatal",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // DCHECK_IS_CONFIGURABLE
 
 FeatureList::FeatureList() = default;
 
@@ -186,54 +186,31 @@ void FeatureList::AddFeaturesToAllocator(PersistentMemoryAllocator* allocator) {
 
 void FeatureList::GetFeatureOverrides(std::string* enable_overrides,
                                       std::string* disable_overrides) {
-  DCHECK(initialized_);
+  GetFeatureOverridesImpl(enable_overrides, disable_overrides, false);
+}
 
-  enable_overrides->clear();
-  disable_overrides->clear();
-
-  // Note: Since |overrides_| is a std::map, iteration will be in alphabetical
-  // order. This not guaranteed to users of this function, but is useful for
-  // tests to assume the order.
-  for (const auto& entry : overrides_) {
-    std::string* target_list = nullptr;
-    switch (entry.second.overridden_state) {
-      case OVERRIDE_USE_DEFAULT:
-      case OVERRIDE_ENABLE_FEATURE:
-        target_list = enable_overrides;
-        break;
-      case OVERRIDE_DISABLE_FEATURE:
-        target_list = disable_overrides;
-        break;
-    }
-
-    if (!target_list->empty())
-      target_list->push_back(',');
-    if (entry.second.overridden_state == OVERRIDE_USE_DEFAULT)
-      target_list->push_back('*');
-    target_list->append(entry.first);
-    if (entry.second.field_trial) {
-      target_list->push_back('<');
-      target_list->append(entry.second.field_trial->trial_name());
-    }
-  }
+void FeatureList::GetCommandLineFeatureOverrides(
+    std::string* enable_overrides,
+    std::string* disable_overrides) {
+  GetFeatureOverridesImpl(enable_overrides, disable_overrides, true);
 }
 
 // static
 bool FeatureList::IsEnabled(const Feature& feature) {
-  if (!g_instance) {
+  if (!g_feature_list_instance) {
     g_initialized_from_accessor = true;
     return feature.default_state == FEATURE_ENABLED_BY_DEFAULT;
   }
-  return g_instance->IsFeatureEnabled(feature);
+  return g_feature_list_instance->IsFeatureEnabled(feature);
 }
 
 // static
 FieldTrial* FeatureList::GetFieldTrial(const Feature& feature) {
-  if (!g_instance) {
+  if (!g_feature_list_instance) {
     g_initialized_from_accessor = true;
     return nullptr;
   }
-  return g_instance->GetAssociatedFieldTrial(feature);
+  return g_feature_list_instance->GetAssociatedFieldTrial(feature);
 }
 
 // static
@@ -258,12 +235,12 @@ bool FeatureList::InitializeInstance(const std::string& enable_features,
   // accessor call(s) which likely returned incorrect information.
   CHECK(!g_initialized_from_accessor);
   bool instance_existed_before = false;
-  if (g_instance) {
-    if (g_instance->initialized_from_command_line_)
+  if (g_feature_list_instance) {
+    if (g_feature_list_instance->initialized_from_command_line_)
       return false;
 
-    delete g_instance;
-    g_instance = nullptr;
+    delete g_feature_list_instance;
+    g_feature_list_instance = nullptr;
     instance_existed_before = true;
   }
 
@@ -275,36 +252,36 @@ bool FeatureList::InitializeInstance(const std::string& enable_features,
 
 // static
 FeatureList* FeatureList::GetInstance() {
-  return g_instance;
+  return g_feature_list_instance;
 }
 
 // static
 void FeatureList::SetInstance(std::unique_ptr<FeatureList> instance) {
-  DCHECK(!g_instance);
+  DCHECK(!g_feature_list_instance);
   instance->FinalizeInitialization();
 
   // Note: Intentional leak of global singleton.
-  g_instance = instance.release();
+  g_feature_list_instance = instance.release();
 
-#if DCHECK_IS_ON() && defined(SYZYASAN)
+#if DCHECK_IS_CONFIGURABLE
   // Update the behaviour of LOG_DCHECK to match the Feature configuration.
   // DCHECK is also forced to be FATAL if we are running a death-test.
   // TODO(asvitkine): If we find other use-cases that need integrating here
   // then define a proper API/hook for the purpose.
-  if (base::FeatureList::IsEnabled(kSyzyAsanDCheckIsFatalFeature) ||
+  if (base::FeatureList::IsEnabled(kDCheckIsFatalFeature) ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           "gtest_internal_run_death_test")) {
     logging::LOG_DCHECK = logging::LOG_FATAL;
   } else {
     logging::LOG_DCHECK = logging::LOG_INFO;
   }
-#endif  // DCHECK_IS_ON() && defined(SYZYASAN)
+#endif  // DCHECK_IS_CONFIGURABLE
 }
 
 // static
 std::unique_ptr<FeatureList> FeatureList::ClearInstanceForTesting() {
-  FeatureList* old_instance = g_instance;
-  g_instance = nullptr;
+  FeatureList* old_instance = g_feature_list_instance;
+  g_feature_list_instance = nullptr;
   g_initialized_from_accessor = false;
   return base::WrapUnique(old_instance);
 }
@@ -312,9 +289,9 @@ std::unique_ptr<FeatureList> FeatureList::ClearInstanceForTesting() {
 // static
 void FeatureList::RestoreInstanceForTesting(
     std::unique_ptr<FeatureList> instance) {
-  DCHECK(!g_instance);
+  DCHECK(!g_feature_list_instance);
   // Note: Intentional leak of global singleton.
-  g_instance = instance.release();
+  g_feature_list_instance = instance.release();
 }
 
 void FeatureList::FinalizeInitialization() {
@@ -396,6 +373,47 @@ void FeatureList::RegisterOverride(StringPiece feature_name,
   // feature name takes effect.
   overrides_.insert(std::make_pair(
       feature_name.as_string(), OverrideEntry(overridden_state, field_trial)));
+}
+
+void FeatureList::GetFeatureOverridesImpl(std::string* enable_overrides,
+                                          std::string* disable_overrides,
+                                          bool command_line_only) {
+  DCHECK(initialized_);
+
+  enable_overrides->clear();
+  disable_overrides->clear();
+
+  // Note: Since |overrides_| is a std::map, iteration will be in alphabetical
+  // order. This is not guaranteed to users of this function, but is useful for
+  // tests to assume the order.
+  for (const auto& entry : overrides_) {
+    if (command_line_only &&
+        (entry.second.field_trial != nullptr ||
+         entry.second.overridden_state == OVERRIDE_USE_DEFAULT)) {
+      continue;
+    }
+
+    std::string* target_list = nullptr;
+    switch (entry.second.overridden_state) {
+      case OVERRIDE_USE_DEFAULT:
+      case OVERRIDE_ENABLE_FEATURE:
+        target_list = enable_overrides;
+        break;
+      case OVERRIDE_DISABLE_FEATURE:
+        target_list = disable_overrides;
+        break;
+    }
+
+    if (!target_list->empty())
+      target_list->push_back(',');
+    if (entry.second.overridden_state == OVERRIDE_USE_DEFAULT)
+      target_list->push_back('*');
+    target_list->append(entry.first);
+    if (entry.second.field_trial) {
+      target_list->push_back('<');
+      target_list->append(entry.second.field_trial->trial_name());
+    }
+  }
 }
 
 bool FeatureList::CheckFeatureIdentity(const Feature& feature) {

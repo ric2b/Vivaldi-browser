@@ -9,13 +9,13 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.DialogInterface.OnClickListener;
-import android.os.AsyncTask;
 import android.security.KeyChain;
 import android.security.KeyChainAliasCallback;
 import android.security.KeyChainException;
 import android.support.v7.app.AlertDialog;
 import android.util.Log;
 
+import org.chromium.base.AsyncTask;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
@@ -58,7 +58,7 @@ public class SSLClientCertificateRequest {
         // Pointer to the native certificate request needed to return the results.
         private final long mNativePtr;
 
-        @SuppressLint("StaticFieldLeak") // TODO(crbug.com/799070): Fix.
+        @SuppressLint("StaticFieldLeak") // TODO(crbug.com/807729): Remove and fix.
         final Context mContext;
         final String mAlias;
 

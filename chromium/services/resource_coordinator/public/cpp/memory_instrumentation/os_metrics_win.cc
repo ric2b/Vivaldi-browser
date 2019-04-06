@@ -9,12 +9,28 @@
 #include <psapi.h>
 #include <tchar.h>
 
+#include <base/strings/stringprintf.h>
 #include <base/strings/sys_string_conversions.h>
 #include <base/win/pe_image.h>
 #include <base/win/win_util.h>
-#include "base/process/process_metrics.h"
 
 namespace memory_instrumentation {
+
+namespace {
+
+// Gets the unique build ID for a module. Windows build IDs are created by a
+// concatenation of a GUID and AGE fields found in the headers of a module. The
+// GUID is stored in the first 16 bytes and the AGE is stored in the last 4
+// bytes. Returns the empty string if the function fails to get the build ID.
+std::string MakeDebugID(const GUID& guid, DWORD age) {
+  return base::StringPrintf("%08lX%04X%04X%02X%02X%02X%02X%02X%02X%02X%02X%ld",
+                            guid.Data1, guid.Data2, guid.Data3, guid.Data4[0],
+                            guid.Data4[1], guid.Data4[2], guid.Data4[3],
+                            guid.Data4[4], guid.Data4[5], guid.Data4[6],
+                            guid.Data4[7], age);
+}
+
+}  // namespace
 
 // static
 bool OSMetrics::FillOSMemoryDump(base::ProcessId pid,
@@ -22,12 +38,14 @@ bool OSMetrics::FillOSMemoryDump(base::ProcessId pid,
   // Creating process metrics for child processes in mac or windows requires
   // additional information like ProcessHandle or port provider.
   DCHECK_EQ(base::kNullProcessId, pid);
-  auto process_metrics = base::ProcessMetrics::CreateCurrentProcessMetrics();
 
-  size_t private_bytes = 0;
-  process_metrics->GetMemoryBytes(&private_bytes, nullptr);
-  dump->platform_private_footprint->private_bytes = private_bytes;
-  dump->resident_set_kb = process_metrics->GetWorkingSetSize() / 1024;
+  PROCESS_MEMORY_COUNTERS_EX pmc;
+  if (::GetProcessMemoryInfo(::GetCurrentProcess(),
+                             reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc),
+                             sizeof(pmc))) {
+    dump->platform_private_footprint->private_bytes = pmc.PrivateUsage;
+    dump->resident_set_kb = pmc.WorkingSetSize / 1024;
+  }
   return true;
 }
 
@@ -38,15 +56,6 @@ std::vector<mojom::VmRegionPtr> OSMetrics::GetProcessMemoryMaps(
   std::vector<HMODULE> modules;
   if (!base::win::GetLoadedModulesSnapshot(::GetCurrentProcess(), &modules))
     return maps;
-
-  auto process_metrics = base::ProcessMetrics::CreateCurrentProcessMetrics();
-  uint64_t pss_bytes = 0;
-  bool res = process_metrics->GetProportionalSetSizeBytes(&pss_bytes);
-  if (res) {
-    mojom::VmRegionPtr region = mojom::VmRegion::New();
-    region->byte_stats_proportional_resident = pss_bytes;
-    maps.push_back(std::move(region));
-  }
 
   // Query the base address for each module, and attach it to the dump.
   for (size_t i = 0; i < modules.size(); ++i) {
@@ -69,6 +78,14 @@ std::vector<mojom::VmRegionPtr> OSMetrics::GetProcessMemoryMaps(
     base::win::PEImage pe_image(module_info.lpBaseOfDll);
     region->module_timestamp =
         pe_image.GetNTHeaders()->FileHeader.TimeDateStamp;
+
+    GUID module_guid;
+    DWORD module_age;
+    LPCSTR pdb_file;
+    if (pe_image.GetDebugId(&module_guid, &module_age, &pdb_file)) {
+      region->module_debugid = MakeDebugID(module_guid, module_age);
+      region->module_debug_path = pdb_file;
+    }
 
     maps.push_back(std::move(region));
   }

@@ -17,7 +17,7 @@
 #include "media/base/media_log.h"
 #include "media/base/stream_parser_buffer.h"
 #include "media/formats/mp4/box_definitions.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 
 namespace media {
 
@@ -95,6 +95,7 @@ class MEDIA_EXPORT TrackRunIterator {
  private:
   bool UpdateCts();
   bool ResetRun();
+  const ProtectionSchemeInfo& protection_scheme_info() const;
   const TrackEncryption& track_encryption() const;
 
   uint32_t GetGroupDescriptionIndex(uint32_t sample_index) const;

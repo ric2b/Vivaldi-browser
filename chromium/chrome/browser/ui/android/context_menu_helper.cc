@@ -6,7 +6,7 @@
 
 #include <stdint.h>
 
-#include <vector>
+#include <map>
 
 #include "base/android/callback_android.h"
 #include "base/android/jni_string.h"
@@ -15,6 +15,7 @@
 #include "chrome/browser/android/download/download_controller_base.h"
 #include "chrome/browser/image_decoder.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
+#include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "content/public/browser/render_frame_host.h"
@@ -22,8 +23,8 @@
 #include "content/public/common/context_menu_params.h"
 #include "jni/ContextMenuHelper_jni.h"
 #include "jni/ContextMenuParams_jni.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/public/web/WebContextMenuData.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/web/web_context_menu_data.h"
 #include "ui/android/view_android.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/geometry/point.h"
@@ -50,14 +51,14 @@ class ContextMenuHelperImageRequest : public ImageDecoder::ImageRequest {
 
  protected:
   void OnImageDecoded(const SkBitmap& decoded_image) override {
-    base::android::RunCallbackAndroid(jcallback_,
-                                      gfx::ConvertToJavaBitmap(&decoded_image));
+    base::android::RunObjectCallbackAndroid(
+        jcallback_, gfx::ConvertToJavaBitmap(&decoded_image));
     delete this;
   }
 
   void OnDecodeImageFailed() override {
     base::android::ScopedJavaLocalRef<jobject> j_bitmap;
-    base::android::RunCallbackAndroid(jcallback_, j_bitmap);
+    base::android::RunObjectCallbackAndroid(jcallback_, j_bitmap);
     delete this;
   }
 
@@ -76,7 +77,7 @@ void OnRetrieveImageForShare(
     const base::android::JavaRef<jobject>& jcallback,
     const std::vector<uint8_t>& thumbnail_data,
     const gfx::Size& original_size) {
-  base::android::RunCallbackAndroid(jcallback, thumbnail_data);
+  base::android::RunByteArrayCallbackAndroid(jcallback, thumbnail_data);
 }
 
 void OnRetrieveImageForContextMenu(
@@ -93,7 +94,7 @@ ContextMenuHelper::ContextMenuHelper(content::WebContents* web_contents)
     : web_contents_(web_contents) {
   JNIEnv* env = base::android::AttachCurrentThread();
   java_obj_.Reset(
-      env, Java_ContextMenuHelper_create(env, reinterpret_cast<long>(this),
+      env, Java_ContextMenuHelper_create(env, reinterpret_cast<int64_t>(this),
                                          web_contents_->GetJavaWebContents())
                .obj());
   DCHECK(!java_obj_.is_null());
@@ -107,6 +108,12 @@ ContextMenuHelper::~ContextMenuHelper() {
 void ContextMenuHelper::ShowContextMenu(
     content::RenderFrameHost* render_frame_host,
     const content::ContextMenuParams& params) {
+  // TODO(crbug.com/851495): support context menu in VR.
+  if (vr::VrTabHelper::IsUiSuppressedInVr(
+          web_contents_, vr::UiSuppressedElement::kContextMenu)) {
+    web_contents_->NotifyContextMenuClosed(params.custom_context);
+    return;
+  }
   JNIEnv* env = base::android::AttachCurrentThread();
   context_menu_params_ = params;
   render_frame_id_ = render_frame_host->GetRoutingID();

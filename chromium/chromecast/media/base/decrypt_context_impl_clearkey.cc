@@ -30,7 +30,9 @@ DecryptContextImplClearKey::~DecryptContextImplClearKey() {}
 void DecryptContextImplClearKey::DecryptAsync(CastDecoderBuffer* buffer,
                                               uint8_t* output,
                                               size_t data_offset,
+                                              bool clear_output,
                                               DecryptCB decrypt_cb) {
+  DCHECK(clear_output);
   std::move(decrypt_cb).Run(DoDecrypt(buffer, output, data_offset));
 }
 
@@ -84,8 +86,9 @@ bool DecryptContextImplClearKey::DoDecrypt(CastDecoderBuffer* buffer,
   return true;
 }
 
-bool DecryptContextImplClearKey::CanDecryptToBuffer() const {
-  return true;
+DecryptContextImpl::OutputType DecryptContextImplClearKey::GetOutputType()
+    const {
+  return OutputType::kClearRequired;
 }
 
 }  // namespace media

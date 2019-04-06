@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2011, Google Inc.
 // All rights reserved.
 //
@@ -57,33 +58,27 @@
 #endif
 #include <gperftools/tcmalloc.h>
 
-static void ReplaceSystemAlloc();  // defined in the .h files below
+#if __cplusplus >= 201103L || (defined(_MSC_VER) && _MSC_VER >= 1900)
+#define CPP_NOTHROW noexcept
+#define CPP_BADALLOC
+#else
+#define CPP_NOTHROW throw()
+#define CPP_BADALLOC throw(std::bad_alloc)
+#endif
 
-#if defined(TCMALLOC_DONT_REPLACE_SYSTEM_ALLOC)
-// TCMALLOC_DONT_REPLACE_SYSTEM_ALLOC has the following semantic:
-//  - tcmalloc with all its tc_* (tc_malloc, tc_free) symbols is being built
-//    and linked as usual.
-//  - the default system allocator symbols (malloc, free, operator new) are NOT
-//    overridden. The embedded must take care of routing them to tc_* symbols.
-// This no-op #if block effectively prevents the inclusion of the
-// libc_override_* headers below.
-static void ReplaceSystemAlloc() {}
+static void ReplaceSystemAlloc();  // defined in the .h files below
 
 // For windows, there are two ways to get tcmalloc.  If we're
 // patching, then src/windows/patch_function.cc will do the necessary
 // overriding here.  Otherwise, we doing the 'redefine' trick, where
 // we remove malloc/new/etc from mscvcrt.dll, and just need to define
 // them now.
-#elif defined(_WIN32) && defined(WIN32_DO_PATCHING)
+#if defined(_WIN32) && defined(WIN32_DO_PATCHING)
 void PatchWindowsFunctions();   // in src/windows/patch_function.cc
 static void ReplaceSystemAlloc() { PatchWindowsFunctions(); }
 
 #elif defined(_WIN32) && !defined(WIN32_DO_PATCHING)
-// "libc_override_redefine.h" is included in the original gperftools.  But,
-// we define allocator functions in Chromium's base/allocator/allocator_shim.cc
-// on Windows.  We don't include libc_override_redefine.h here.
-// ReplaceSystemAlloc() is defined here instead.
-static void ReplaceSystemAlloc() { }
+#include "libc_override_redefine.h"
 
 #elif defined(__APPLE__)
 #include "libc_override_osx.h"

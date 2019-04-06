@@ -20,13 +20,6 @@ namespace media {
 // shared with device manager.
 typedef int VideoCaptureSessionId;
 
-// Storage type for the pixels.
-// TODO(chfremer): https://crbug.com/788798 Extend or remove this enum.
-enum class VideoPixelStorage {
-  CPU,
-  MAX = CPU,
-};
-
 // Policies for capture devices that have source content that varies in size.
 // It is up to the implementation how the captured content will be transformed
 // (e.g., scaling and/or letterboxing) in order to produce video frames that
@@ -61,6 +54,12 @@ enum class PowerLineFrequency {
   FREQUENCY_MAX = FREQUENCY_60HZ
 };
 
+enum class VideoCaptureBufferType {
+  kSharedMemory,
+  kSharedMemoryViaRawFileDescriptor,
+  kMailboxHolder
+};
+
 // Assert that the int:frequency mapping is correct.
 static_assert(static_cast<int>(PowerLineFrequency::FREQUENCY_DEFAULT) == 0,
               "static_cast<int>(FREQUENCY_DEFAULT) must equal 0.");
@@ -82,13 +81,8 @@ struct CAPTURE_EXPORT VideoCaptureFormat {
   VideoCaptureFormat(const gfx::Size& frame_size,
                      float frame_rate,
                      VideoPixelFormat pixel_format);
-  VideoCaptureFormat(const gfx::Size& frame_size,
-                     float frame_rate,
-                     VideoPixelFormat pixel_format,
-                     VideoPixelStorage pixel_storage);
 
   static std::string ToString(const VideoCaptureFormat& format);
-  static std::string PixelStorageToString(VideoPixelStorage storage);
 
   // Compares the priority of the pixel formats. Returns true if |lhs| is the
   // preferred pixel format in comparison with |rhs|. Returns false otherwise.
@@ -111,7 +105,6 @@ struct CAPTURE_EXPORT VideoCaptureFormat {
   gfx::Size frame_size;
   float frame_rate;
   VideoPixelFormat pixel_format;
-  VideoPixelStorage pixel_storage;
 };
 
 typedef std::vector<VideoCaptureFormat> VideoCaptureFormats;
@@ -147,6 +140,8 @@ struct CAPTURE_EXPORT VideoCaptureParams {
 
   // Requests a resolution and format at which the capture will occur.
   VideoCaptureFormat requested_format;
+
+  VideoCaptureBufferType buffer_type;
 
   // Policy for resolution change.
   ResolutionChangePolicy resolution_change_policy;

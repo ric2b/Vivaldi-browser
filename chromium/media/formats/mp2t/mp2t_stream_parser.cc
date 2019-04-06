@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/optional.h"
 #include "media/base/media_tracks.h"
 #include "media/base/stream_parser_buffer.h"
 #include "media/base/text_track_config.h"
@@ -203,7 +204,7 @@ Mp2tStreamParser::~Mp2tStreamParser() {
 }
 
 void Mp2tStreamParser::Init(
-    const InitCB& init_cb,
+    InitCB init_cb,
     const NewConfigCB& config_cb,
     const NewBuffersCB& new_buffers_cb,
     bool /* ignore_text_tracks */,
@@ -220,7 +221,7 @@ void Mp2tStreamParser::Init(
   DCHECK(!new_segment_cb.is_null());
   DCHECK(!end_of_segment_cb.is_null());
 
-  init_cb_ = init_cb;
+  init_cb_ = std::move(init_cb);
   config_cb_ = config_cb;
   new_buffers_cb_ = new_buffers_cb;
   encrypted_media_init_data_cb_ = encrypted_media_init_data_cb;
@@ -275,6 +276,10 @@ void Mp2tStreamParser::Flush() {
 
   // Reset the timestamp unroller.
   timestamp_unroller_.Reset();
+}
+
+bool Mp2tStreamParser::GetGenerateTimestampsFlag() const {
+  return false;
 }
 
 bool Mp2tStreamParser::Parse(const uint8_t* buf, int size) {
@@ -698,7 +703,7 @@ bool Mp2tStreamParser::FinishInitializationIfNeeded() {
       queue_with_config.audio_config.IsValidConfig() ? 1 : 0;
   params.detected_video_track_count =
       queue_with_config.video_config.IsValidConfig() ? 1 : 0;
-  base::ResetAndReturn(&init_cb_).Run(params);
+  std::move(init_cb_).Run(params);
   is_initialized_ = true;
 
   return true;
@@ -843,8 +848,9 @@ void Mp2tStreamParser::UnregisterCat() {
 }
 
 void Mp2tStreamParser::RegisterCencPids(int ca_pid, int pssh_pid) {
-  std::unique_ptr<TsSectionCetsEcm> ecm_parser(new TsSectionCetsEcm(base::Bind(
-      &Mp2tStreamParser::RegisterDecryptConfig, base::Unretained(this))));
+  std::unique_ptr<TsSectionCetsEcm> ecm_parser(
+      new TsSectionCetsEcm(base::BindRepeating(
+          &Mp2tStreamParser::RegisterNewKeyIdAndIv, base::Unretained(this))));
   std::unique_ptr<PidState> ecm_pid_state(
       new PidState(ca_pid, PidState::kPidCetsEcm, std::move(ecm_parser)));
   ecm_pid_state->Enable();
@@ -883,12 +889,25 @@ void Mp2tStreamParser::RegisterEncryptionScheme(
   // Reset the DecryptConfig, so that unless and until a CENC-ECM (containing
   // key id and IV) is seen, media data will be considered unencrypted. This is
   // similar to the way clear leaders can occur in MP4 containers.
-  decrypt_config_.reset(nullptr);
+  decrypt_config_.reset();
 }
 
-void Mp2tStreamParser::RegisterDecryptConfig(const DecryptConfig& config) {
-  decrypt_config_.reset(
-      new DecryptConfig(config.key_id(), config.iv(), config.subsamples()));
+void Mp2tStreamParser::RegisterNewKeyIdAndIv(const std::string& key_id,
+                                             const std::string& iv) {
+  if (!iv.empty()) {
+    switch (initial_scheme_.mode()) {
+      case EncryptionScheme::CIPHER_MODE_UNENCRYPTED:
+        decrypt_config_.reset();
+        break;
+      case EncryptionScheme::CIPHER_MODE_AES_CTR:
+        decrypt_config_ = DecryptConfig::CreateCencConfig(key_id, iv, {});
+        break;
+      case EncryptionScheme::CIPHER_MODE_AES_CBC:
+        decrypt_config_ = DecryptConfig::CreateCbcsConfig(
+            key_id, iv, {}, initial_scheme_.pattern());
+        break;
+    }
+  }
 }
 
 void Mp2tStreamParser::RegisterPsshBoxes(

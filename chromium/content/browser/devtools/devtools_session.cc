@@ -11,6 +11,7 @@
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/public/browser/devtools_manager_delegate.h"
+#include "content/public/common/child_process_host.h"
 
 namespace content {
 
@@ -23,22 +24,35 @@ bool ShouldSendOnIO(const std::string& method) {
          method == "Debugger.setBreakpointByUrl" ||
          method == "Debugger.removeBreakpoint" ||
          method == "Debugger.setBreakpointsActive" ||
-         method == "Performance.getMetrics" || method == "Page.crash";
+         method == "Performance.getMetrics" || method == "Page.crash" ||
+         method == "Runtime.terminateExecution" ||
+         method == "Emulation.setScriptExecutionDisabled";
 }
 
 }  // namespace
 
 DevToolsSession::DevToolsSession(DevToolsAgentHostImpl* agent_host,
-                                 DevToolsAgentHostClient* client)
+                                 DevToolsAgentHostClient* client,
+                                 bool restricted)
     : binding_(this),
       agent_host_(agent_host),
       client_(client),
-      process_(nullptr),
+      restricted_(restricted),
+      process_host_id_(ChildProcessHost::kInvalidUniqueID),
       host_(nullptr),
       dispatcher_(new protocol::UberDispatcher(this)),
-      weak_factory_(this) {}
+      weak_factory_(this) {
+  dispatcher_->setFallThroughForNotFound(true);
+}
 
 DevToolsSession::~DevToolsSession() {
+  // It is Ok for session to be deleted without the dispose -
+  // it can be kicked out by an extension connect / disconnect.
+  if (dispatcher_)
+    Dispose();
+}
+
+void DevToolsSession::Dispose() {
   dispatcher_.reset();
   for (auto& pair : handlers_)
     pair.second->Disable();
@@ -48,20 +62,21 @@ DevToolsSession::~DevToolsSession() {
 void DevToolsSession::AddHandler(
     std::unique_ptr<protocol::DevToolsDomainHandler> handler) {
   handler->Wire(dispatcher_.get());
-  handler->SetRenderer(process_, host_);
+  handler->SetRenderer(process_host_id_, host_);
   handlers_[handler->name()] = std::move(handler);
 }
 
-void DevToolsSession::SetRenderer(RenderProcessHost* process_host,
+void DevToolsSession::SetRenderer(int process_host_id,
                                   RenderFrameHostImpl* frame_host) {
-  process_ = process_host;
+  process_host_id_ = process_host_id;
   host_ = frame_host;
   for (auto& pair : handlers_)
-    pair.second->SetRenderer(process_, host_);
+    pair.second->SetRenderer(process_host_id_, host_);
 }
 
-void DevToolsSession::SetFallThroughForNotFound(bool value) {
-  dispatcher_->setFallThroughForNotFound(value);
+void DevToolsSession::SetBrowserOnly(bool browser_only) {
+  browser_only_ = browser_only;
+  dispatcher_->setFallThroughForNotFound(!browser_only);
 }
 
 void DevToolsSession::AttachToAgent(
@@ -70,20 +85,28 @@ void DevToolsSession::AttachToAgent(
   binding_.Bind(mojo::MakeRequest(&host_ptr_info));
   agent->AttachDevToolsSession(
       std::move(host_ptr_info), mojo::MakeRequest(&session_ptr_),
-      mojo::MakeRequest(&io_session_ptr_), base::Optional<std::string>());
-  session_ptr_.set_connection_error_handler(base::BindOnce(
-      &DevToolsSession::MojoConnectionDestroyed, base::Unretained(this)));
-}
-
-void DevToolsSession::ReattachToAgent(
-    const blink::mojom::DevToolsAgentAssociatedPtr& agent) {
-  blink::mojom::DevToolsSessionHostAssociatedPtrInfo host_ptr_info;
-  binding_.Bind(mojo::MakeRequest(&host_ptr_info));
-  agent->AttachDevToolsSession(
-      std::move(host_ptr_info), mojo::MakeRequest(&session_ptr_),
       mojo::MakeRequest(&io_session_ptr_), state_cookie_);
   session_ptr_.set_connection_error_handler(base::BindOnce(
       &DevToolsSession::MojoConnectionDestroyed, base::Unretained(this)));
+
+  if (!suspended_sending_messages_to_agent_) {
+    for (const auto& pair : waiting_for_response_messages_) {
+      int call_id = pair.first;
+      const WaitingMessage& message = pair.second;
+      DispatchProtocolMessageToAgent(call_id, message.method, message.message);
+    }
+  } else {
+    std::vector<SuspendedMessage> temp;
+    for (const auto& pair : waiting_for_response_messages_)
+      temp.push_back({pair.first, pair.second.method, pair.second.message});
+    suspended_messages_.insert(suspended_messages_.begin(), temp.begin(),
+                               temp.end());
+    waiting_for_response_messages_.clear();
+  }
+
+  // Set cookie to an empty string to reattach next time instead of attaching.
+  if (!state_cookie_.has_value())
+    state_cookie_ = std::string();
 }
 
 void DevToolsSession::SendResponse(
@@ -91,6 +114,7 @@ void DevToolsSession::SendResponse(
   std::string json;
   base::JSONWriter::Write(*response.get(), &json);
   client_->DispatchProtocolMessage(agent_host_, json);
+  // |this| may be deleted at this point.
 }
 
 void DevToolsSession::MojoConnectionDestroyed() {
@@ -99,91 +123,101 @@ void DevToolsSession::MojoConnectionDestroyed() {
   io_session_ptr_.reset();
 }
 
-protocol::Response::Status DevToolsSession::Dispatch(
+void DevToolsSession::DispatchProtocolMessage(
     const std::string& message,
-    int* call_id,
-    std::string* method) {
-  std::unique_ptr<base::Value> value = base::JSONReader::Read(message);
-
+    base::DictionaryValue* parsed_message) {
   DevToolsManagerDelegate* delegate =
       DevToolsManager::GetInstance()->delegate();
-  if (value && value->is_dict() && delegate) {
-    base::DictionaryValue* dict_value =
-        static_cast<base::DictionaryValue*>(value.get());
-
-    if (delegate->HandleCommand(agent_host_, client_, dict_value))
-      return protocol::Response::kSuccess;
-
-    if (delegate->HandleAsyncCommand(agent_host_, client_, dict_value,
-                                     base::Bind(&DevToolsSession::SendResponse,
-                                                weak_factory_.GetWeakPtr()))) {
-      return protocol::Response::kAsync;
-    }
+  if (delegate && parsed_message &&
+      delegate->HandleCommand(agent_host_, client_, parsed_message)) {
+    return;
   }
 
-  return dispatcher_->dispatch(protocol::toProtocolValue(value.get(), 1000),
-                               call_id, method);
+  int call_id;
+  std::string method;
+  if (dispatcher_->dispatch(protocol::toProtocolValue(parsed_message, 1000),
+                            &call_id,
+                            &method) != protocol::Response::kFallThrough) {
+    return;
+  }
+
+  // In browser-only mode, we should've handled everything in dispatcher.
+  DCHECK(!browser_only_);
+
+  if (suspended_sending_messages_to_agent_) {
+    suspended_messages_.push_back({call_id, method, message});
+    return;
+  }
+
+  DispatchProtocolMessageToAgent(call_id, method, message);
+  waiting_for_response_messages_[call_id] = {method, message};
 }
 
 void DevToolsSession::DispatchProtocolMessageToAgent(
     int call_id,
     const std::string& method,
     const std::string& message) {
+  DCHECK(!browser_only_);
   if (ShouldSendOnIO(method)) {
     if (io_session_ptr_)
-      io_session_ptr_->DispatchProtocolMessage(call_id, method, message);
+      io_session_ptr_->DispatchProtocolCommand(call_id, method, message);
   } else {
     if (session_ptr_)
-      session_ptr_->DispatchProtocolMessage(call_id, method, message);
+      session_ptr_->DispatchProtocolCommand(call_id, method, message);
   }
 }
 
-void DevToolsSession::InspectElement(const gfx::Point& point) {
-  if (session_ptr_)
-    session_ptr_->InspectElement(point);
+void DevToolsSession::SuspendSendingMessagesToAgent() {
+  DCHECK(!browser_only_);
+  suspended_sending_messages_to_agent_ = true;
+}
+
+void DevToolsSession::ResumeSendingMessagesToAgent() {
+  DCHECK(!browser_only_);
+  suspended_sending_messages_to_agent_ = false;
+  for (const SuspendedMessage& message : suspended_messages_) {
+    DispatchProtocolMessageToAgent(message.call_id, message.method,
+                                   message.message);
+    waiting_for_response_messages_[message.call_id] = {message.method,
+                                                       message.message};
+  }
+  suspended_messages_.clear();
 }
 
 void DevToolsSession::sendProtocolResponse(
     int call_id,
     std::unique_ptr<protocol::Serializable> message) {
   client_->DispatchProtocolMessage(agent_host_, message->serialize());
+  // |this| may be deleted at this point.
 }
 
 void DevToolsSession::sendProtocolNotification(
     std::unique_ptr<protocol::Serializable> message) {
   client_->DispatchProtocolMessage(agent_host_, message->serialize());
+  // |this| may be deleted at this point.
 }
 
 void DevToolsSession::flushProtocolNotifications() {
 }
 
-void DevToolsSession::DispatchProtocolMessage(
-    blink::mojom::DevToolsMessageChunkPtr chunk) {
-  if (chunk->is_first && !response_message_buffer_.empty()) {
-    ReceivedBadMessage();
-    return;
-  }
-
-  response_message_buffer_ += std::move(chunk->data);
-
-  if (!chunk->is_last)
-    return;
-
-  if (!chunk->post_state.empty())
-    state_cookie_ = std::move(chunk->post_state);
-  waiting_for_response_messages_.erase(chunk->call_id);
-  std::string message;
-  message.swap(response_message_buffer_);
+void DevToolsSession::DispatchProtocolResponse(
+    const std::string& message,
+    int call_id,
+    const base::Optional<std::string>& state) {
+  if (state.has_value())
+    state_cookie_ = state.value();
+  waiting_for_response_messages_.erase(call_id);
   client_->DispatchProtocolMessage(agent_host_, message);
   // |this| may be deleted at this point.
 }
 
-void DevToolsSession::ReceivedBadMessage() {
-  MojoConnectionDestroyed();
-  if (process_) {
-    bad_message::ReceivedBadMessage(
-        process_, bad_message::RFH_INCONSISTENT_DEVTOOLS_MESSAGE);
-  }
+void DevToolsSession::DispatchProtocolNotification(
+    const std::string& message,
+    const base::Optional<std::string>& state) {
+  if (state.has_value())
+    state_cookie_ = state.value();
+  client_->DispatchProtocolMessage(agent_host_, message);
+  // |this| may be deleted at this point.
 }
 
 }  // namespace content

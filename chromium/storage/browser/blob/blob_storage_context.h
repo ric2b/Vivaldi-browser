@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/trace_event/memory_dump_provider.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/blob/blob_entry.h"
 #include "storage/browser/blob/blob_memory_controller.h"
@@ -30,30 +31,31 @@ class GURL;
 namespace content {
 class BlobDispatcherHost;
 class BlobDispatcherHostTest;
-class BlobStorageBrowserTest;
 class BlobTransportHostTest;
 class ChromeBlobStorageContext;
+class ShareableBlobDataItem;
 }
 
 namespace storage {
 class BlobDataBuilder;
 class BlobDataHandle;
 class BlobDataSnapshot;
-class ShareableBlobDataItem;
 
 // This class handles the logistics of blob storage within the browser process.
 // This class is not threadsafe, access on IO thread. In Chromium there is one
 // instance per profile.
-class STORAGE_EXPORT BlobStorageContext {
+class STORAGE_EXPORT BlobStorageContext
+    : public base::trace_event::MemoryDumpProvider {
  public:
   using TransportAllowedCallback = BlobEntry::TransportAllowedCallback;
+  using BuildAbortedCallback = BlobEntry::BuildAbortedCallback;
 
   // Initializes the context without disk support.
   BlobStorageContext();
   // Disk support is enabled if |file_runner| isn't null.
   BlobStorageContext(base::FilePath storage_directory,
                      scoped_refptr<base::TaskRunner> file_runner);
-  ~BlobStorageContext();
+  ~BlobStorageContext() override;
 
   std::unique_ptr<BlobDataHandle> GetBlobDataFromUUID(const std::string& uuid);
   std::unique_ptr<BlobDataHandle> GetBlobDataFromPublicURL(const GURL& url);
@@ -62,11 +64,13 @@ class STORAGE_EXPORT BlobStorageContext {
   // BlobStatus::RunOnConstructionComplete(callback) to determine construction
   // completion and possible errors.
   std::unique_ptr<BlobDataHandle> AddFinishedBlob(
-      const BlobDataBuilder& builder);
+      std::unique_ptr<BlobDataBuilder> builder);
 
-  // Deprecated, use const ref version above or BuildBlob below.
   std::unique_ptr<BlobDataHandle> AddFinishedBlob(
-      const BlobDataBuilder* builder);
+      const std::string& uuid,
+      const std::string& content_type,
+      const std::string& content_disposition,
+      std::vector<scoped_refptr<ShareableBlobDataItem>> items);
 
   std::unique_ptr<BlobDataHandle> AddBrokenBlob(
       const std::string& uuid,
@@ -98,8 +102,8 @@ class STORAGE_EXPORT BlobStorageContext {
   // * REFERENCED_BLOB_BROKEN if a referenced blob is broken or we're
   //   referencing ourself.
   std::unique_ptr<BlobDataHandle> BuildBlob(
-      const BlobDataBuilder& input_builder,
-      const TransportAllowedCallback& transport_allowed_callback);
+      std::unique_ptr<BlobDataBuilder> input_builder,
+      TransportAllowedCallback transport_allowed_callback);
 
   // Similar to BuildBlob, but this merely registers a blob that will be built
   // in the future. The caller must later call either BuildPreregisteredBlob
@@ -112,13 +116,14 @@ class STORAGE_EXPORT BlobStorageContext {
   std::unique_ptr<BlobDataHandle> AddFutureBlob(
       const std::string& uuid,
       const std::string& content_type,
-      const std::string& content_disposition);
+      const std::string& content_disposition,
+      BuildAbortedCallback build_aborted_callback);
 
   // Same as BuildBlob, but for a blob that was previously registered by calling
   // AddFutureBlob.
   std::unique_ptr<BlobDataHandle> BuildPreregisteredBlob(
-      const BlobDataBuilder& input_builder,
-      const TransportAllowedCallback& transport_allowed_callback);
+      std::unique_ptr<BlobDataBuilder> input_builder,
+      TransportAllowedCallback transport_allowed_callback);
 
   // This breaks a blob that is currently being built by using the BuildBlob
   // method above. Any callbacks waiting on this blob, including the
@@ -140,96 +145,28 @@ class STORAGE_EXPORT BlobStorageContext {
     return ptr_factory_.GetWeakPtr();
   }
 
+  void set_limits_for_testing(const BlobStorageLimits& limits) {
+    mutable_memory_controller()->set_limits_for_testing(limits);
+  }
+
+  void DisableFilePagingForTesting() {
+    mutable_memory_controller()->DisableFilePaging(base::File::FILE_OK);
+  }
+
  protected:
   friend class content::BlobDispatcherHost;
   friend class content::BlobDispatcherHostTest;
-  friend class content::BlobStorageBrowserTest;
   friend class content::BlobTransportHostTest;
   friend class content::ChromeBlobStorageContext;
+  friend class BlobBuilderFromStream;
   friend class BlobTransportHost;
   friend class BlobDataHandle;
   friend class BlobDataHandle::BlobDataHandleShared;
-  friend class BlobFlattenerTest;
   friend class BlobRegistryImplTest;
-  friend class BlobSliceTest;
   friend class BlobStorageContextTest;
+  friend class BlobURLTokenImpl;
 
   enum class TransportQuotaType { MEMORY, FILE };
-
-  // Transforms a BlobDataBuilder into a BlobEntry with no blob references.
-  // BlobSlice is used to flatten out these references. Records the total size
-  // and items for memory and file quota requests.
-  // Exposed in the header file for testing.
-  struct STORAGE_EXPORT BlobFlattener {
-    BlobFlattener(const BlobDataBuilder& input_builder,
-                  BlobEntry* output_blob,
-                  BlobStorageRegistry* registry);
-    ~BlobFlattener();
-
-    // This can be:
-    // * PENDING_QUOTA if we need memory quota, if we're populated and don't
-    // need quota.
-    // * PENDING_INTERNALS if we're waiting on dependent blobs or we're done.
-    // * INVALID_CONSTRUCTION_ARGUMENTS if we have invalid input.
-    // * REFERENCED_BLOB_BROKEN if one of the referenced blobs is broken or we
-    //   reference ourself.
-    BlobStatus status = BlobStatus::ERR_INVALID_CONSTRUCTION_ARGUMENTS;
-
-    bool contains_unpopulated_transport_items = false;
-
-    // This is the total size of the blob, including all memory, files, etc.
-    uint64_t total_size = 0;
-    // Total memory size of the blob (not including files, etc).
-    uint64_t total_memory_size = 0;
-
-    std::vector<std::pair<std::string, BlobEntry*>> dependent_blobs;
-
-    TransportQuotaType transport_quota_type = TransportQuotaType::MEMORY;
-    uint64_t transport_quota_needed = 0;
-    std::vector<scoped_refptr<ShareableBlobDataItem>> pending_transport_items;
-    // Hold a separate vector of pointers to declare them as populated.
-    std::vector<ShareableBlobDataItem*> transport_items;
-
-    // Copy quota is always memory quota.
-    uint64_t copy_quota_needed = 0;
-    std::vector<scoped_refptr<ShareableBlobDataItem>> pending_copy_items;
-
-    // These record all future copies we'll need to do from referenced blobs.
-    // This happens when we do a partial slice from a pending data or file
-    // item.
-    std::vector<BlobEntry::ItemCopyEntry> copies;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(BlobFlattener);
-  };
-
-  // Used when a blob reference has a size and offset. Records the source items
-  // and memory we need to copy if either side of slice intersects an item.
-  // Exposed in the header file for testing.
-  struct STORAGE_EXPORT BlobSlice {
-    BlobSlice(const BlobEntry& source,
-              uint64_t slice_offset,
-              uint64_t slice_size);
-    ~BlobSlice();
-
-    // Size of memory copying from the source blob.
-    base::CheckedNumeric<size_t> copying_memory_size = 0;
-    // Size of all memory for UMA stats.
-    base::CheckedNumeric<size_t> total_memory_size = 0;
-
-    size_t first_item_slice_offset = 0;
-    // Populated if our first slice item is a temporary item that we'll copy to
-    // later from this |first_source_item|, at offset |first_item_slice_offset|.
-    scoped_refptr<ShareableBlobDataItem> first_source_item;
-    // Populated if our last slice item is a temporary item that we'll copy to
-    // later from this |last_source_item|.
-    scoped_refptr<ShareableBlobDataItem> last_source_item;
-
-    std::vector<scoped_refptr<ShareableBlobDataItem>> dest_items;
-
-   private:
-    DISALLOW_COPY_AND_ASSIGN(BlobSlice);
-  };
 
   void IncrementBlobRefCount(const std::string& uuid);
   void DecrementBlobRefCount(const std::string& uuid);
@@ -243,12 +180,12 @@ class STORAGE_EXPORT BlobStorageContext {
 
   // Runs |done| when construction completes with the final status of the blob.
   void RunOnConstructionComplete(const std::string& uuid,
-                                 const BlobStatusCallback& done_callback);
+                                 BlobStatusCallback done_callback);
 
   // Runs |done| when construction begins (when the blob is no longer
   // PENDING_CONSTRUCTION) with the new status of the blob.
   void RunOnConstructionBegin(const std::string& uuid,
-                              const BlobStatusCallback& done_callback);
+                              BlobStatusCallback done_callback);
 
   BlobStorageRegistry* mutable_registry() { return &registry_; }
 
@@ -259,8 +196,8 @@ class STORAGE_EXPORT BlobStorageContext {
  private:
   std::unique_ptr<BlobDataHandle> BuildBlobInternal(
       BlobEntry* entry,
-      const BlobDataBuilder& input_builder,
-      const TransportAllowedCallback& transport_allowed_callback);
+      std::unique_ptr<BlobDataBuilder> input_builder,
+      TransportAllowedCallback transport_allowed_callback);
 
   std::unique_ptr<BlobDataHandle> CreateHandle(const std::string& uuid,
                                                BlobEntry* entry);
@@ -287,6 +224,10 @@ class STORAGE_EXPORT BlobStorageContext {
                                BlobStatus reason);
 
   void ClearAndFreeMemory(BlobEntry* entry);
+
+  // base::trace_event::MemoryDumpProvider implementation.
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
 
   BlobStorageRegistry registry_;
   BlobMemoryController memory_controller_;

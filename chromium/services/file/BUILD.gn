@@ -17,15 +17,14 @@ source_set("lib") {
 
   deps = [
     "//base",
-    "//components/filesystem:lib",
-    "//components/filesystem/public/interfaces",
-    "//components/leveldb:lib",
-    "//components/leveldb/public/interfaces",
-    "//mojo/common",
-    "//mojo/common:common_base",
-    "//services/file/public/interfaces",
+    "//components/services/filesystem:lib",
+    "//components/services/filesystem/public/interfaces",
+    "//components/services/leveldb:lib",
+    "//components/services/leveldb/public/interfaces",
+    "//mojo/public/cpp/system",
+    "//services/file/public/mojom",
     "//services/service_manager/public/cpp",
-    "//services/service_manager/public/interfaces",
+    "//services/service_manager/public/mojom",
     "//url",
   ]
 }

@@ -68,7 +68,8 @@ GuestViewContainer.registerElement = function(guestViewContainerType) {
     if (document.readyState == 'loading')
       return;
 
-    registerInternalElement(guestViewContainerType.VIEW_TYPE.toLowerCase());
+    registerInternalElement(
+        $String.toLowerCase(guestViewContainerType.VIEW_TYPE));
     registerGuestViewElement(guestViewContainerType);
     window.removeEventListener(event.type, listener, useCapture);
   }, useCapture);
@@ -108,6 +109,8 @@ GuestViewContainer.prototype.createInternalElement$ = function() {
   privates(browserPluginElement).internal = this;
   return browserPluginElement;
 };
+
+GuestViewContainer.prototype.prepareForReattach_ = function() {};
 
 GuestViewContainer.prototype.setupFocusPropagation = function() {
   if (!this.element.hasAttribute('tabIndex')) {
@@ -302,10 +305,9 @@ function registerGuestViewElement(guestViewContainerType) {
     guestViewContainerType.setupElement(proto);
   }
 
-  window[guestViewContainerType.VIEW_TYPE] =
-      DocumentNatives.RegisterElement(
-          guestViewContainerType.VIEW_TYPE.toLowerCase(),
-          {prototype: proto});
+  window[guestViewContainerType.VIEW_TYPE] = DocumentNatives.RegisterElement(
+      $String.toLowerCase(guestViewContainerType.VIEW_TYPE),
+      {prototype: proto});
 
   // Delete the callbacks so developers cannot call them and produce unexpected
   // behavior.

@@ -12,8 +12,7 @@
 #include "content/shell/test_runner/test_runner_export.h"
 
 namespace blink {
-class WebAudioDevice;
-class WebFrameClient;
+class WebLocalFrameClient;
 class WebMIDIAccessor;
 class WebMIDIAccessorClient;
 class WebRTCPeerConnectionHandler;
@@ -67,13 +66,9 @@ class TEST_RUNNER_EXPORT WebTestInterfaces {
   std::unique_ptr<blink::WebMIDIAccessor> CreateMIDIAccessor(
       blink::WebMIDIAccessorClient* client);
 
-  std::unique_ptr<blink::WebAudioDevice> CreateAudioDevice(
-      double sample_rate,
-      int frames_per_buffer);
-
   TestInterfaces* GetTestInterfaces();
 
-  // Creates a WebFrameClient implementation providing test behavior (i.e.
+  // Creates a WebLocalFrameClient implementation providing test behavior (i.e.
   // forwarding javascript console output to the test harness).  The caller
   // should guarantee that the returned object won't be used beyond the lifetime
   // of WebTestInterfaces and/or the lifetime of |web_view_test_proxy_base|.
@@ -86,7 +81,8 @@ class TEST_RUNNER_EXPORT WebTestInterfaces {
   // the returned pointer won't be used beyond the lifetime of WebTestInterfaces
   // and/or the lifetime of |web_view_test_proxy_base|.
   std::unique_ptr<WebViewTestClient> CreateWebViewTestClient(
-      WebViewTestProxyBase* web_view_test_proxy_base);
+      WebViewTestProxyBase* web_view_test_proxy_base,
+      std::unique_ptr<WebWidgetTestClient> web_widget_test_client);
 
   // Creates a WebWidgetClient implementation providing test behavior (i.e.
   // providing a mocked screen orientation).  The caller should guarantee that

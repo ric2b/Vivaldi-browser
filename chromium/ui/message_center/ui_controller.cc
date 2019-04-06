@@ -9,7 +9,6 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
@@ -42,20 +41,16 @@ bool UiController::ShowMessageCenterBubble(bool show_by_click) {
 
   message_center_visible_ = delegate_->ShowMessageCenter(show_by_click);
   if (message_center_visible_) {
-    message_center_->SetVisibility(message_center::VISIBILITY_MESSAGE_CENTER);
+    message_center_->SetVisibility(VISIBILITY_MESSAGE_CENTER);
     NotifyUiControllerChanged();
   }
   return message_center_visible_;
 }
 
 bool UiController::HideMessageCenterBubble() {
-#if defined(OS_CHROMEOS)
-  // TODO(yoshiki): Move the message center bubble related logic to ash/.
-  hide_empty_message_center_callback_.reset();
-#endif
-
   if (!message_center_visible_)
     return false;
+
   delegate_->HideMessageCenter();
   MarkMessageCenterHidden();
 
@@ -66,7 +61,7 @@ void UiController::MarkMessageCenterHidden() {
   if (!message_center_visible_)
     return;
   message_center_visible_ = false;
-  message_center_->SetVisibility(message_center::VISIBILITY_TRANSIENT);
+  message_center_->SetVisibility(VISIBILITY_TRANSIENT);
 
   // Some notifications (like system ones) should appear as popups again
   // after the message center is closed.
@@ -117,7 +112,7 @@ void UiController::ShowNotifierSettingsBubble() {
     HidePopupBubbleInternal();
 
   message_center_visible_ = delegate_->ShowNotifierSettings();
-  message_center_->SetVisibility(message_center::VISIBILITY_SETTINGS);
+  message_center_->SetVisibility(VISIBILITY_SETTINGS);
 
   NotifyUiControllerChanged();
 }
@@ -135,14 +130,10 @@ void UiController::OnNotificationUpdated(const std::string& notification_id) {
   OnMessageCenterChanged();
 }
 
-void UiController::OnNotificationClicked(const std::string& notification_id) {
-  if (popups_visible_)
-    OnMessageCenterChanged();
-}
-
-void UiController::OnNotificationButtonClicked(
+void UiController::OnNotificationClicked(
     const std::string& notification_id,
-    int button_index) {
+    const base::Optional<int>& button_index,
+    const base::Optional<base::string16>& reply) {
   if (popups_visible_)
     OnMessageCenterChanged();
 }
@@ -166,25 +157,11 @@ void UiController::OnBlockingStateChanged(NotificationBlocker* blocker) {
 }
 
 void UiController::OnMessageCenterChanged() {
-#if defined(OS_CHROMEOS)
-  // TODO(yoshiki): Move the message center bubble related logic to ash/.
-  if (message_center_visible_ && message_center_->NotificationCount() == 0) {
-    if (hide_empty_message_center_callback_)
-      return;
-
-    hide_empty_message_center_callback_ =
-        std::make_unique<base::CancelableClosure>(base::Bind(
-            base::IgnoreResult(&UiController::HideMessageCenterBubble),
-            base::Unretained(this)));
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, hide_empty_message_center_callback_->callback());
+  if (hide_on_last_notification_ && message_center_visible_ &&
+      message_center_->NotificationCount() == 0) {
+    HideMessageCenterBubble();
     return;
   }
-
-  // Cancel the callback if necessary.
-  if (hide_empty_message_center_callback_)
-    hide_empty_message_center_callback_.reset();
-#endif
 
   if (popups_visible_ && !message_center_->HasPopupNotifications())
     HidePopupBubbleInternal();

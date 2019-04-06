@@ -51,8 +51,13 @@ ShippingAddressEditorViewController::ShippingAddressEditorViewController(
     BackNavigationType back_navigation_type,
     base::OnceClosure on_edited,
     base::OnceCallback<void(const autofill::AutofillProfile&)> on_added,
-    autofill::AutofillProfile* profile)
-    : EditorViewController(spec, state, dialog, back_navigation_type),
+    autofill::AutofillProfile* profile,
+    bool is_incognito)
+    : EditorViewController(spec,
+                           state,
+                           dialog,
+                           back_navigation_type,
+                           is_incognito),
       on_edited_(std::move(on_edited)),
       on_added_(std::move(on_added)),
       profile_to_edit_(profile),
@@ -121,7 +126,8 @@ bool ShippingAddressEditorViewController::ValidateModelAndSave() {
   if (!profile_to_edit_) {
     // Add the profile (will not add a duplicate).
     profile.set_origin(autofill::kSettingsOrigin);
-    state()->GetPersonalDataManager()->AddProfile(profile);
+    if (!is_incognito())
+      state()->GetPersonalDataManager()->AddProfile(profile);
     std::move(on_added_).Run(profile);
     on_edited_.Reset();
   } else {
@@ -139,7 +145,8 @@ bool ShippingAddressEditorViewController::ValidateModelAndSave() {
                                        /*ignore_errors=*/false);
     DCHECK(success);
     profile_to_edit_->set_origin(autofill::kSettingsOrigin);
-    state()->GetPersonalDataManager()->UpdateProfile(*profile_to_edit_);
+    if (!is_incognito())
+      state()->GetPersonalDataManager()->UpdateProfile(*profile_to_edit_);
     state()->profile_comparator()->Invalidate(*profile_to_edit_);
     std::move(on_edited_).Run();
     on_added_.Reset();
@@ -161,18 +168,16 @@ ShippingAddressEditorViewController::GetComboboxModelForType(
     const autofill::ServerFieldType& type) {
   switch (type) {
     case autofill::ADDRESS_HOME_COUNTRY: {
-      std::unique_ptr<autofill::CountryComboboxModel> model =
-          std::make_unique<autofill::CountryComboboxModel>();
+      auto model = std::make_unique<autofill::CountryComboboxModel>();
       model->SetCountries(*state()->GetPersonalDataManager(),
                           base::Callback<bool(const std::string&)>(),
                           state()->GetApplicationLocale());
       if (model->countries().size() != countries_.size())
         UpdateCountries(model.get());
-      return std::move(model);
+      return model;
     }
     case autofill::ADDRESS_HOME_STATE: {
-      std::unique_ptr<autofill::RegionComboboxModel> model =
-          std::make_unique<autofill::RegionComboboxModel>();
+      auto model = std::make_unique<autofill::RegionComboboxModel>();
       region_model_ = model.get();
       if (chosen_country_index_ < countries_.size()) {
         model->LoadRegionData(countries_[chosen_country_index_].first,
@@ -190,7 +195,7 @@ ShippingAddressEditorViewController::GetComboboxModelForType(
         // We can't update the view synchronously while building the view.
         OnDataChanged(/*synchronous=*/false);
       }
-      return std::move(model);
+      return model;
     }
     default:
       NOTREACHED();
@@ -337,7 +342,7 @@ bool ShippingAddressEditorViewController::ShippingAddressValidationDelegate::
   }
   if (error_message && field_.required) {
     *error_message = l10n_util::GetStringUTF16(
-        IDS_PAYMENTS_FIELD_REQUIRED_VALIDATION_MESSAGE);
+        IDS_PREF_EDIT_DIALOG_FIELD_REQUIRED_VALIDATION_MESSAGE);
   }
   return !field_.required;
 }

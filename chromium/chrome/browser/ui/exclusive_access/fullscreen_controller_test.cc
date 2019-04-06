@@ -4,27 +4,48 @@
 
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller_test.h"
 
+#include <utility>
+#include <vector>
+
+#include "base/callback.h"
 #include "base/command_line.h"
+#include "base/containers/flat_set.h"
+#include "base/optional.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
+#include "chrome/browser/ui/exclusive_access/keyboard_lock_controller.h"
+#include "chrome/browser/ui/exclusive_access/mouse_lock_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/events/base_event_utils.h"
+#include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 using content::WebContents;
 
+const char FullscreenControllerTest::kFullscreenKeyboardLockHTML[] =
+    "/fullscreen_keyboardlock/fullscreen_keyboardlock.html";
+
 const char FullscreenControllerTest::kFullscreenMouseLockHTML[] =
     "/fullscreen_mouselock/fullscreen_mouselock.html";
 
-FullscreenControllerTest::FullscreenControllerTest()
-    : weak_ptr_factory_(this) {}
+FullscreenControllerTest::FullscreenControllerTest() : weak_ptr_factory_(this) {
+  // Ensure the KeyboardLockAPI is enabled and system keyboard lock is disabled.
+  // It is important to disable system keyboard lock as low-level test utilities
+  // may install a keyboard hook to listen for keyboard events and having an
+  // active system hook may cause issues with that mechanism.
+  scoped_feature_list_.InitWithFeatures({features::kKeyboardLockAPI},
+                                        {features::kSystemKeyboardLock});
+}
 
 FullscreenControllerTest::~FullscreenControllerTest() = default;
 
@@ -33,7 +54,13 @@ void FullscreenControllerTest::SetUpOnMainThread() {
       ->mouse_lock_controller()
       ->set_bubble_hide_callback_for_test_(
           base::BindRepeating(&FullscreenControllerTest::OnBubbleHidden,
-                              weak_ptr_factory_.GetWeakPtr()));
+                              weak_ptr_factory_.GetWeakPtr(),
+                              &mouse_lock_bubble_hide_reason_recorder_));
+  GetExclusiveAccessManager()
+      ->keyboard_lock_controller()
+      ->bubble_hide_callback_for_test_ = base::BindRepeating(
+      &FullscreenControllerTest::OnBubbleHidden, weak_ptr_factory_.GetWeakPtr(),
+      &keyboard_lock_bubble_hide_reason_recorder_);
 }
 
 void FullscreenControllerTest::TearDownOnMainThread() {
@@ -41,6 +68,28 @@ void FullscreenControllerTest::TearDownOnMainThread() {
       ->mouse_lock_controller()
       ->set_bubble_hide_callback_for_test_(
           base::RepeatingCallback<void(ExclusiveAccessBubbleHideReason)>());
+  GetExclusiveAccessManager()
+      ->keyboard_lock_controller()
+      ->bubble_hide_callback_for_test_ =
+      base::RepeatingCallback<void(ExclusiveAccessBubbleHideReason)>();
+}
+
+bool FullscreenControllerTest::RequestKeyboardLock(bool esc_key_locked) {
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+
+  // If the caller defines |esc_key_locked| as true then we create a set of
+  // locked keys which includes the escape key, this will require the user/test
+  // to press and hold escape to exit fullscreen.  If |esc_key_locked| is false,
+  // then we create a set of keys that does not include escape (we arbitrarily
+  // chose the 'a' key) which means the user/test can just press escape to exit
+  // fullscreen.
+  base::Optional<base::flat_set<ui::DomCode>> codes;
+  if (esc_key_locked)
+    codes = base::flat_set<ui::DomCode>({ui::DomCode::ESCAPE});
+  else
+    codes = base::flat_set<ui::DomCode>({ui::DomCode::US_A});
+
+  return content::RequestKeyboardLock(tab, std::move(codes));
 }
 
 void FullscreenControllerTest::RequestToLockMouse(
@@ -71,6 +120,11 @@ ExclusiveAccessManager* FullscreenControllerTest::GetExclusiveAccessManager() {
   return browser()->exclusive_access_manager();
 }
 
+void FullscreenControllerTest::CancelKeyboardLock() {
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  content::CancelKeyboardLock(tab);
+}
+
 void FullscreenControllerTest::LostMouseLock() {
   browser()->LostMouseLock();
 }
@@ -78,9 +132,9 @@ void FullscreenControllerTest::LostMouseLock() {
 bool FullscreenControllerTest::SendEscapeToFullscreenController() {
   content::NativeWebKeyboardEvent event(
       blink::WebInputEvent::kKeyDown, blink::WebInputEvent::kNoModifiers,
-      blink::WebInputEvent::kTimeStampForTesting);
+      blink::WebInputEvent::GetStaticTimeStampForTests());
   event.windows_key_code = ui::VKEY_ESCAPE;
-  return GetExclusiveAccessManager()->HandleUserKeyPress(event);
+  return GetExclusiveAccessManager()->HandleUserKeyEvent(event);
 }
 
 bool FullscreenControllerTest::IsFullscreenForBrowser() {
@@ -121,13 +175,41 @@ void FullscreenControllerTest::SetPrivilegedFullscreen(bool is_privileged) {
 void FullscreenControllerTest::EnterActiveTabFullscreen() {
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
   FullscreenNotificationObserver fullscreen_observer;
-  browser()->EnterFullscreenModeForTab(tab, GURL());
+  browser()->EnterFullscreenModeForTab(tab, GURL(),
+                                       blink::WebFullscreenOptions());
   fullscreen_observer.Wait();
 }
 
+void FullscreenControllerTest::EnterExtensionInitiatedFullscreen() {
+  FullscreenNotificationObserver fullscreen_observer;
+  browser()->ToggleFullscreenModeWithExtension(GURL("faux_extension"));
+  fullscreen_observer.Wait();
+}
+
+void FullscreenControllerTest::SetEscRepeatWindowLength(
+    base::TimeDelta esc_repeat_window) {
+  GetExclusiveAccessManager()->keyboard_lock_controller()->esc_repeat_window_ =
+      esc_repeat_window;
+}
+
+void FullscreenControllerTest::SetEscRepeatThresholdReachedCallback(
+    base::OnceClosure callback) {
+  GetExclusiveAccessManager()
+      ->keyboard_lock_controller()
+      ->esc_repeat_triggered_for_test_ = std::move(callback);
+}
+
+void FullscreenControllerTest::SetEscRepeatTestTickClock(
+    const base::TickClock* tick_clock_for_test) {
+  GetExclusiveAccessManager()
+      ->keyboard_lock_controller()
+      ->esc_repeat_tick_clock_ = tick_clock_for_test;
+}
+
 void FullscreenControllerTest::OnBubbleHidden(
+    std::vector<ExclusiveAccessBubbleHideReason>* reason_recorder,
     ExclusiveAccessBubbleHideReason reason) {
-  mouse_lock_bubble_hide_reason_recorder_.push_back(reason);
+  reason_recorder->push_back(reason);
 }
 
 int FullscreenControllerTest::InitialBubbleDelayMs() const {

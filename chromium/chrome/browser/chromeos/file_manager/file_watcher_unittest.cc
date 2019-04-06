@@ -6,7 +6,6 @@
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/task_scheduler/task_scheduler.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -26,6 +25,8 @@ class FileManagerFileWatcherTest : public testing::Test {
   FileManagerFileWatcherTest()
       : thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP) {
   }
+
+  void FlushMessageLoopTasks() { thread_bundle_.RunUntilIdle(); };
 
  private:
   content::TestBrowserThreadBundle thread_bundle_;
@@ -140,13 +141,14 @@ TEST_F(FileManagerFileWatcherTest, WatchLocalFile) {
 
   // Create a temporary file in the temporary directory. The file watcher
   // should detect the change in the directory.
-  base::FilePath temp_file_path;
+  base::FilePath temporary_file;
   ASSERT_TRUE(
-      base::CreateTemporaryFileInDir(temp_dir.GetPath(), &temp_file_path));
-  // Wait until the directory change is notified, and also flush the tasks in
-  // the message loop since |change_callback| can be called multiple times.
+      base::CreateTemporaryFileInDir(temp_dir.GetPath(), &temporary_file));
+
+  // Wait until the directory change is notified. Also flush tasks in the
+  // message loop since |change_callback| can be called multiple times.
   change_run_loop.Run();
-  base::RunLoop().RunUntilIdle();
+  FlushMessageLoopTasks();
 
   ASSERT_FALSE(on_change_error);
   ASSERT_EQ(temp_dir.GetPath().value(), changed_path.value());

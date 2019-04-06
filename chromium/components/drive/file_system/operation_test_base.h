@@ -31,11 +31,13 @@ class JobScheduler;
 
 namespace internal {
 class AboutResourceLoader;
+class AboutResourceRootFolderIdLoader;
 class ChangeListLoader;
 class FileCache;
 class LoaderController;
 class ResourceMetadata;
 class ResourceMetadataStorage;
+class StartPageTokenLoader;
 }  // namespace internal
 
 namespace file_system {
@@ -157,8 +159,11 @@ class OperationTestBase : public testing::Test {
   std::unique_ptr<internal::ResourceMetadata, test_util::DestroyHelperForTests>
       metadata_;
   std::unique_ptr<internal::AboutResourceLoader> about_resource_loader_;
+  std::unique_ptr<internal::StartPageTokenLoader> start_page_token_loader_;
   std::unique_ptr<internal::LoaderController> loader_controller_;
   std::unique_ptr<internal::ChangeListLoader> change_list_loader_;
+  std::unique_ptr<internal::AboutResourceRootFolderIdLoader>
+      root_folder_id_loader_;
 };
 
 }  // namespace file_system

@@ -15,12 +15,14 @@
 #include "base/task_scheduler/environment_config.h"
 #include "base/task_scheduler/scheduler_lock.h"
 #include "base/task_scheduler/single_thread_task_runner_thread_mode.h"
+#include "base/task_scheduler/tracked_ref.h"
 #include "base/threading/platform_thread.h"
 #include "build/build_config.h"
 
 namespace base {
 
 class TaskTraits;
+class SchedulerWorkerObserver;
 class SingleThreadTaskRunner;
 
 namespace internal {
@@ -49,13 +51,16 @@ class SchedulerWorkerDelegate;
 class BASE_EXPORT SchedulerSingleThreadTaskRunnerManager final {
  public:
   SchedulerSingleThreadTaskRunnerManager(
-      TaskTracker* task_tracker,
+      TrackedRef<TaskTracker> task_tracker,
       DelayedTaskManager* delayed_task_manager);
   ~SchedulerSingleThreadTaskRunnerManager();
 
   // Starts threads for existing SingleThreadTaskRunners and allows threads to
-  // be started when SingleThreadTaskRunners are created in the future.
-  void Start();
+  // be started when SingleThreadTaskRunners are created in the future. If
+  // specified, |scheduler_worker_observer| will be notified when a worker
+  // enters and exits its main function. It must not be destroyed before
+  // JoinForTesting() has returned (must never be destroyed in production).
+  void Start(SchedulerWorkerObserver* scheduler_worker_observer = nullptr);
 
   // Creates a SingleThreadTaskRunner which runs tasks with |traits| on a thread
   // named "TaskSchedulerSingleThread[Shared]" +
@@ -80,6 +85,15 @@ class BASE_EXPORT SchedulerSingleThreadTaskRunnerManager final {
  private:
   class SchedulerSingleThreadTaskRunner;
 
+  enum ContinueOnShutdown {
+    IS_CONTINUE_ON_SHUTDOWN,
+    IS_NOT_CONTINUE_ON_SHUTDOWN,
+    CONTINUE_ON_SHUTDOWN_COUNT,
+  };
+
+  static ContinueOnShutdown TraitsToContinueOnShutdown(
+      const TaskTraits& traits);
+
   template <typename DelegateType>
   scoped_refptr<SchedulerSingleThreadTaskRunner> CreateTaskRunnerWithTraitsImpl(
       const TaskTraits& traits,
@@ -88,11 +102,13 @@ class BASE_EXPORT SchedulerSingleThreadTaskRunnerManager final {
   template <typename DelegateType>
   std::unique_ptr<SchedulerWorkerDelegate> CreateSchedulerWorkerDelegate(
       const std::string& name,
-      int id);
+      int id,
+      SingleThreadTaskRunnerThreadMode thread_mode);
 
   template <typename DelegateType>
   SchedulerWorker* CreateAndRegisterSchedulerWorker(
       const std::string& name,
+      SingleThreadTaskRunnerThreadMode thread_mode,
       ThreadPriority priority_hint);
 
   template <typename DelegateType>
@@ -102,18 +118,29 @@ class BASE_EXPORT SchedulerSingleThreadTaskRunnerManager final {
 
   void ReleaseSharedSchedulerWorkers();
 
-  TaskTracker* const task_tracker_;
+  const TrackedRef<TaskTracker> task_tracker_;
   DelayedTaskManager* const delayed_task_manager_;
+
+  // Optional observer notified when a worker enters and exits its main
+  // function. Set in Start() and never modified afterwards.
+  SchedulerWorkerObserver* scheduler_worker_observer_ = nullptr;
 
   // Synchronizes access to all members below.
   SchedulerLock lock_;
   std::vector<scoped_refptr<SchedulerWorker>> workers_;
   int next_worker_id_ = 0;
 
-  SchedulerWorker* shared_scheduler_workers_[ENVIRONMENT_COUNT] = {};
-
+  // Workers for SingleThreadTaskRunnerThreadMode::SHARED tasks. It is
+  // important to have separate threads for CONTINUE_ON_SHUTDOWN and non-
+  // CONTINUE_ON_SHUTDOWN to avoid being in a situation where a
+  // CONTINUE_ON_SHUTDOWN task effectively blocks shutdown by preventing a
+  // BLOCK_SHUTDOWN task to be scheduled. https://crbug.com/829786
+  SchedulerWorker* shared_scheduler_workers_[ENVIRONMENT_COUNT]
+                                            [CONTINUE_ON_SHUTDOWN_COUNT] = {};
 #if defined(OS_WIN)
-  SchedulerWorker* shared_com_scheduler_workers_[ENVIRONMENT_COUNT] = {};
+  SchedulerWorker* shared_com_scheduler_workers_[ENVIRONMENT_COUNT]
+                                                [CONTINUE_ON_SHUTDOWN_COUNT] =
+                                                    {};
 #endif  // defined(OS_WIN)
 
   // Set to true when Start() is called.

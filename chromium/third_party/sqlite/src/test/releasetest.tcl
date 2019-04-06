@@ -173,6 +173,7 @@ array set ::Configs [strip_comments {
     -DSQLITE_OMIT_TRACE=1
     -DSQLITE_TEMP_STORE=3
     -DSQLITE_THREADSAFE=2
+    -DSQLITE_ENABLE_DESERIALIZE=1
     --enable-json1 --enable-fts5 --enable-session
   }
   "Locking-Style" {
@@ -734,6 +735,9 @@ proc makeCommand { targets makeOpts cflags opts } {
     set nmakeDir [file nativename $::SRCDIR]
     set nmakeFile [file nativename [file join $nmakeDir Makefile.msc]]
     lappend result nmake /f $nmakeFile TOP=$nmakeDir
+    set tclDir [file nativename [file normalize \
+        [file dirname [file dirname [info nameofexecutable]]]]]
+    lappend result "TCLDIR=$tclDir"
     if {[regexp {USE_STDCALL=1} $cflags]} {
       lappend result USE_STDCALL=1
     }

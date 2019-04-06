@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include "components/variations/proto/study.pb.h"
+
 namespace base {
 class FeatureList;
 }
@@ -14,6 +16,9 @@ class FeatureList;
 namespace variations {
 
 struct FieldTrialTestingConfig;
+
+// Unescapes special characters from the given string.
+std::string UnescapeValue(const std::string& value);
 
 // Escapes the trial name, or parameter name, or parameter value in a way that
 // makes it usable within variations::switches::kForceFieldTrialParams.
@@ -30,12 +35,14 @@ bool AssociateParamsFromString(const std::string& variations_string);
 // of FieldTrial groups specified in the |config|. Registers features associated
 // with default field trials with |feature_list|.
 void AssociateParamsFromFieldTrialConfig(const FieldTrialTestingConfig& config,
-                                         base::FeatureList* feature_list);
+                                         base::FeatureList* feature_list,
+                                         Study::Platform platform);
 
 // Associates params and features to FieldTrial groups and forces the selection
 // of groups specified in testing/variations/fieldtrial_testing_config.json.
 // Registers features associated with default field trials with |feature_list|.
-void AssociateDefaultFieldTrialConfig(base::FeatureList* feature_list);
+void AssociateDefaultFieldTrialConfig(base::FeatureList* feature_list,
+                                      Study::Platform platform);
 
 }  // namespace variations
 

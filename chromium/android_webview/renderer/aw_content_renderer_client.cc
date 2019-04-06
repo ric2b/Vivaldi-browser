@@ -18,22 +18,20 @@
 #include "android_webview/renderer/aw_render_frame_ext.h"
 #include "android_webview/renderer/aw_render_view_ext.h"
 #include "android_webview/renderer/aw_url_loader_throttle_provider.h"
+#include "android_webview/renderer/aw_websocket_handshake_throttle_provider.h"
 #include "android_webview/renderer/print_render_frame_observer.h"
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/printing/renderer/print_render_frame_helper.h"
 #include "components/safe_browsing/renderer/websocket_sb_handshake_throttle.h"
-#include "components/spellcheck/spellcheck_build_features.h"
 #include "components/supervised_user_error_page/gin_wrapper.h"
 #include "components/supervised_user_error_page/supervised_user_error_page_android.h"
 #include "components/visitedlink/renderer/visitedlink_slave.h"
 #include "components/web_restrictions/interfaces/web_restrictions.mojom.h"
 #include "content/public/child/child_thread.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/common/simple_connection_filter.h"
@@ -45,15 +43,16 @@
 #include "content/public/renderer/render_view.h"
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
+#include "services/network/public/cpp/features.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
-#include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
-#include "third_party/WebKit/public/platform/WebURLRequest.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/WebKit/public/web/WebNavigationType.h"
-#include "third_party/WebKit/public/web/WebSecurityPolicy.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/platform/web_url.h"
+#include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/web/web_frame.h"
+#include "third_party/blink/public/web/web_navigation_type.h"
+#include "third_party/blink/public/web/web_security_policy.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
@@ -94,10 +93,8 @@ void AwContentRendererClient::RenderThreadStarted() {
           std::move(registry)));
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
-  if (!spellcheck_) {
-    spellcheck_ = std::make_unique<SpellCheck>(this);
-    thread->AddObserver(spellcheck_.get());
-  }
+  if (!spellcheck_)
+    spellcheck_ = std::make_unique<SpellCheck>(nullptr, this);
 #endif
 }
 
@@ -287,12 +284,21 @@ void AwContentRendererClient::AddSupportedKeySystems(
   AwAddKeySystems(key_systems);
 }
 
+// TODO(nhiroki): Remove this once the off-main-thread WebSocket is enabled by
+// default (https://crbug.com/825740).
 std::unique_ptr<blink::WebSocketHandshakeThrottle>
 AwContentRendererClient::CreateWebSocketHandshakeThrottle() {
   if (!UsingSafeBrowsingMojoService())
     return nullptr;
+  // This is called only for Shared Worker and Service Worker that don't have a
+  // real frame, so we specify MSG_ROUTING_NONE here.
   return std::make_unique<safe_browsing::WebSocketSBHandshakeThrottle>(
-      safe_browsing_.get());
+      safe_browsing_.get(), MSG_ROUTING_NONE);
+}
+
+std::unique_ptr<content::WebSocketHandshakeThrottleProvider>
+AwContentRendererClient::CreateWebSocketHandshakeThrottleProvider() {
+  return std::make_unique<AwWebSocketHandshakeThrottleProvider>();
 }
 
 bool AwContentRendererClient::ShouldUseMediaPlayerForURL(const GURL& url) {
@@ -349,12 +355,21 @@ AwContentRendererClient::CreateURLLoaderThrottleProvider(
 
 void AwContentRendererClient::GetInterface(
     const std::string& interface_name,
-    mojo::ScopedMessagePipeHandle interface_pipe) {}
+    mojo::ScopedMessagePipeHandle interface_pipe) {
+  // A dirty hack to make SpellCheckHost requests work on WebView.
+  // TODO(crbug.com/806394): Use a WebView-specific service for SpellCheckHost
+  // and SafeBrowsing, instead of |content_browser|.
+  RenderThread::Get()->GetConnector()->BindInterface(
+      service_manager::Identity(content::mojom::kBrowserServiceName),
+      interface_name, std::move(interface_pipe));
+}
 
+// TODO(nhiroki): Remove this once the off-main-thread WebSocket is enabled by
+// default (https://crbug.com/825740).
 bool AwContentRendererClient::UsingSafeBrowsingMojoService() {
   if (safe_browsing_)
     return true;
-  if (!base::FeatureList::IsEnabled(features::kNetworkService))
+  if (!base::FeatureList::IsEnabled(network::features::kNetworkService))
     return false;
   RenderThread::Get()->GetConnector()->BindInterface(
       content::mojom::kBrowserServiceName, &safe_browsing_);

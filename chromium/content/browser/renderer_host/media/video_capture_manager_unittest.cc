@@ -15,7 +15,6 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -143,7 +142,7 @@ class WrappedDeviceFactory : public media::FakeVideoCaptureDeviceFactory {
 class MockMediaStreamProviderListener : public MediaStreamProviderListener {
  public:
   MockMediaStreamProviderListener() {}
-  ~MockMediaStreamProviderListener() {}
+  ~MockMediaStreamProviderListener() override {}
 
   MOCK_METHOD2(Opened, void(MediaStreamType, int));
   MOCK_METHOD2(Closed, void(MediaStreamType, int));
@@ -157,9 +156,10 @@ class MockFrameObserver : public VideoCaptureControllerEventHandler {
   MOCK_METHOD1(OnStarted, void(VideoCaptureControllerID id));
   MOCK_METHOD1(OnStartedUsingGpuDecode, void(VideoCaptureControllerID id));
 
-  void OnBufferCreated(VideoCaptureControllerID id,
-                       mojo::ScopedSharedBufferHandle handle,
-                       int length, int buffer_id) override {}
+  void OnNewBuffer(VideoCaptureControllerID id,
+                   media::mojom::VideoBufferHandlePtr buffer_handle,
+                   int length,
+                   int buffer_id) override {}
   void OnBufferDestroyed(VideoCaptureControllerID id, int buffer_id) override {}
   void OnBufferReady(
       VideoCaptureControllerID id,

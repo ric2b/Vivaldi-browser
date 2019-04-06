@@ -31,8 +31,9 @@
 #include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source_type.h"
-#include "net/reporting/reporting_service.h"
+#include "net/socket/next_proto.h"
 #include "net/ssl/ssl_cert_request_info.h"
+#include "net/url_request/http_user_agent_settings.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/redirect_util.h"
 #include "net/url_request/url_request_context.h"
@@ -45,7 +46,8 @@
 #include "url/origin.h"
 
 #if BUILDFLAG(ENABLE_REPORTING)
-#include "net/url_request/network_error_logging_delegate.h"
+#include "net/network_error_logging/network_error_logging_service.h"
+#include "net/reporting/reporting_service.h"
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
 using base::Time;
@@ -508,6 +510,16 @@ void URLRequest::set_delegate(Delegate* delegate) {
   delegate_ = delegate;
 }
 
+void URLRequest::set_allow_credentials(bool allow_credentials) {
+  if (allow_credentials) {
+    load_flags_ &= ~(LOAD_DO_NOT_SAVE_COOKIES | LOAD_DO_NOT_SEND_COOKIES |
+                     LOAD_DO_NOT_SEND_AUTH_DATA);
+  } else {
+    load_flags_ |= (LOAD_DO_NOT_SAVE_COOKIES | LOAD_DO_NOT_SEND_COOKIES |
+                    LOAD_DO_NOT_SEND_AUTH_DATA);
+  }
+}
+
 void URLRequest::Start() {
   DCHECK(delegate_);
 
@@ -529,11 +541,14 @@ void URLRequest::Start() {
   load_timing_info_.request_start = base::TimeTicks::Now();
 
   if (network_delegate_) {
-    OnCallToDelegate();
+    OnCallToDelegate(NetLogEventType::NETWORK_DELEGATE_BEFORE_URL_REQUEST);
     int error = network_delegate_->NotifyBeforeURLRequest(
-        this, before_request_callback_, &delegate_redirect_url_);
+        this,
+        base::BindOnce(&URLRequest::BeforeRequestComplete,
+                       base::Unretained(this)),
+        &delegate_redirect_url_);
     // If ERR_IO_PENDING is returned, the delegate will invoke
-    // |before_request_callback_| later.
+    // |BeforeRequestComplete| later.
     if (error != ERR_IO_PENDING)
       BeforeRequestComplete(error);
     return;
@@ -557,6 +572,7 @@ URLRequest::URLRequest(const GURL& url,
       net_log_(NetLogWithSource::Make(context->net_log(),
                                       NetLogSourceType::URL_REQUEST)),
       url_chain_(1, url),
+      attach_same_site_cookies_(false),
       method_("GET"),
       referrer_policy_(CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE),
       first_party_url_policy_(NEVER_CHANGE_FIRST_PARTY_URL),
@@ -568,16 +584,16 @@ URLRequest::URLRequest(const GURL& url,
       redirect_limit_(kMaxRedirects),
       priority_(priority),
       identifier_(GenerateURLRequestIdentifier()),
+      delegate_event_type_(NetLogEventType::FAILED),
       calling_delegate_(false),
       use_blocked_by_as_load_param_(false),
-      before_request_callback_(base::Bind(&URLRequest::BeforeRequestComplete,
-                                          base::Unretained(this))),
       has_notified_completion_(false),
       received_response_content_length_(0),
       creation_time_(base::TimeTicks::Now()),
       raw_header_size_(0),
       is_pac_request_(false),
-      traffic_annotation_(traffic_annotation) {
+      traffic_annotation_(traffic_annotation),
+      upgrade_if_insecure_(false) {
   // Sanity check out environment.
   DCHECK(base::ThreadTaskRunnerHandle::IsSet());
 
@@ -700,7 +716,7 @@ void URLRequest::CancelWithSSLError(int error, const SSLInfo& ssl_info) {
 }
 
 int URLRequest::DoCancel(int error, const SSLInfo& ssl_info) {
-  DCHECK(error < 0);
+  DCHECK_LT(error, 0);
   // If cancelled while calling a delegate, clear delegate info.
   if (calling_delegate_) {
     LogUnblocked();
@@ -802,7 +818,7 @@ void URLRequest::NotifyReceivedRedirect(const RedirectInfo& redirect_info,
   if (job) {
     RestartWithJob(job);
   } else {
-    OnCallToDelegate();
+    OnCallToDelegate(NetLogEventType::URL_REQUEST_DELEGATE_RECEIVED_REDIRECT);
     delegate_->OnReceivedRedirect(this, redirect_info, defer_redirect);
     // |this| may be have been destroyed here.
   }
@@ -836,19 +852,20 @@ void URLRequest::NotifyResponseStarted(const URLRequestStatus& status) {
     if (!has_notified_completion_ && !status_.is_success())
       NotifyRequestCompleted();
 
-    OnCallToDelegate();
+    OnCallToDelegate(NetLogEventType::URL_REQUEST_DELEGATE_RESPONSE_STARTED);
     delegate_->OnResponseStarted(this, net_error);
     // Nothing may appear below this line as OnResponseStarted may delete
     // |this|.
   }
 }
 
-void URLRequest::FollowDeferredRedirect() {
+void URLRequest::FollowDeferredRedirect(
+    const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
   DCHECK(job_.get());
   DCHECK(status_.is_success());
 
   status_ = URLRequestStatus::FromError(ERR_IO_PENDING);
-  job_->FollowDeferredRedirect();
+  job_->FollowDeferredRedirect(modified_request_headers);
 }
 
 void URLRequest::SetAuth(const AuthCredentials& credentials) {
@@ -911,7 +928,9 @@ void URLRequest::PrepareToRestart() {
   proxy_server_ = ProxyServer();
 }
 
-void URLRequest::Redirect(const RedirectInfo& redirect_info) {
+void URLRequest::Redirect(
+    const RedirectInfo& redirect_info,
+    const base::Optional<net::HttpRequestHeaders>& modified_request_headers) {
   // This method always succeeds. Whether |job_| is allowed to redirect to
   // |redirect_info| is checked in URLRequestJob::CanFollowRedirect, before
   // NotifyReceivedRedirect. This means the delegate can assume that, if it
@@ -934,6 +953,7 @@ void URLRequest::Redirect(const RedirectInfo& redirect_info) {
 
   bool clear_body = false;
   net::RedirectUtil::UpdateHttpRequest(url(), method_, redirect_info,
+                                       modified_request_headers,
                                        &extra_request_headers_, &clear_body);
   if (clear_body)
     upload_data_stream_.reset();
@@ -989,12 +1009,11 @@ void URLRequest::NotifyAuthRequired(AuthChallengeInfo* auth_info) {
       NetworkDelegate::AUTH_REQUIRED_RESPONSE_NO_ACTION;
   auth_info_ = auth_info;
   if (network_delegate_) {
-    OnCallToDelegate();
+    OnCallToDelegate(NetLogEventType::NETWORK_DELEGATE_AUTH_REQUIRED);
     rv = network_delegate_->NotifyAuthRequired(
-        this,
-        *auth_info,
-        base::Bind(&URLRequest::NotifyAuthRequiredComplete,
-                   base::Unretained(this)),
+        this, *auth_info,
+        base::BindOnce(&URLRequest::NotifyAuthRequiredComplete,
+                       base::Unretained(this)),
         &auth_credentials_);
     if (rv == NetworkDelegate::AUTH_REQUIRED_RESPONSE_IO_PENDING)
       return;
@@ -1042,14 +1061,14 @@ void URLRequest::NotifyAuthRequiredComplete(
 void URLRequest::NotifyCertificateRequested(
     SSLCertRequestInfo* cert_request_info) {
   status_ = URLRequestStatus();
-  OnCallToDelegate();
+  OnCallToDelegate(NetLogEventType::URL_REQUEST_DELEGATE_CERTIFICATE_REQUESTED);
   delegate_->OnCertificateRequested(this, cert_request_info);
 }
 
 void URLRequest::NotifySSLCertificateError(const SSLInfo& ssl_info,
                                            bool fatal) {
   status_ = URLRequestStatus();
-  OnCallToDelegate();
+  OnCallToDelegate(NetLogEventType::URL_REQUEST_DELEGATE_SSL_CERTIFICATE_ERROR);
   delegate_->OnSSLCertificateError(this, ssl_info, fatal);
 }
 
@@ -1092,13 +1111,6 @@ void URLRequest::NotifyReadCompleted(int bytes_read) {
   // failure, rather than -1.
   if (bytes_read == -1)
     bytes_read = status_.error();
-
-  // Notify NetworkChangeNotifier that we just received network data.
-  // This is to identify cases where the NetworkChangeNotifier thinks we
-  // are off-line but we are still receiving network data (crbug.com/124069),
-  // and to get rough network connection measurements.
-  if (bytes_read > 0 && !was_cached())
-    NetworkChangeNotifier::NotifyDataReceived(*this, bytes_read);
 
   delegate_->OnReadCompleted(this, bytes_read);
 
@@ -1146,11 +1158,12 @@ void URLRequest::NotifyRequestCompleted() {
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 }
 
-void URLRequest::OnCallToDelegate() {
+void URLRequest::OnCallToDelegate(NetLogEventType type) {
   DCHECK(!calling_delegate_);
   DCHECK(blocked_by_.empty());
   calling_delegate_ = true;
-  net_log_.BeginEvent(NetLogEventType::URL_REQUEST_DELEGATE);
+  delegate_event_type_ = type;
+  net_log_.BeginEvent(type);
 }
 
 void URLRequest::OnCallToDelegateComplete() {
@@ -1159,49 +1172,69 @@ void URLRequest::OnCallToDelegateComplete() {
   if (!calling_delegate_)
     return;
   calling_delegate_ = false;
-  net_log_.EndEvent(NetLogEventType::URL_REQUEST_DELEGATE);
+  net_log_.EndEvent(delegate_event_type_);
+  delegate_event_type_ = NetLogEventType::FAILED;
 }
 
 #if BUILDFLAG(ENABLE_REPORTING)
+std::string URLRequest::GetUserAgent() const {
+  // This should be kept in sync with the corresponding code in
+  // URLRequestHttpJob::Start.
+  // TODO(dcreager): Consider whether we can share code instead of copy-pasting
+  std::string user_agent;
+  if (extra_request_headers_.GetHeader(net::HttpRequestHeaders::kUserAgent,
+                                       &user_agent))
+    return user_agent;
+  if (context()->http_user_agent_settings())
+    return context()->http_user_agent_settings()->GetUserAgent();
+  return std::string();
+}
+
 void URLRequest::MaybeGenerateNetworkErrorLoggingReport() {
-  NetworkErrorLoggingDelegate* delegate =
-      context()->network_error_logging_delegate();
-  if (!delegate)
+  NetworkErrorLoggingService* service =
+      context()->network_error_logging_service();
+  if (!service) {
+    NetworkErrorLoggingService::
+        RecordRequestDiscardedForNoNetworkErrorLoggingService();
     return;
+  }
 
   // TODO(juliatuttle): Figure out whether we should be ignoring errors from
   // non-HTTPS origins.
 
-  // TODO(juliatuttle): Remove this and reconsider interface once there's a
-  // better story for reporting successes.
-  if (status().ToNetError() == OK)
-    return;
-
-  NetworkErrorLoggingDelegate::ErrorDetails details;
+  NetworkErrorLoggingService::RequestDetails details;
 
   details.uri = url();
   details.referrer = GURL(referrer());
+  details.user_agent = GetUserAgent();
   IPEndPoint endpoint;
   if (GetRemoteEndpoint(&endpoint))
     details.server_ip = endpoint.address();
-  // TODO(juliatuttle): Plumb this.
-  details.protocol = kProtoUnknown;
   if (response_headers()) {
     // HttpResponseHeaders::response_code() returns 0 if response code couldn't
     // be parsed, which is also how NEL represents the same.
     details.status_code = response_headers()->response_code();
+    // If we got response headers, assume that the connection used HTTP/1.1
+    // unless ALPN negotation tells us otherwise (handled below).
+    details.protocol = "http/1.1";
   } else {
     details.status_code = 0;
   }
+  if (response_info().was_alpn_negotiated)
+    details.protocol = response_info().alpn_negotiated_protocol;
+  details.method = method();
   details.elapsed_time =
       base::TimeTicks::Now() - load_timing_info_.request_start;
   details.type = status().ToNetError();
 
-  details.is_reporting_upload =
-      context()->reporting_service() &&
-      context()->reporting_service()->RequestIsUpload(*this);
+  if (context()->reporting_service()) {
+    details.reporting_upload_depth =
+        context()->reporting_service()->GetUploadDepth(*this);
+  } else {
+    details.reporting_upload_depth = 0;
+  }
 
-  delegate->OnNetworkError(details);
+  service->OnRequest(std::move(details));
 }
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
@@ -1222,6 +1255,12 @@ void URLRequest::SetResponseHeadersCallback(ResponseHeadersCallback callback) {
   DCHECK(!job_.get());
   DCHECK(response_headers_callback_.is_null());
   response_headers_callback_ = std::move(callback);
+}
+
+void URLRequest::set_socket_tag(const SocketTag& socket_tag) {
+  DCHECK(!is_pending_);
+  DCHECK(url().SchemeIsHTTPOrHTTPS());
+  socket_tag_ = socket_tag;
 }
 
 void URLRequest::set_status(URLRequestStatus status) {

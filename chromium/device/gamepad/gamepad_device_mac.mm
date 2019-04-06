@@ -6,21 +6,47 @@
 
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_cftyperef.h"
+#include "base/stl_util.h"
+#include "device/gamepad/gamepad_data_fetcher.h"
 
 #import <Foundation/Foundation.h>
 
 namespace {
 
 // http://www.usb.org/developers/hidpage
-const uint32_t kGenericDesktopUsagePage = 0x01;
-const uint32_t kGameControlsUsagePage = 0x05;
-const uint32_t kButtonUsagePage = 0x09;
-const uint32_t kJoystickUsageNumber = 0x04;
-const uint32_t kGameUsageNumber = 0x05;
-const uint32_t kMultiAxisUsageNumber = 0x08;
-const uint32_t kAxisMinimumUsageNumber = 0x30;
+const uint16_t kGenericDesktopUsagePage = 0x01;
+const uint16_t kGameControlsUsagePage = 0x05;
+const uint16_t kButtonUsagePage = 0x09;
+const uint16_t kConsumerUsagePage = 0x0c;
+
+const uint16_t kJoystickUsageNumber = 0x04;
+const uint16_t kGameUsageNumber = 0x05;
+const uint16_t kMultiAxisUsageNumber = 0x08;
+const uint16_t kAxisMinimumUsageNumber = 0x30;
+const uint16_t kSystemMainMenuUsageNumber = 0x85;
+const uint16_t kPowerUsageNumber = 0x30;
+const uint16_t kSearchUsageNumber = 0x0221;
+const uint16_t kHomeUsageNumber = 0x0223;
+const uint16_t kBackUsageNumber = 0x0224;
 
 const int kRumbleMagnitudeMax = 10000;
+
+struct SpecialUsages {
+  const uint16_t usage_page;
+  const uint16_t usage;
+} kSpecialUsages[] = {
+    // Xbox One S pre-FW update reports Xbox button as SystemMainMenu over BT.
+    {kGenericDesktopUsagePage, kSystemMainMenuUsageNumber},
+    // Power is used for the Guide button on the Nvidia Shield 2015 gamepad.
+    {kConsumerUsagePage, kPowerUsageNumber},
+    // Search is used for the Guide button on the Nvidia Shield 2017 gamepad.
+    {kConsumerUsagePage, kSearchUsageNumber},
+    // Start, Back, and Guide buttons are often reported as Consumer Home or
+    // Back.
+    {kConsumerUsagePage, kHomeUsageNumber},
+    {kConsumerUsagePage, kBackUsageNumber},
+};
+const size_t kSpecialUsagesLen = base::size(kSpecialUsages);
 
 float NormalizeAxis(CFIndex value, CFIndex min, CFIndex max) {
   return (2.f * (value - min) / static_cast<float>(max - min)) - 1.f;
@@ -42,22 +68,19 @@ float NormalizeUInt32Axis(uint32_t value, uint32_t min, uint32_t max) {
 
 namespace device {
 
-GamepadDeviceMac::GamepadDeviceMac(int location_id, IOHIDDeviceRef device_ref)
+GamepadDeviceMac::GamepadDeviceMac(int location_id,
+                                   IOHIDDeviceRef device_ref,
+                                   int vendor_id,
+                                   int product_id)
     : location_id_(location_id),
       device_ref_(device_ref),
       ff_device_ref_(nullptr),
       ff_effect_ref_(nullptr) {
-  std::fill(button_elements_, button_elements_ + Gamepad::kButtonsLengthCap,
-            nullptr);
-  std::fill(axis_elements_, axis_elements_ + Gamepad::kAxesLengthCap, nullptr);
-  std::fill(axis_minimums_, axis_minimums_ + Gamepad::kAxesLengthCap, 0);
-  std::fill(axis_maximums_, axis_maximums_ + Gamepad::kAxesLengthCap, 0);
-  std::fill(axis_report_sizes_, axis_report_sizes_ + Gamepad::kAxesLengthCap,
-            0);
-
-  if (device_ref != nullptr) {
+  if (Dualshock4ControllerMac::IsDualshock4(vendor_id, product_id)) {
+    dualshock4_ = std::make_unique<Dualshock4ControllerMac>(device_ref);
+  } else if (device_ref) {
     ff_device_ref_ = CreateForceFeedbackDevice(device_ref);
-    if (ff_device_ref_ != nullptr) {
+    if (ff_device_ref_) {
       ff_effect_ref_ = CreateForceFeedbackEffect(ff_device_ref_, &ff_effect_,
                                                  &ff_custom_force_, force_data_,
                                                  axes_data_, direction_data_);
@@ -68,11 +91,16 @@ GamepadDeviceMac::GamepadDeviceMac(int location_id, IOHIDDeviceRef device_ref)
 GamepadDeviceMac::~GamepadDeviceMac() = default;
 
 void GamepadDeviceMac::DoShutdown() {
-  SetZeroVibration();
-  if (ff_device_ref_ != nullptr) {
-    if (ff_effect_ref_ != nullptr)
+  if (ff_device_ref_) {
+    if (ff_effect_ref_)
       FFDeviceReleaseEffect(ff_device_ref_, ff_effect_ref_);
     FFReleaseDevice(ff_device_ref_);
+    ff_effect_ref_ = nullptr;
+    ff_device_ref_ = nullptr;
+  }
+  if (dualshock4_) {
+    dualshock4_->Shutdown();
+    dualshock4_ = nullptr;
   }
 }
 
@@ -94,18 +122,108 @@ bool GamepadDeviceMac::CheckCollection(IOHIDElementRef element) {
 }
 
 bool GamepadDeviceMac::AddButtonsAndAxes(Gamepad* gamepad) {
+  bool has_buttons = AddButtons(gamepad);
+  bool has_axes = AddAxes(gamepad);
+  gamepad->timestamp = GamepadDataFetcher::CurrentTimeInMicroseconds();
+  return (has_buttons || has_axes);
+}
+
+bool GamepadDeviceMac::AddButtons(Gamepad* gamepad) {
   base::ScopedCFTypeRef<CFArrayRef> elements_cf(IOHIDDeviceCopyMatchingElements(
       device_ref_, nullptr, kIOHIDOptionsTypeNone));
   NSArray* elements = base::mac::CFToNSCast(elements_cf);
   DCHECK(elements);
   DCHECK(gamepad);
-  gamepad->axes_length = 0;
-  gamepad->buttons_length = 0;
-  gamepad->timestamp = 0;
-  memset(gamepad->axes, 0, sizeof(gamepad->axes));
   memset(gamepad->buttons, 0, sizeof(gamepad->buttons));
+  std::fill(button_elements_, button_elements_ + Gamepad::kButtonsLengthCap,
+            nullptr);
 
-  bool mapped_all_axes = true;
+  std::vector<IOHIDElementRef> special_element(kSpecialUsagesLen, nullptr);
+  size_t button_count = 0;
+  size_t unmapped_button_count = 0;
+  for (id elem in elements) {
+    IOHIDElementRef element = reinterpret_cast<IOHIDElementRef>(elem);
+    if (!CheckCollection(element))
+      continue;
+
+    uint32_t usage_page = IOHIDElementGetUsagePage(element);
+    uint32_t usage = IOHIDElementGetUsage(element);
+    if (IOHIDElementGetType(element) == kIOHIDElementTypeInput_Button) {
+      if (usage_page == kButtonUsagePage && usage > 0) {
+        size_t button_index = size_t{usage - 1};
+
+        // Ignore buttons with large usage values.
+        if (button_index >= Gamepad::kButtonsLengthCap)
+          continue;
+
+        // Button index already assigned, ignore.
+        if (button_elements_[button_index])
+          continue;
+
+        button_elements_[button_index] = element;
+        button_count = std::max(button_count, button_index + 1);
+      } else {
+        // Check for common gamepad buttons that are not on the Button usage
+        // page. Button indices are assigned in a second pass.
+        for (size_t special_index = 0; special_index < kSpecialUsagesLen;
+             ++special_index) {
+          const auto& special = kSpecialUsages[special_index];
+          if (usage_page == special.usage_page && usage == special.usage) {
+            special_element[special_index] = element;
+            ++unmapped_button_count;
+          }
+        }
+      }
+    }
+  }
+
+  if (unmapped_button_count > 0) {
+    // Insert unmapped buttons at unused button indices.
+    size_t button_index = 0;
+    for (size_t special_index = 0; special_index < kSpecialUsagesLen;
+         ++special_index) {
+      if (!special_element[special_index])
+        continue;
+
+      // Advance to the next unused button index.
+      while (button_index < Gamepad::kButtonsLengthCap &&
+             button_elements_[button_index]) {
+        ++button_index;
+      }
+      if (button_index >= Gamepad::kButtonsLengthCap)
+        break;
+
+      button_elements_[button_index] = special_element[special_index];
+      button_count = std::max(button_count, button_index + 1);
+
+      if (--unmapped_button_count == 0)
+        break;
+    }
+  }
+
+  gamepad->buttons_length = button_count;
+  return gamepad->buttons_length > 0;
+}
+
+bool GamepadDeviceMac::AddAxes(Gamepad* gamepad) {
+  base::ScopedCFTypeRef<CFArrayRef> elements_cf(IOHIDDeviceCopyMatchingElements(
+      device_ref_, nullptr, kIOHIDOptionsTypeNone));
+  NSArray* elements = base::mac::CFToNSCast(elements_cf);
+  DCHECK(elements);
+  DCHECK(gamepad);
+  memset(gamepad->axes, 0, sizeof(gamepad->axes));
+  std::fill(axis_elements_, axis_elements_ + Gamepad::kAxesLengthCap, nullptr);
+  std::fill(axis_minimums_, axis_minimums_ + Gamepad::kAxesLengthCap, 0);
+  std::fill(axis_maximums_, axis_maximums_ + Gamepad::kAxesLengthCap, 0);
+  std::fill(axis_report_sizes_, axis_report_sizes_ + Gamepad::kAxesLengthCap,
+            0);
+
+  // Most axes are mapped so that their index in the Gamepad axes array
+  // corresponds to the usage ID. However, this is not possible when the usage
+  // ID would cause the axis index to exceed the bounds of the axes array.
+  // Axes with large usage IDs are mapped in a second pass.
+  size_t axis_count = 0;
+  size_t unmapped_axis_count = 0;
 
   for (id elem in elements) {
     IOHIDElementRef element = reinterpret_cast<IOHIDElementRef>(elem);
@@ -114,28 +232,27 @@ bool GamepadDeviceMac::AddButtonsAndAxes(Gamepad* gamepad) {
 
     uint32_t usage_page = IOHIDElementGetUsagePage(element);
     uint32_t usage = IOHIDElementGetUsage(element);
-    if (IOHIDElementGetType(element) == kIOHIDElementTypeInput_Button &&
-        usage_page == kButtonUsagePage) {
-      uint32_t button_index = usage - 1;
-      if (button_index < Gamepad::kButtonsLengthCap) {
-        button_elements_[button_index] = element;
-        gamepad->buttons_length =
-            std::max(gamepad->buttons_length, button_index + 1);
-      }
-    } else if (IOHIDElementGetType(element) == kIOHIDElementTypeInput_Misc) {
-      uint32_t axis_index = usage - kAxisMinimumUsageNumber;
-      if (axis_index < Gamepad::kAxesLengthCap) {
-        axis_elements_[axis_index] = element;
-        gamepad->axes_length = std::max(gamepad->axes_length, axis_index + 1);
-      } else {
-        mapped_all_axes = false;
-      }
+    if (IOHIDElementGetType(element) != kIOHIDElementTypeInput_Misc ||
+        usage < kAxisMinimumUsageNumber) {
+      continue;
+    }
+
+    size_t axis_index = size_t{usage - kAxisMinimumUsageNumber};
+    if (axis_index < Gamepad::kAxesLengthCap) {
+      // Axis index already assigned, ignore.
+      if (axis_elements_[axis_index])
+        continue;
+      axis_elements_[axis_index] = element;
+      axis_count = std::max(axis_count, axis_index + 1);
+    } else if (usage_page <= kGameControlsUsagePage) {
+      // Assign an index for this axis in the second pass.
+      ++unmapped_axis_count;
     }
   }
 
-  if (!mapped_all_axes) {
-    // For axes whose usage puts them outside the standard axesLengthCap range.
-    uint32_t next_index = 0;
+  if (unmapped_axis_count > 0) {
+    // Insert unmapped axes at unused axis indices.
+    size_t axis_index = 0;
     for (id elem in elements) {
       IOHIDElementRef element = reinterpret_cast<IOHIDElementRef>(elem);
       if (!CheckCollection(element))
@@ -143,26 +260,35 @@ bool GamepadDeviceMac::AddButtonsAndAxes(Gamepad* gamepad) {
 
       uint32_t usage_page = IOHIDElementGetUsagePage(element);
       uint32_t usage = IOHIDElementGetUsage(element);
-      if (IOHIDElementGetType(element) == kIOHIDElementTypeInput_Misc &&
-          usage - kAxisMinimumUsageNumber >= Gamepad::kAxesLengthCap &&
-          usage_page <= kGameControlsUsagePage) {
-        for (; next_index < Gamepad::kAxesLengthCap; ++next_index) {
-          if (axis_elements_[next_index] == NULL)
-            break;
-        }
-        if (next_index < Gamepad::kAxesLengthCap) {
-          axis_elements_[next_index] = element;
-          gamepad->axes_length = std::max(gamepad->axes_length, next_index + 1);
-        }
+      if (IOHIDElementGetType(element) != kIOHIDElementTypeInput_Misc ||
+          usage < kAxisMinimumUsageNumber ||
+          usage_page > kGameControlsUsagePage) {
+        continue;
       }
 
-      if (next_index >= Gamepad::kAxesLengthCap)
+      // Ignore axes with small usage IDs that should have been mapped in the
+      // initial pass.
+      if (size_t{usage - kAxisMinimumUsageNumber} < Gamepad::kAxesLengthCap)
+        continue;
+
+      // Advance to the next unused axis index.
+      while (axis_index < Gamepad::kAxesLengthCap &&
+             axis_elements_[axis_index]) {
+        ++axis_index;
+      }
+      if (axis_index >= Gamepad::kAxesLengthCap)
+        break;
+
+      axis_elements_[axis_index] = element;
+      axis_count = std::max(axis_count, axis_index + 1);
+
+      if (--unmapped_axis_count == 0)
         break;
     }
   }
 
-  for (uint32_t axis_index = 0; axis_index < gamepad->axes_length;
-       ++axis_index) {
+  // Fetch the logical range and report size for each axis.
+  for (size_t axis_index = 0; axis_index < axis_count; ++axis_index) {
     IOHIDElementRef element = axis_elements_[axis_index];
     if (element != NULL) {
       CFIndex axis_min = IOHIDElementGetLogicalMin(element);
@@ -180,7 +306,9 @@ bool GamepadDeviceMac::AddButtonsAndAxes(Gamepad* gamepad) {
       axis_report_sizes_[axis_index] = IOHIDElementGetReportSize(element);
     }
   }
-  return (gamepad->axes_length > 0 || gamepad->buttons_length > 0);
+
+  gamepad->axes_length = axis_count;
+  return gamepad->axes_length > 0;
 }
 
 void GamepadDeviceMac::UpdateGamepadForValue(IOHIDValueRef value,
@@ -200,8 +328,7 @@ void GamepadDeviceMac::UpdateGamepadForValue(IOHIDValueRef value,
       bool pressed = IOHIDValueGetIntegerValue(value);
       gamepad->buttons[i].pressed = pressed;
       gamepad->buttons[i].value = pressed ? 1.f : 0.f;
-      gamepad->timestamp =
-          std::max(gamepad->timestamp, IOHIDValueGetTimeStamp(value));
+      gamepad->timestamp = GamepadDataFetcher::CurrentTimeInMicroseconds();
       return;
     }
   }
@@ -232,36 +359,46 @@ void GamepadDeviceMac::UpdateGamepadForValue(IOHIDValueRef value,
       } else {
         gamepad->axes[i] = NormalizeAxis(axis_value, axis_min, axis_max);
       }
-
-      gamepad->timestamp =
-          std::max(gamepad->timestamp, IOHIDValueGetTimeStamp(value));
+      gamepad->timestamp = GamepadDataFetcher::CurrentTimeInMicroseconds();
       return;
     }
   }
 }
 
+bool GamepadDeviceMac::SupportsVibration() {
+  return dualshock4_ || ff_device_ref_;
+}
+
 void GamepadDeviceMac::SetVibration(double strong_magnitude,
                                     double weak_magnitude) {
-  FFCUSTOMFORCE* ff_custom_force =
-      static_cast<FFCUSTOMFORCE*>(ff_effect_.lpvTypeSpecificParams);
-  DCHECK(ff_custom_force);
-  DCHECK(ff_custom_force->rglForceData);
+  if (dualshock4_) {
+    dualshock4_->SetVibration(strong_magnitude, weak_magnitude);
+  } else if (ff_device_ref_) {
+    FFCUSTOMFORCE* ff_custom_force =
+        static_cast<FFCUSTOMFORCE*>(ff_effect_.lpvTypeSpecificParams);
+    DCHECK(ff_custom_force);
+    DCHECK(ff_custom_force->rglForceData);
 
-  ff_custom_force->rglForceData[0] =
-      static_cast<LONG>(strong_magnitude * kRumbleMagnitudeMax);
-  ff_custom_force->rglForceData[1] =
-      static_cast<LONG>(weak_magnitude * kRumbleMagnitudeMax);
+    ff_custom_force->rglForceData[0] =
+        static_cast<LONG>(strong_magnitude * kRumbleMagnitudeMax);
+    ff_custom_force->rglForceData[1] =
+        static_cast<LONG>(weak_magnitude * kRumbleMagnitudeMax);
 
-  // Download the effect to the device and start the effect.
-  HRESULT res = FFEffectSetParameters(
-      ff_effect_ref_, &ff_effect_,
-      FFEP_DURATION | FFEP_STARTDELAY | FFEP_TYPESPECIFICPARAMS);
-  if (res == FF_OK)
-    FFEffectStart(ff_effect_ref_, 1, FFES_SOLO);
+    // Download the effect to the device and start the effect.
+    HRESULT res = FFEffectSetParameters(
+        ff_effect_ref_, &ff_effect_,
+        FFEP_DURATION | FFEP_STARTDELAY | FFEP_TYPESPECIFICPARAMS);
+    if (res == FF_OK)
+      FFEffectStart(ff_effect_ref_, 1, FFES_SOLO);
+  }
 }
 
 void GamepadDeviceMac::SetZeroVibration() {
-  FFEffectStop(ff_effect_ref_);
+  if (dualshock4_) {
+    dualshock4_->SetZeroVibration();
+  } else if (ff_effect_ref_) {
+    FFEffectStop(ff_effect_ref_);
+  }
 }
 
 // static

@@ -14,12 +14,11 @@
 #include "base/files/file_path.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/string_util.h"
 #include "chrome/grit/theme_resources.h"
-#include "media/media_features.h"
+#include "content/public/browser/browser_thread.h"
+#include "media/media_buildflags.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -206,8 +205,9 @@ void IconLoader::ReadIcon() {
   gfx::ImageSkia image_skia(ResizeImage(*(rb.GetImageNamed(idr)).ToImageSkia(),
                                         IconSizeToDIPSize(icon_size_)));
   image_skia.MakeThreadSafe();
-  std::unique_ptr<gfx::Image> image = base::MakeUnique<gfx::Image>(image_skia);
+  std::unique_ptr<gfx::Image> image = std::make_unique<gfx::Image>(image_skia);
   target_task_runner_->PostTask(
-      FROM_HERE, base::Bind(callback_, base::Passed(&image), group_));
+      FROM_HERE,
+      base::BindOnce(std::move(callback_), std::move(image), group_));
   delete this;
 }

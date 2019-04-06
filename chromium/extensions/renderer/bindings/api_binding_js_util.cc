@@ -6,10 +6,12 @@
 
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
+#include "content/public/renderer/v8_value_converter.h"
 #include "extensions/renderer/bindings/api_event_handler.h"
 #include "extensions/renderer/bindings/api_request_handler.h"
 #include "extensions/renderer/bindings/api_signature.h"
 #include "extensions/renderer/bindings/api_type_reference_map.h"
+#include "extensions/renderer/bindings/argument_spec.h"
 #include "extensions/renderer/bindings/declarative_event.h"
 #include "extensions/renderer/bindings/exception_handler.h"
 #include "extensions/renderer/bindings/js_runner.h"
@@ -49,7 +51,11 @@ gin::ObjectTemplateBuilder APIBindingJSUtil::GetObjectTemplateBuilder(
       .SetMethod("runCallbackWithLastError",
                  &APIBindingJSUtil::RunCallbackWithLastError)
       .SetMethod("handleException", &APIBindingJSUtil::HandleException)
-      .SetMethod("setExceptionHandler", &APIBindingJSUtil::SetExceptionHandler);
+      .SetMethod("setExceptionHandler", &APIBindingJSUtil::SetExceptionHandler)
+      .SetMethod("validateType", &APIBindingJSUtil::ValidateType)
+      .SetMethod("validateCustomSignature",
+                 &APIBindingJSUtil::ValidateCustomSignature)
+      .SetMethod("addCustomSignature", &APIBindingJSUtil::AddCustomSignature);
 }
 
 void APIBindingJSUtil::SendRequest(
@@ -243,6 +249,86 @@ void APIBindingJSUtil::SetExceptionHandler(gin::Arguments* arguments,
                                            v8::Local<v8::Function> handler) {
   exception_handler_->SetHandlerForContext(
       arguments->GetHolderCreationContext(), handler);
+}
+
+void APIBindingJSUtil::ValidateType(gin::Arguments* arguments,
+                                    const std::string& type_name,
+                                    v8::Local<v8::Value> value) {
+  v8::Isolate* isolate = arguments->isolate();
+  v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Context> context = arguments->GetHolderCreationContext();
+
+  const ArgumentSpec* spec = type_refs_->GetSpec(type_name);
+  if (!spec) {
+    // We shouldn't be asked to validate unknown specs, but since this comes
+    // from JS, assume nothing.
+    NOTREACHED();
+    return;
+  }
+
+  std::string error;
+  if (!spec->ParseArgument(context, value, *type_refs_, nullptr, nullptr,
+                           &error)) {
+    arguments->ThrowTypeError(error);
+  }
+}
+
+void APIBindingJSUtil::AddCustomSignature(
+    gin::Arguments* arguments,
+    const std::string& custom_signature_name,
+    v8::Local<v8::Value> signature) {
+  v8::Local<v8::Context> context = arguments->GetHolderCreationContext();
+
+  // JS bindings run per-context, so it's expected that they will call this
+  // multiple times in the lifetime of the renderer process. Only handle the
+  // first call.
+  if (type_refs_->GetCustomSignature(custom_signature_name))
+    return;
+
+  if (!signature->IsArray()) {
+    NOTREACHED();
+    return;
+  }
+
+  std::unique_ptr<base::Value> base_signature =
+      content::V8ValueConverter::Create()->FromV8Value(signature, context);
+  if (!base_signature->is_list()) {
+    NOTREACHED();
+    return;
+  }
+
+  type_refs_->AddCustomSignature(
+      custom_signature_name,
+      std::make_unique<APISignature>(
+          *base::ListValue::From(std::move(base_signature))));
+}
+
+void APIBindingJSUtil::ValidateCustomSignature(
+    gin::Arguments* arguments,
+    const std::string& custom_signature_name,
+    v8::Local<v8::Value> arguments_to_validate) {
+  v8::Isolate* isolate = arguments->isolate();
+  v8::HandleScope handle_scope(isolate);
+  v8::Local<v8::Context> context = arguments->GetHolderCreationContext();
+
+  const APISignature* signature =
+      type_refs_->GetCustomSignature(custom_signature_name);
+  if (!signature) {
+    NOTREACHED();
+  }
+
+  std::vector<v8::Local<v8::Value>> vector_arguments;
+  if (!gin::ConvertFromV8(isolate, arguments_to_validate, &vector_arguments)) {
+    NOTREACHED();
+    return;
+  }
+
+  std::vector<v8::Local<v8::Value>> args_out;
+  std::string parse_error;
+  if (!signature->ParseArgumentsToV8(context, vector_arguments, *type_refs_,
+                                     &args_out, &parse_error)) {
+    arguments->ThrowTypeError(parse_error);
+  }
 }
 
 }  // namespace extensions

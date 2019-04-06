@@ -21,7 +21,7 @@ int kCctOriginObserverUserDataKey;
 void CctOriginObserver::AttachToOfflinePageModel(OfflinePageModel* model) {
   if (!IsOfflinePagesCTV2Enabled())
     return;
-  auto origin_observer = base::MakeUnique<CctOriginObserver>();
+  auto origin_observer = std::make_unique<CctOriginObserver>();
   model->AddObserver(origin_observer.get());
   model->SetUserData(&kCctOriginObserverUserDataKey,
                      std::move(origin_observer));
@@ -36,14 +36,16 @@ void CctOriginObserver::OfflinePageAdded(OfflinePageModel* model,
                                          const OfflinePageItem& added_page) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_CctOfflinePageModelObserver_onPageChanged(
-      env, ConvertUTF8ToJavaString(env, added_page.request_origin));
+      env, ConvertUTF8ToJavaString(env, added_page.request_origin), true,
+      ConvertUTF8ToJavaString(env, added_page.url.spec()));
 }
 
 void CctOriginObserver::OfflinePageDeleted(
     const OfflinePageModel::DeletedPageInfo& page_info) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_CctOfflinePageModelObserver_onPageChanged(
-      env, ConvertUTF8ToJavaString(env, page_info.request_origin));
+      env, ConvertUTF8ToJavaString(env, page_info.request_origin), false,
+      ConvertUTF8ToJavaString(env, page_info.url.spec()));
 }
 
 }  // namespace offline_pages

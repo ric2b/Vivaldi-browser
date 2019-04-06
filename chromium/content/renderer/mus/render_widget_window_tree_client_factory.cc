@@ -8,7 +8,6 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
@@ -70,9 +69,9 @@ class RenderWidgetWindowTreeClientFactoryImpl
           render_widget_window_tree_client_request) override {
     main_thread_task_runner_->PostTask(
         FROM_HERE,
-        base::BindOnce(
-            &BindMusConnectionOnMainThread, routing_id, base::Passed(&request),
-            base::Passed(&render_widget_window_tree_client_request)));
+        base::BindOnce(&BindMusConnectionOnMainThread, routing_id,
+                       std::move(request),
+                       std::move(render_widget_window_tree_client_request)));
   }
 
   scoped_refptr<base::SequencedTaskRunner> main_thread_task_runner_;

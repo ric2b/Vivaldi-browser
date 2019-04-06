@@ -7,72 +7,97 @@
 (function() {
 
 /**
- * Tests if the gallery shows up for the selected image and is loaded
- * successfully.
+ * Tests opening (then closing) the image Gallery from Files app.
  *
- * @param {string} path Directory path to be tested.
+ * @param {string} path Directory path (Downloads or Drive).
  */
 function imageOpen(path) {
-  var appId;
-  var galleryAppId;
-
-  var expectedFilesBefore =
-      TestEntryInfo.getExpectedRows(path == RootPath.DRIVE ?
-          BASIC_DRIVE_ENTRY_SET : BASIC_LOCAL_ENTRY_SET).sort();
-  var expectedFilesAfter =
-      expectedFilesBefore.concat([ENTRIES.image3.getExpectedRow()]).sort();
+  let appId;
+  let galleryAppId;
 
   StepsRunner.run([
+    // Open Files.App on |path|, add image3 to Downloads and Drive.
     function() {
-      setupAndWaitUntilReady(null, path, this.next);
+      setupAndWaitUntilReady(
+          null, path, this.next, [ENTRIES.image3], [ENTRIES.image3]);
     },
-    // Select the song.
+    // Open the image file in Files app.
     function(results) {
       appId = results.windowId;
-
-      // Add an additional image file.
-      addEntries(['local', 'drive'], [ENTRIES.image3], this.next);
-    },
-    function(result) {
-      chrome.test.assertTrue(result);
-      remoteCall.waitForFileListChange(appId, expectedFilesBefore.length).
-          then(this.next);
-    },
-    function(actualFilesAfter) {
-      chrome.test.assertEq(expectedFilesAfter, actualFilesAfter);
-      // Open a file in the Files app.
       remoteCall.callRemoteTestUtil(
-          'openFile', appId, ['My Desktop Background.png'], this.next);
+          'openFile', appId, [ENTRIES.image3.targetPath], this.next);
     },
+    // Check: the Gallery window should open.
     function(result) {
       chrome.test.assertTrue(result);
-      // Wait for the window.
       galleryApp.waitForWindow('gallery.html').then(this.next);
     },
-    function(inAppId) {
-      galleryAppId = inAppId;
-      // Wait for the file opened.
+    // Check: the image should appear in the Gallery window.
+    function(windowId) {
+      galleryAppId = windowId;
+      galleryApp.waitForSlideImage(
+          galleryAppId, 640, 480, 'image3').then(this.next);
+    },
+    // Close the Gallery window.
+    function() {
+      galleryApp.closeWindowAndWait(galleryAppId).then(this.next);
+    },
+    // Check: the Gallery window should close.
+    function(result) {
+      chrome.test.assertTrue(result, 'Failed to close Gallery window');
+      this.next();
+    },
+    function() {
+      checkIfNoErrorsOccured(this.next);
+    }
+  ]);
+}
+
+/**
+ * Tests opening the image Gallery from Files app: once the Gallery opens and
+ * shows the initial image, open a different image from FilesApp.
+ *
+ * @param {string} path Directory path (Downloads or Drive).
+ */
+function imageOpenGalleryOpen(path) {
+  let appId;
+  let galleryAppId;
+
+  const testImages = [ENTRIES.image3, ENTRIES.desktop];
+
+  StepsRunner.run([
+    // Open Files.App on |path|, add test images to Downloads and Drive.
+    function() {
+      setupAndWaitUntilReady(null, path, this.next, testImages, testImages);
+    },
+    // Open an image file in Files app.
+    function(results) {
+      appId = results.windowId;
+      remoteCall.callRemoteTestUtil(
+          'openFile', appId, [ENTRIES.image3.targetPath], this.next);
+    },
+    // Check: the Gallery window should open.
+    function(result) {
+      chrome.test.assertTrue(result);
+      galleryApp.waitForWindow('gallery.html').then(this.next);
+    },
+    // Check: the image should appear in the Gallery window.
+    function(windowId) {
+      galleryAppId = windowId;
+      galleryApp.waitForSlideImage(
+          galleryAppId, 640, 480, 'image3').then(this.next);
+    },
+    // Now open a different image file in Files app.
+    function() {
+      remoteCall.callRemoteTestUtil(
+          'openFile', appId, [ENTRIES.desktop.targetPath], this.next);
+    },
+    // Check: the new image should appear in the Gallery window.
+    function() {
       galleryApp.waitForSlideImage(
           galleryAppId, 800, 600, 'My Desktop Background').then(this.next);
     },
     function() {
-      // Open another file in the Files app.
-      remoteCall.callRemoteTestUtil(
-          'openFile', appId, ['image3.jpg'], this.next);
-    },
-    function(result) {
-      chrome.test.assertTrue(result);
-      // Wait for the file opened.
-      galleryApp.waitForSlideImage(
-          galleryAppId, 640, 480, 'image3').then(this.next);
-    },
-    function() {
-      // Close window
-      galleryApp.closeWindowAndWait(galleryAppId).then(this.next);
-    },
-    // Wait for closing.
-    function(result) {
-      chrome.test.assertTrue(result, 'Fail to close the window');
       checkIfNoErrorsOccured(this.next);
     }
   ]);
@@ -84,6 +109,14 @@ testcase.imageOpenDownloads = function() {
 
 testcase.imageOpenDrive = function() {
   imageOpen(RootPath.DRIVE);
+};
+
+testcase.imageOpenGalleryOpenDownloads = function() {
+  imageOpenGalleryOpen(RootPath.DOWNLOADS);
+};
+
+testcase.imageOpenGalleryOpenDrive = function() {
+  imageOpenGalleryOpen(RootPath.DRIVE);
 };
 
 })();

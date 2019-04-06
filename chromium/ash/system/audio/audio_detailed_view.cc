@@ -57,8 +57,8 @@ using chromeos::CrasAudioHandler;
 namespace ash {
 namespace tray {
 
-AudioDetailedView::AudioDetailedView(SystemTrayItem* owner)
-    : TrayDetailsView(owner) {
+AudioDetailedView::AudioDetailedView(DetailedViewDelegate* delegate)
+    : TrayDetailedView(delegate) {
   CreateItems();
   Update();
 }
@@ -139,8 +139,7 @@ void AudioDetailedView::UpdateScrollableList() {
   }
 
   if (has_output_devices) {
-    scroll_content()->AddChildView(
-        TrayPopupUtils::CreateListSubHeaderSeparator());
+    scroll_content()->AddChildView(CreateListSubHeaderSeparator());
   }
 
   // Add audio input devices.

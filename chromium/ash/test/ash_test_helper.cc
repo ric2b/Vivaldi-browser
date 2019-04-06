@@ -9,32 +9,42 @@
 #include <set>
 #include <utility>
 
+#include "ash/app_list/test/app_list_test_helper.h"
 #include "ash/display/display_configuration_controller_test_api.h"
+#include "ash/display/screen_ash.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
+#include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
 #include "ash/shell_init_params.h"
 #include "ash/shell_port.h"
 #include "ash/shell_port_classic.h"
 #include "ash/shell_port_mash.h"
-#include "ash/shell_port_mus.h"
 #include "ash/system/screen_layout_observer.h"
 #include "ash/test/ash_test_environment.h"
 #include "ash/test/ash_test_views_delegate.h"
 #include "ash/test_shell_delegate.h"
 #include "ash/window_manager.h"
 #include "ash/window_manager_service.h"
+#include "ash/ws/window_service_owner.h"
+#include "base/guid.h"
 #include "base/run_loop.h"
 #include "base/strings/string_split.h"
-#include "base/test/sequenced_worker_pool_owner.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/power_policy_controller.h"
 #include "chromeos/network/network_handler.h"
 #include "components/prefs/testing_pref_service.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
-#include "services/ui/public/cpp/input_devices/input_device_client.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "services/service_manager/public/cpp/identity.h"
+#include "services/service_manager/public/cpp/service.h"
+#include "services/ui/ws2/window_service.h"
 #include "ui/aura/env.h"
 #include "ui/aura/input_state_lookup.h"
 #include "ui/aura/mus/window_tree_client.h"
@@ -45,6 +55,7 @@
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/platform_window_defaults.h"
 #include "ui/base/test/material_design_controller_test_api.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/test/context_factories_for_test.h"
@@ -53,27 +64,109 @@
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
-#include "ui/message_center/message_center.h"
 #include "ui/wm/core/capture_controller.h"
 #include "ui/wm/core/cursor_manager.h"
 #include "ui/wm/core/wm_state.h"
 
 namespace ash {
 
+// TODO(sky): refactor and move to services.
+class TestConnector : public service_manager::mojom::Connector {
+ public:
+  TestConnector() : test_user_id_(base::GenerateGUID()) {}
+
+  ~TestConnector() override = default;
+
+  service_manager::mojom::ServiceRequest GenerateServiceRequest() {
+    return mojo::MakeRequest(&service_ptr_);
+  }
+
+  void Start() {
+    service_ptr_->OnStart(
+        service_manager::Identity("TestConnectorFactory", test_user_id_),
+        base::BindOnce(&TestConnector::OnStartCallback,
+                       base::Unretained(this)));
+  }
+
+ private:
+  void OnStartCallback(
+      service_manager::mojom::ConnectorRequest request,
+      service_manager::mojom::ServiceControlAssociatedRequest control_request) {
+  }
+
+  // mojom::Connector implementation:
+  void BindInterface(const service_manager::Identity& target,
+                     const std::string& interface_name,
+                     mojo::ScopedMessagePipeHandle interface_pipe,
+                     BindInterfaceCallback callback) override {
+    service_manager::mojom::ServicePtr* service_ptr = &service_ptr_;
+    // If you hit the DCHECK below, you need to add a call to AddService() in
+    // your test for the reported service.
+    DCHECK(service_ptr) << "Binding interface for unregistered service "
+                        << target.name();
+    (*service_ptr)
+        ->OnBindInterface(service_manager::BindSourceInfo(
+                              service_manager::Identity("TestConnectorFactory",
+                                                        test_user_id_),
+                              service_manager::CapabilitySet()),
+                          interface_name, std::move(interface_pipe),
+                          base::DoNothing());
+    std::move(callback).Run(service_manager::mojom::ConnectResult::SUCCEEDED,
+                            service_manager::Identity());
+  }
+
+  void StartService(const service_manager::Identity& target,
+                    StartServiceCallback callback) override {
+    NOTREACHED();
+  }
+
+  void QueryService(const service_manager::Identity& target,
+                    QueryServiceCallback callback) override {
+    NOTREACHED();
+  }
+
+  void StartServiceWithProcess(
+      const service_manager::Identity& identity,
+      mojo::ScopedMessagePipeHandle service,
+      service_manager::mojom::PIDReceiverRequest pid_receiver_request,
+      StartServiceWithProcessCallback callback) override {
+    NOTREACHED();
+  }
+
+  void Clone(service_manager::mojom::ConnectorRequest request) override {
+    bindings_.AddBinding(this, std::move(request));
+  }
+
+  void FilterInterfaces(
+      const std::string& spec,
+      const service_manager::Identity& source,
+      service_manager::mojom::InterfaceProviderRequest source_request,
+      service_manager::mojom::InterfaceProviderPtr target) override {
+    NOTREACHED();
+  }
+
+  const std::string test_user_id_;
+  mojo::BindingSet<service_manager::mojom::Connector> bindings_;
+  service_manager::mojom::ServicePtr service_ptr_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestConnector);
+};
+
 // static
 Config AshTestHelper::config_ = Config::CLASSIC;
 
 AshTestHelper::AshTestHelper(AshTestEnvironment* ash_test_environment)
     : ash_test_environment_(ash_test_environment),
-      test_shell_delegate_(nullptr),
-      dbus_thread_manager_initialized_(false),
-      bluez_dbus_manager_initialized_(false),
       command_line_(std::make_unique<base::test::ScopedCommandLine>()) {
   ui::test::EnableTestConfigForPlatformWindows();
   aura::test::InitializeAuraEventGeneratorDelegate();
 }
 
-AshTestHelper::~AshTestHelper() = default;
+AshTestHelper::~AshTestHelper() {
+  // Ensure the next test starts with a null display::Screen. Done here because
+  // some tests use Screen after TearDown().
+  ScreenAsh::DeleteScreenForShutdown();
+}
 
 void AshTestHelper::SetUp(bool start_session, bool provide_local_state) {
   // TODO(jamescook): Can we do this without changing command line?
@@ -97,11 +190,6 @@ void AshTestHelper::SetUp(bool start_session, bool provide_local_state) {
         switches::kAshDisableSmoothScreenRotation);
   }
 
-  // Allow for other code to have created InputDeviceManager (such as the
-  // test-suite).
-  if (config_ == Config::MUS && !ui::InputDeviceManager::HasInstance())
-    input_device_client_ = std::make_unique<ui::InputDeviceClient>();
-
   display::ResetDisplayIdForTest();
   if (config_ != Config::CLASSIC)
     aura::test::EnvTestHelper().SetAlwaysUseLastMouseLocation(true);
@@ -115,17 +203,6 @@ void AshTestHelper::SetUp(bool start_session, bool provide_local_state) {
       ui::ScopedAnimationDurationScaleMode::ZERO_DURATION));
   ui::InitializeInputMethodForTesting();
 
-  if (config_ == Config::MUS && !::switches::IsMusHostingViz()) {
-    ui::ContextFactory* context_factory = nullptr;
-    ui::ContextFactoryPrivate* context_factory_private = nullptr;
-    ui::InitializeContextFactoryForTests(false /* enable_pixel_output */,
-                                         &context_factory,
-                                         &context_factory_private);
-    auto* env = aura::Env::GetInstance();
-    env->set_context_factory(context_factory);
-    env->set_context_factory_private(context_factory_private);
-  }
-
   // Creates Shell and hook with Desktop.
   if (!test_shell_delegate_)
     test_shell_delegate_ = new TestShellDelegate;
@@ -133,13 +210,9 @@ void AshTestHelper::SetUp(bool start_session, bool provide_local_state) {
   if (config_ == Config::CLASSIC) {
     // All of this initialization is done in WindowManagerService for mash.
 
-    // Creates MessageCenter since g_browser_process is not created in
-    // AshTestBase tests.
-    message_center::MessageCenter::Initialize();
-
     if (!chromeos::DBusThreadManager::IsInitialized()) {
       chromeos::DBusThreadManager::Initialize(
-          chromeos::DBusThreadManager::PROCESS_ASH);
+          chromeos::DBusThreadManager::kShared);
       dbus_thread_manager_initialized_ = true;
     }
 
@@ -148,6 +221,12 @@ void AshTestHelper::SetUp(bool start_session, bool provide_local_state) {
           chromeos::DBusThreadManager::Get()->GetSystemBus(),
           chromeos::DBusThreadManager::Get()->IsUsingFakes());
       bluez_dbus_manager_initialized_ = true;
+    }
+
+    if (!chromeos::PowerPolicyController::IsInitialized()) {
+      chromeos::PowerPolicyController::Initialize(
+          chromeos::DBusThreadManager::Get()->GetPowerManagerClient());
+      power_policy_controller_initialized_ = true;
     }
 
     // Create CrasAudioHandler for testing since g_browser_process is not
@@ -183,7 +262,7 @@ void AshTestHelper::SetUp(bool start_session, bool provide_local_state) {
 
   if (provide_local_state) {
     auto pref_service = std::make_unique<TestingPrefServiceSimple>();
-    Shell::RegisterLocalStatePrefs(pref_service->registry());
+    Shell::RegisterLocalStatePrefs(pref_service->registry(), true);
     Shell::Get()->OnLocalStatePrefServiceInitialized(std::move(pref_service));
   }
 
@@ -205,9 +284,16 @@ void AshTestHelper::SetUp(bool start_session, bool provide_local_state) {
   DisplayConfigurationControllerTestApi(
       shell->display_configuration_controller())
       .DisableDisplayAnimator();
+
+  app_list_test_helper_ = std::make_unique<AppListTestHelper>();
+
+  if (config_ == Config::CLASSIC)
+    CreateWindowService();
 }
 
 void AshTestHelper::TearDown() {
+  app_list_test_helper_.reset();
+
   window_manager_service_.reset();
 
   // WindowManger owns the Shell in mash.
@@ -216,15 +302,17 @@ void AshTestHelper::TearDown() {
 
   // Suspend the tear down until all resources are returned via
   // CompositorFrameSinkClient::ReclaimResources()
-  RunAllPendingInMessageLoop();
+  base::RunLoop().RunUntilIdle();
   ash_test_environment_->TearDown();
 
   if (config_ == Config::CLASSIC) {
-    // Remove global message center state.
-    message_center::MessageCenter::Shutdown();
-
     chromeos::SystemSaltGetter::Shutdown();
     chromeos::CrasAudioHandler::Shutdown();
+  }
+
+  if (power_policy_controller_initialized_) {
+    chromeos::PowerPolicyController::Shutdown();
+    power_policy_controller_initialized_ = false;
   }
 
   if (bluez_dbus_manager_initialized_) {
@@ -238,15 +326,14 @@ void AshTestHelper::TearDown() {
     dbus_thread_manager_initialized_ = false;
   }
 
-  ui::TerminateContextFactoryForTests();
+  if (config_ == Config::CLASSIC)
+    ui::TerminateContextFactoryForTests();
 
   ui::ShutdownInputMethodForTesting();
   zero_duration_mode_.reset();
 
   test_views_delegate_.reset();
   wm_state_.reset();
-
-  input_device_client_.reset();
 
   command_line_.reset();
 
@@ -257,19 +344,8 @@ void AshTestHelper::TearDown() {
   CHECK(config_ != Config::CLASSIC || !::wm::CaptureController::Get());
 }
 
-void AshTestHelper::RunAllPendingInMessageLoop() {
-  base::RunLoop run_loop;
-  run_loop.RunUntilIdle();
-}
-
-void AshTestHelper::NotifyClientAboutAcceleratedWidgets() {
-  if (config_ == Config::CLASSIC)
-    return;
-  if (::switches::IsMusHostingViz())
-    return;
-  Shell* shell = Shell::Get();
-  window_tree_client_setup_.NotifyClientAboutAcceleratedWidgets(
-      shell->display_manager());
+PrefService* AshTestHelper::GetLocalStatePrefService() {
+  return Shell::Get()->local_state_.get();
 }
 
 aura::Window* AshTestHelper::CurrentContext() {
@@ -284,14 +360,27 @@ display::Display AshTestHelper::GetSecondaryDisplay() {
   return Shell::Get()->display_manager()->GetSecondaryDisplay();
 }
 
+void AshTestHelper::CreateWindowService() {
+  test_connector_ = std::make_unique<TestConnector>();
+  Shell::Get()->window_service_owner()->BindWindowService(
+      test_connector_->GenerateServiceRequest());
+  test_connector_->Start();
+  // WindowService::OnStart() is not immediately called (it happens async over
+  // mojo). If this becomes a problem we could run the MessageLoop here.
+  // Surprisingly running the MessageLooop results in some test failures. These
+  // failures seem to be because spinning the messageloop causes some timers to
+  // fire (perhaps animations too) the results in a slightly different Shell
+  // state.
+}
+
 void AshTestHelper::CreateMashWindowManager() {
-  CHECK(config_ != Config::CLASSIC);
+  CHECK_EQ(config_, Config::MASH_DEPRECATED);
   const bool show_primary_root_on_connect = false;
   window_manager_service_ =
       std::make_unique<WindowManagerService>(show_primary_root_on_connect);
 
   window_manager_service_->window_manager_.reset(
-      new WindowManager(nullptr, config_, show_primary_root_on_connect));
+      new WindowManager(nullptr, show_primary_root_on_connect));
   window_manager_service_->window_manager()->shell_delegate_.reset(
       test_shell_delegate_);
 
@@ -313,7 +402,6 @@ void AshTestHelper::CreateMashWindowManager() {
   window_tree_client_private_ =
       std::make_unique<aura::WindowTreeClientPrivate>(window_tree_client);
   window_tree_client_private_->CallOnConnect();
-  NotifyClientAboutAcceleratedWidgets();
 }
 
 void AshTestHelper::CreateShell() {

@@ -6,6 +6,7 @@
 #define NET_REPORTING_REPORTING_TEST_UTIL_H_
 
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -15,12 +16,13 @@
 #include "net/reporting/reporting_context.h"
 #include "net/reporting/reporting_delegate.h"
 #include "net/reporting/reporting_uploader.h"
+#include "net/test/test_with_scoped_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 class GURL;
 
 namespace base {
-class MockTimer;
+class MockOneShotTimer;
 class SimpleTestClock;
 class SimpleTestTickClock;
 class Value;
@@ -35,6 +37,7 @@ namespace net {
 class ReportingCache;
 struct ReportingClient;
 class ReportingGarbageCollector;
+class TestURLRequestContext;
 
 // Finds a particular client (by origin and endpoint) in the cache and returns
 // it (or nullptr if not found).
@@ -50,6 +53,7 @@ class TestReportingUploader : public ReportingUploader {
    public:
     virtual ~PendingUpload();
 
+    virtual const url::Origin& report_origin() const = 0;
     virtual const GURL& url() const = 0;
     virtual const std::string& json() const = 0;
     virtual std::unique_ptr<base::Value> GetValue() const = 0;
@@ -69,11 +73,13 @@ class TestReportingUploader : public ReportingUploader {
 
   // ReportingUploader implementation:
 
-  void StartUpload(const GURL& url,
+  void StartUpload(const url::Origin& report_origin,
+                   const GURL& url,
                    const std::string& json,
+                   int max_depth,
                    UploadCallback callback) override;
 
-  bool RequestIsUpload(const URLRequest& request) override;
+  int GetUploadDepth(const URLRequest& request) override;
 
  private:
   std::vector<std::unique_ptr<PendingUpload>> pending_uploads_;
@@ -81,6 +87,9 @@ class TestReportingUploader : public ReportingUploader {
   DISALLOW_COPY_AND_ASSIGN(TestReportingUploader);
 };
 
+// Allows all permissions unless set_disallow_report_uploads is called; uses
+// the real ReportingDelegate for JSON parsing to exercise depth and size
+// limits.
 class TestReportingDelegate : public ReportingDelegate {
  public:
   TestReportingDelegate();
@@ -89,9 +98,22 @@ class TestReportingDelegate : public ReportingDelegate {
 
   ~TestReportingDelegate() override;
 
+  void set_disallow_report_uploads(bool disallow_report_uploads) {
+    disallow_report_uploads_ = disallow_report_uploads;
+  }
+
+  void set_pause_permissions_check(bool pause_permissions_check) {
+    pause_permissions_check_ = pause_permissions_check;
+  }
+
   bool CanQueueReport(const url::Origin& origin) const override;
 
-  bool CanSendReport(const url::Origin& origin) const override;
+  void CanSendReports(std::set<url::Origin> origins,
+                      base::OnceCallback<void(std::set<url::Origin>)>
+                          result_callback) const override;
+
+  bool PermissionsCheckPaused() const;
+  void ResumePermissionsCheck();
 
   bool CanSetClient(const url::Origin& origin,
                     const GURL& endpoint) const override;
@@ -99,7 +121,20 @@ class TestReportingDelegate : public ReportingDelegate {
   bool CanUseClient(const url::Origin& origin,
                     const GURL& endpoint) const override;
 
+  void ParseJson(const std::string& unsafe_json,
+                 const JsonSuccessCallback& success_callback,
+                 const JsonFailureCallback& failure_callback) const override;
+
  private:
+  std::unique_ptr<TestURLRequestContext> test_request_context_;
+  std::unique_ptr<ReportingDelegate> real_delegate_;
+  bool disallow_report_uploads_ = false;
+  bool pause_permissions_check_ = false;
+
+  mutable std::set<url::Origin> saved_origins_;
+  mutable base::OnceCallback<void(std::set<url::Origin>)>
+      permissions_check_callback_;
+
   DISALLOW_COPY_AND_ASSIGN(TestReportingDelegate);
 };
 
@@ -108,12 +143,12 @@ class TestReportingDelegate : public ReportingDelegate {
 class TestReportingContext : public ReportingContext {
  public:
   TestReportingContext(base::Clock* clock,
-                       base::TickClock* tick_clock,
+                       const base::TickClock* tick_clock,
                        const ReportingPolicy& policy);
   ~TestReportingContext();
 
-  base::MockTimer* test_delivery_timer() { return delivery_timer_; }
-  base::MockTimer* test_garbage_collection_timer() {
+  base::MockOneShotTimer* test_delivery_timer() { return delivery_timer_; }
+  base::MockOneShotTimer* test_garbage_collection_timer() {
     return garbage_collection_timer_;
   }
   TestReportingUploader* test_uploader() {
@@ -131,15 +166,15 @@ class TestReportingContext : public ReportingContext {
   // Owned by the DeliveryAgent and GarbageCollector, respectively, but
   // referenced here to preserve type:
 
-  base::MockTimer* delivery_timer_;
-  base::MockTimer* garbage_collection_timer_;
+  base::MockOneShotTimer* delivery_timer_;
+  base::MockOneShotTimer* garbage_collection_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(TestReportingContext);
 };
 
 // A unit test base class that provides a TestReportingContext and shorthand
 // getters.
-class ReportingTestBase : public ::testing::Test {
+class ReportingTestBase : public TestWithScopedTaskEnvironment {
  protected:
   ReportingTestBase();
   ~ReportingTestBase() override;
@@ -158,8 +193,10 @@ class ReportingTestBase : public ::testing::Test {
 
   base::SimpleTestClock* clock() { return &clock_; }
   base::SimpleTestTickClock* tick_clock() { return &tick_clock_; }
-  base::MockTimer* delivery_timer() { return context_->test_delivery_timer(); }
-  base::MockTimer* garbage_collection_timer() {
+  base::MockOneShotTimer* delivery_timer() {
+    return context_->test_delivery_timer();
+  }
+  base::MockOneShotTimer* garbage_collection_timer() {
     return context_->test_garbage_collection_timer();
   }
   TestReportingUploader* uploader() { return context_->test_uploader(); }

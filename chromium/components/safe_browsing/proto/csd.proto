@@ -42,6 +42,23 @@ message ChromeUserPopulation {
   // defined by finch trial name and group name. Trial name and group name are
   // concatenated with separator "|", e.g. "PingOnlyTrial|DefaultGroup".
   repeated string finch_active_groups = 4;
+
+  // Whether and how the current Chrome profile is being managed.
+  enum ProfileManagementStatus {
+    // Value not set.
+    UNKNOWN = 0;
+
+    // Profile management status is unavailable.
+    UNAVAILABLE = 1;
+
+    // The profile is not managed.
+    NOT_MANAGED = 2;
+
+    // Chrome is being managed by enterprise policies.
+    ENTERPRISE_MANAGED = 3;
+  }
+  optional ProfileManagementStatus profile_management_status = 5
+      [default = UNKNOWN];
 }
 
 message ClientPhishingRequest {
@@ -243,6 +260,26 @@ message LoginReputationClientRequest {
       GSUITE = 2;
     }
     optional SyncAccountType sync_account_type = 4;
+
+    // Type of password being reused.
+    enum ReusedPasswordType {
+      REUSED_PASSWORD_TYPE_UNKNOWN = 0;
+
+      // Password saved in Chrome's password manager.
+      SAVED_PASSWORD = 1;
+
+      // Password used in Chrome sign-in.
+      SIGN_IN_PASSWORD = 2;
+
+      // Other Gaia password used in Chrome's content area other than Chrome's
+      // sign-in password.
+      OTHER_GAIA_PASSWORD = 3;
+
+      // Non-Gaia enterprise password captured from enterprise login page.
+      ENTERPRISE_PASSWORD = 4;
+    }
+    optional ReusedPasswordType reused_password_type = 5
+        [default = REUSED_PASSWORD_TYPE_UNKNOWN];
   }
 
   optional PasswordReuseEvent password_reuse_event = 4;
@@ -255,6 +292,9 @@ message LoginReputationClientRequest {
 
   // If user clicked through safe browsing interstitial on this page.
   optional bool clicked_through_interstitial = 7;
+
+  // The MIME type of the page, e.g. "application/pdf".
+  optional string content_type = 8;
 }
 
 // The message is used for client response for login reputation requests.
@@ -439,6 +479,13 @@ message ClientDownloadRequest {
     // A file we don't support, but we've decided to sample and send
     // a light-ping.
     SAMPLED_UNSUPPORTED_FILE = 10;
+    // .rar file containing one of the other executable types.
+    RAR_COMPRESSED_EXECUTABLE = 11;
+    // .rar file containing another archive.
+    RAR_COMPRESSED_ARCHIVE = 12;
+    // .rar file that Chrome failed to unpack to the point of finding
+    // executables or archives.
+    INVALID_RAR = 13;
   }
   optional DownloadType download_type = 10 [default = WIN_EXECUTABLE];
 
@@ -551,7 +598,16 @@ message ClientDownloadRequest {
   // https://opensource.apple.com/source/xnu/xnu-2782.1.97/bsd/sys/codesign.h
   optional bytes udif_code_signature = 40;
 
-  // next available tag number: 51;
+  // Mac-only. A detached code signature contains the DER-encoded PKCS7 data
+  // of a codesigned artifact. Detached signatures are used for signing files
+  // that are not Mach-O and thus cannot have a LC_CODE_SIGNATURE load command.
+  message DetachedCodeSignature {
+    required string file_name = 1;
+    required bytes contents = 2;
+  }
+  repeated DetachedCodeSignature detached_code_signature = 59;
+
+  // next available tag number: 60;
 }
 
 message ReferrerChainOptions {
@@ -649,7 +705,12 @@ message ReferrerChainEntry {
   // How this navigation is initiated.
   optional NavigationInitiation navigation_initiation = 10;
 
-  // next available tag number: 11.
+  // Whether we think this entry may have been launched by an external
+  // application. This will have no false negatives, but some false positives
+  // are possible.
+  optional bool maybe_launched_by_external_application = 11;
+
+  // next available tag number: 12.
 }  // End of ReferrerChainEntry
 
 message ClientDownloadResponse {
@@ -957,7 +1018,7 @@ message DownloadMetadata {
 // A Detailed Safebrowsing Report from clients. Chrome safebrowsing reports are
 // only sent by Chrome users who have opted into extended Safe Browsing.
 // This proto is replacing ClientMalwareReportRequest.
-// Next tag: 19
+// Next tag: 24
 message ClientSafeBrowsingReportRequest {
   // Note: A lot of the "optional" fields would make sense to be
   // "required" instead.  However, having them as optional allows the
@@ -977,6 +1038,7 @@ message ClientSafeBrowsingReportRequest {
     URL_PASSWORD_PROTECTION_PHISHING = 12;
     DANGEROUS_DOWNLOAD_OPENED = 13;
     AD_SAMPLE = 14;
+    URL_SUSPICIOUS = 15;
   }
 
   message HTTPHeader {
@@ -1091,6 +1153,12 @@ message ClientSafeBrowsingReportRequest {
   // False means user directly executed this download via download shelf or
   // other download UIs.
   optional bool show_download_in_folder = 18;
+
+  // If we can find the complete referrer chain, this field will contains URLs
+  // transitions from landing referrer to event in reverse chronological
+  // order, i.e. event url comes first in this list, and landing referrer
+  // comes last.
+  repeated ReferrerChainEntry referrer_chain = 23;
 }
 
 // An HTML Element on the page (eg: iframe, div, script, etc).

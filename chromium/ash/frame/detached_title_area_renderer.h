@@ -15,12 +15,11 @@
 #include "ui/views/widget/widget_delegate.h"
 
 namespace aura {
+class PropertyConverter;
 class Window;
 }
 
 namespace ash {
-
-class WindowManager;
 
 // This class is used to support immersive fullscreen mode.
 //
@@ -77,8 +76,8 @@ class DetachedTitleAreaRendererForClient : public views::WidgetDelegate {
  public:
   DetachedTitleAreaRendererForClient(
       aura::Window* parent,
-      std::map<std::string, std::vector<uint8_t>>* properties,
-      WindowManager* window_manager);
+      aura::PropertyConverter* property_converter,
+      std::map<std::string, std::vector<uint8_t>>* properties);
 
   static DetachedTitleAreaRendererForClient* ForWindow(aura::Window* window);
 
@@ -90,6 +89,7 @@ class DetachedTitleAreaRendererForClient : public views::WidgetDelegate {
   views::Widget* widget() { return widget_; }
 
   // views::WidgetDelegate:
+  bool CanActivate() const override;
   views::Widget* GetWidget() override;
   const views::Widget* GetWidget() const override;
   void DeleteDelegate() override;

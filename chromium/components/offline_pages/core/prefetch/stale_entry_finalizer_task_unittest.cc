@@ -9,7 +9,7 @@
 
 #include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/offline_pages/core/prefetch/mock_prefetch_item_generator.h"
@@ -83,22 +83,17 @@ TEST_F(StaleEntryFinalizerTaskTest, StoreFailure) {
   store_util()->SimulateInitializationError();
 
   // Execute the expiration task.
-  ExpectTaskCompletes(stale_finalizer_task_.get());
-  stale_finalizer_task_->Run();
-  RunUntilIdle();
+  RunTask(stale_finalizer_task_.get());
 }
 
 // Tests that the task works correctly with an empty database.
 TEST_F(StaleEntryFinalizerTaskTest, EmptyRun) {
-  std::set<PrefetchItem> no_items;
-  EXPECT_EQ(0U, store_util()->GetAllItems(&no_items));
+  EXPECT_EQ(std::set<PrefetchItem>(), store_util()->GetAllItems());
 
   // Execute the expiration task.
-  ExpectTaskCompletes(stale_finalizer_task_.get());
-  stale_finalizer_task_->Run();
-  RunUntilIdle();
+  RunTask(stale_finalizer_task_.get());
   EXPECT_EQ(Result::NO_MORE_WORK, stale_finalizer_task_->final_status());
-  EXPECT_EQ(0U, store_util()->GetAllItems(&no_items));
+  EXPECT_EQ(std::set<PrefetchItem>(), store_util()->GetAllItems());
 }
 
 // Verifies that expired and non-expired items from all expirable states are
@@ -137,14 +132,10 @@ TEST_F(StaleEntryFinalizerTaskTest, HandlesFreshnessTimesCorrectly) {
       b1_item1_fresh, b1_item2_stale, b2_item1_fresh, b2_item2_stale,
       b2_item3_fresh, b2_item4_stale, b2_item5_fresh, b2_item6_stale,
       b3_item1_fresh, b3_item2_stale, b3_item3_fresh, b3_item4_stale};
-  std::set<PrefetchItem> all_inserted_items;
-  EXPECT_EQ(12U, store_util()->GetAllItems(&all_inserted_items));
-  EXPECT_EQ(initial_items, all_inserted_items);
+  EXPECT_EQ(initial_items, store_util()->GetAllItems());
 
   // Execute the expiration task.
-  ExpectTaskCompletes(stale_finalizer_task_.get());
-  stale_finalizer_task_->Run();
-  RunUntilIdle();
+  RunTask(stale_finalizer_task_.get());
   EXPECT_EQ(Result::MORE_WORK_NEEDED, stale_finalizer_task_->final_status());
 
   // Create the expected finished version of each stale item.
@@ -173,10 +164,7 @@ TEST_F(StaleEntryFinalizerTaskTest, HandlesFreshnessTimesCorrectly) {
       b1_item1_fresh, b1_item2_finished, b2_item1_fresh, b2_item2_finished,
       b2_item3_fresh, b2_item4_finished, b2_item5_fresh, b2_item6_finished,
       b3_item1_fresh, b3_item2_finished, b3_item3_fresh, b3_item4_finished};
-  EXPECT_EQ(12U, expected_final_items.size());
-  std::set<PrefetchItem> all_items_post_expiration;
-  EXPECT_EQ(12U, store_util()->GetAllItems(&all_items_post_expiration));
-  EXPECT_EQ(expected_final_items, all_items_post_expiration);
+  EXPECT_EQ(expected_final_items, store_util()->GetAllItems());
 }
 
 // Checks that items from all states are handled properly by the task when all
@@ -186,28 +174,17 @@ TEST_F(StaleEntryFinalizerTaskTest, HandlesStalesInAllStatesCorrectly) {
   // We want a longer time than the pipeline normally takes, but shorter
   // than the point at which we report items as too old.
   const int many_hours = -6 * 24;
-  CreateAndInsertItem(PrefetchItemState::NEW_REQUEST, many_hours);
-  CreateAndInsertItem(PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE, many_hours);
-  CreateAndInsertItem(PrefetchItemState::AWAITING_GCM, many_hours);
-  CreateAndInsertItem(PrefetchItemState::RECEIVED_GCM, many_hours);
-  CreateAndInsertItem(PrefetchItemState::SENT_GET_OPERATION, many_hours);
-  CreateAndInsertItem(PrefetchItemState::RECEIVED_BUNDLE, many_hours);
-  CreateAndInsertItem(PrefetchItemState::DOWNLOADING, many_hours);
-  CreateAndInsertItem(PrefetchItemState::DOWNLOADED, many_hours);
-  CreateAndInsertItem(PrefetchItemState::IMPORTING, many_hours);
-  CreateAndInsertItem(PrefetchItemState::FINISHED, many_hours);
-  CreateAndInsertItem(PrefetchItemState::ZOMBIE, many_hours);
+  for (PrefetchItemState state : kOrderedPrefetchItemStates)
+    CreateAndInsertItem(state, many_hours);
   EXPECT_EQ(11, store_util()->CountPrefetchItems());
 
   // Execute the expiration task.
-  ExpectTaskCompletes(stale_finalizer_task_.get());
-  stale_finalizer_task_->Run();
-  RunUntilIdle();
+  RunTask(stale_finalizer_task_.get());
   EXPECT_EQ(Result::MORE_WORK_NEEDED, stale_finalizer_task_->final_status());
 
   // Checks item counts for states expected to still exist.
-  std::set<PrefetchItem> post_items;
-  EXPECT_EQ(11U, store_util()->GetAllItems(&post_items));
+  std::set<PrefetchItem> post_items = store_util()->GetAllItems();
+  EXPECT_EQ(11U, post_items.size());
   EXPECT_EQ(
       1U,
       Filter(post_items, PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE).size());
@@ -218,28 +195,22 @@ TEST_F(StaleEntryFinalizerTaskTest, HandlesStalesInAllStatesCorrectly) {
   EXPECT_EQ(1U, Filter(post_items, PrefetchItemState::ZOMBIE).size());
 }
 
+// Items in states AWAITING_GCM and ZOMBIE should cause the task to finish with
+// a NO_MORE_WORK result.
 TEST_F(StaleEntryFinalizerTaskTest, NoWorkInQueue) {
   CreateAndInsertItem(PrefetchItemState::AWAITING_GCM, 0);
   CreateAndInsertItem(PrefetchItemState::ZOMBIE, 0);
 
-  ExpectTaskCompletes(stale_finalizer_task_.get());
-  stale_finalizer_task_->Run();
-  RunUntilIdle();
+  RunTask(stale_finalizer_task_.get());
   EXPECT_EQ(Result::NO_MORE_WORK, stale_finalizer_task_->final_status());
   EXPECT_EQ(0, dispatcher()->task_schedule_count);
 }
 
+// Items in any state but AWAITING_GCM and ZOMBIE should cause the task to
+// finish with a MORE_WORK_NEEDED result.
 TEST_F(StaleEntryFinalizerTaskTest, WorkInQueue) {
-  std::vector<PrefetchItemState> work_states = {
-      PrefetchItemState::NEW_REQUEST,
-      PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE,
-      PrefetchItemState::RECEIVED_GCM,
-      PrefetchItemState::SENT_GET_OPERATION,
-      PrefetchItemState::RECEIVED_BUNDLE,
-      PrefetchItemState::DOWNLOADING,
-      PrefetchItemState::DOWNLOADED,
-      PrefetchItemState::IMPORTING,
-      PrefetchItemState::FINISHED};
+  std::vector<PrefetchItemState> work_states = GetAllStatesExcept(
+      {PrefetchItemState::AWAITING_GCM, PrefetchItemState::ZOMBIE});
 
   for (auto& state : work_states) {
     store_util()->DeleteStore();
@@ -251,11 +222,8 @@ TEST_F(StaleEntryFinalizerTaskTest, WorkInQueue) {
         << "Failed inserting item with state " << static_cast<int>(state);
 
     StaleEntryFinalizerTask task(dispatcher(), store());
-    ExpectTaskCompletes(&task);
-    task.Run();
-    RunUntilIdle();
+    RunTask(&task);
     EXPECT_EQ(Result::MORE_WORK_NEEDED, task.final_status());
-
     EXPECT_EQ(1, dispatcher()->task_schedule_count);
   }
 }
@@ -300,14 +268,10 @@ TEST_F(StaleEntryFinalizerTaskTest, HandlesClockSetBackwardsCorrectly) {
       b2_item3_recent, b2_item4_future, b2_item5_recent, b2_item6_future,
       b3_item1_recent, b3_item2_future, b3_item3_recent, b3_item4_future,
       b4_item1_future};
-  std::set<PrefetchItem> all_inserted_items;
-  EXPECT_EQ(13U, store_util()->GetAllItems(&all_inserted_items));
-  EXPECT_EQ(initial_items, all_inserted_items);
+  EXPECT_EQ(initial_items, store_util()->GetAllItems());
 
   // Execute the expiration task.
-  ExpectTaskCompletes(stale_finalizer_task_.get());
-  stale_finalizer_task_->Run();
-  RunUntilIdle();
+  RunTask(stale_finalizer_task_.get());
   EXPECT_EQ(Result::MORE_WORK_NEEDED, stale_finalizer_task_->final_status());
 
   // Create the expected finished version of each stale item.
@@ -346,10 +310,7 @@ TEST_F(StaleEntryFinalizerTaskTest, HandlesClockSetBackwardsCorrectly) {
       b2_item3_recent, b2_item4_finished, b2_item5_recent, b2_item6_finished,
       b3_item1_recent, b3_item2_finished, b3_item3_recent, b3_item4_finished,
       b4_item1_future};
-  EXPECT_EQ(13U, expected_final_items.size());
-  std::set<PrefetchItem> all_items_post_expiration;
-  EXPECT_EQ(13U, store_util()->GetAllItems(&all_items_post_expiration));
-  EXPECT_EQ(expected_final_items, all_items_post_expiration);
+  EXPECT_EQ(expected_final_items, store_util()->GetAllItems());
 }
 
 // Checks that items from all states are handled properly by the task when all
@@ -358,28 +319,17 @@ TEST_F(StaleEntryFinalizerTaskTest,
        HandleClockChangeBackwardsInAllStatesCorrectly) {
   // Insert "future" items for every state.
   const int many_hours = 7 * 24;
-  CreateAndInsertItem(PrefetchItemState::NEW_REQUEST, many_hours);
-  CreateAndInsertItem(PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE, many_hours);
-  CreateAndInsertItem(PrefetchItemState::AWAITING_GCM, many_hours);
-  CreateAndInsertItem(PrefetchItemState::RECEIVED_GCM, many_hours);
-  CreateAndInsertItem(PrefetchItemState::SENT_GET_OPERATION, many_hours);
-  CreateAndInsertItem(PrefetchItemState::RECEIVED_BUNDLE, many_hours);
-  CreateAndInsertItem(PrefetchItemState::DOWNLOADING, many_hours);
-  CreateAndInsertItem(PrefetchItemState::DOWNLOADED, many_hours);
-  CreateAndInsertItem(PrefetchItemState::IMPORTING, many_hours);
-  CreateAndInsertItem(PrefetchItemState::FINISHED, many_hours);
-  CreateAndInsertItem(PrefetchItemState::ZOMBIE, many_hours);
+  for (PrefetchItemState state : kOrderedPrefetchItemStates)
+    CreateAndInsertItem(state, many_hours);
   EXPECT_EQ(11, store_util()->CountPrefetchItems());
 
   // Execute the expiration task.
-  ExpectTaskCompletes(stale_finalizer_task_.get());
-  stale_finalizer_task_->Run();
-  RunUntilIdle();
+  RunTask(stale_finalizer_task_.get());
   EXPECT_EQ(Result::MORE_WORK_NEEDED, stale_finalizer_task_->final_status());
 
   // Checks item counts for states expected to still exist.
-  std::set<PrefetchItem> post_items;
-  EXPECT_EQ(11U, store_util()->GetAllItems(&post_items));
+  std::set<PrefetchItem> post_items = store_util()->GetAllItems();
+  EXPECT_EQ(11U, post_items.size());
   EXPECT_EQ(
       1U,
       Filter(post_items, PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE).size());
@@ -390,8 +340,7 @@ TEST_F(StaleEntryFinalizerTaskTest,
   EXPECT_EQ(1U, Filter(post_items, PrefetchItemState::ZOMBIE).size());
 }
 
-// Verifies that expired and non-expired items from all expirable states are
-// properly handled.
+// Verifies that only stale, live items are transitioned to 'FINISHED'.
 TEST_F(StaleEntryFinalizerTaskTest, HandlesStuckItemsCorrectly) {
   base::HistogramTester histogram_tester;
   // Insert fresh and stale items for all expirable states from all buckets.
@@ -399,19 +348,27 @@ TEST_F(StaleEntryFinalizerTaskTest, HandlesStuckItemsCorrectly) {
       CreateAndInsertItem(PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE, 1);
   PrefetchItem item2_stuck =
       CreateAndInsertItem(PrefetchItemState::SENT_GENERATE_PAGE_BUNDLE, -170);
+  PrefetchItem item3_finished =
+      CreateAndInsertItem(PrefetchItemState::FINISHED, -170);
+  PrefetchItem item4_zombie =
+      CreateAndInsertItem(PrefetchItemState::ZOMBIE, -170);
 
   // Check inserted initial items.
-  std::set<PrefetchItem> initial_items = {item1_recent, item2_stuck};
-  std::set<PrefetchItem> all_inserted_items;
-  EXPECT_EQ(2U, store_util()->GetAllItems(&all_inserted_items));
-  EXPECT_EQ(initial_items, all_inserted_items);
+  std::set<PrefetchItem> initial_items = {item1_recent, item2_stuck,
+                                          item3_finished, item4_zombie};
+  EXPECT_EQ(initial_items, store_util()->GetAllItems());
 
   // Execute the expiration task.
-  ExpectTaskCompletes(stale_finalizer_task_.get());
-  stale_finalizer_task_->Run();
-  RunUntilIdle();
+  RunTask(stale_finalizer_task_.get());
   EXPECT_EQ(Result::MORE_WORK_NEEDED, stale_finalizer_task_->final_status());
 
+  // Only the stuck item is changed.
+  PrefetchItem want_stuck_item = item2_stuck;
+  want_stuck_item.state = PrefetchItemState::FINISHED;
+  want_stuck_item.error_code = PrefetchItemErrorCode::STUCK;
+  std::set<PrefetchItem> final_items{item1_recent, want_stuck_item,
+                                     item3_finished, item4_zombie};
+  EXPECT_EQ(final_items, store_util()->GetAllItems());
   // Check that the proper UMA was reported for the stale item, but not the
   // fresh item, so there should be exactly one sample.
   histogram_tester.ExpectUniqueSample(

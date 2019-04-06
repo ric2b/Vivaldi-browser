@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "ash/public/cpp/app_list/app_list_features.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -18,7 +19,6 @@
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/search_engines/template_url_service.h"
-#include "ui/app_list/app_list_features.h"
 
 namespace app_list {
 
@@ -162,7 +162,7 @@ void AnswerCardSearchProvider::DidFinishNavigation(
                       base::TimeTicks::Now() - server_request_start_time_);
 }
 
-void AnswerCardSearchProvider::DidStopLoading(
+void AnswerCardSearchProvider::OnContentsReady(
     const AnswerCardContents* source) {
   NavigationContext& context_for_loading = GetNavigationContextForLoading();
   DCHECK_EQ(source, context_for_loading.contents.get());

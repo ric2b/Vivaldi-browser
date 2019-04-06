@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/animation/animation_host.h"
 #include "cc/layers/append_quads_data.h"
@@ -61,7 +60,7 @@ TEST(PictureLayerTest, NoTilesIfEmptyBounds) {
       FakeLayerTreeFrameSink::CreateSoftware();
   FakeLayerTreeHostImpl host_impl(
       LayerTreeSettings(), &impl_task_runner_provider, &task_graph_runner);
-  host_impl.InitializeRenderer(layer_tree_frame_sink.get());
+  host_impl.InitializeFrameSink(layer_tree_frame_sink.get());
   host_impl.CreatePendingTree();
   std::unique_ptr<FakePictureLayerImpl> layer_impl =
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1);
@@ -102,7 +101,7 @@ TEST(PictureLayerTest, InvalidateRasterAfterUpdate) {
   FakeLayerTreeHostImpl host_impl(
       layer_tree_settings, &impl_task_runner_provider, &task_graph_runner);
   host_impl.SetVisible(true);
-  host_impl.InitializeRenderer(layer_tree_frame_sink.get());
+  host_impl.InitializeFrameSink(layer_tree_frame_sink.get());
   host_impl.CreatePendingTree();
   host_impl.pending_tree()->SetRootLayerForTesting(
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1));
@@ -143,7 +142,7 @@ TEST(PictureLayerTest, InvalidateRasterWithoutUpdate) {
   FakeLayerTreeHostImpl host_impl(
       layer_tree_settings, &impl_task_runner_provider, &task_graph_runner);
   host_impl.SetVisible(true);
-  host_impl.InitializeRenderer(layer_tree_frame_sink.get());
+  host_impl.InitializeFrameSink(layer_tree_frame_sink.get());
   host_impl.CreatePendingTree();
   host_impl.pending_tree()->SetRootLayerForTesting(
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1));
@@ -188,7 +187,7 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
   FakeLayerTreeHostImpl host_impl(
       layer_tree_settings, &impl_task_runner_provider, &task_graph_runner);
   host_impl.SetVisible(true);
-  EXPECT_TRUE(host_impl.InitializeRenderer(layer_tree_frame_sink.get()));
+  EXPECT_TRUE(host_impl.InitializeFrameSink(layer_tree_frame_sink.get()));
 
   host_impl.CreatePendingTree();
   host_impl.pending_tree()->SetRootLayerForTesting(
@@ -352,13 +351,13 @@ TEST(PictureLayerTest, NonMonotonicSourceFrameNumber) {
   // Do a main frame, record the picture layers.
   EXPECT_EQ(0, layer->update_count());
   layer->SetNeedsDisplay();
-  host1->Composite(base::TimeTicks::Now());
+  host1->Composite(base::TimeTicks::Now(), false);
   EXPECT_EQ(1, layer->update_count());
   EXPECT_EQ(1, host1->SourceFrameNumber());
 
   // The source frame number in |host1| is now higher than host2.
   layer->SetNeedsDisplay();
-  host1->Composite(base::TimeTicks::Now());
+  host1->Composite(base::TimeTicks::Now(), false);
   EXPECT_EQ(2, layer->update_count());
   EXPECT_EQ(2, host1->SourceFrameNumber());
 
@@ -369,7 +368,7 @@ TEST(PictureLayerTest, NonMonotonicSourceFrameNumber) {
   // Do a main frame, record the picture layers. The frame number has changed
   // non-monotonically.
   layer->SetNeedsDisplay();
-  host2->Composite(base::TimeTicks::Now());
+  host2->Composite(base::TimeTicks::Now(), false);
   EXPECT_EQ(3, layer->update_count());
   EXPECT_EQ(1, host2->SourceFrameNumber());
 
@@ -424,7 +423,7 @@ TEST(PictureLayerTest, ChangingHostsWithCollidingFrames) {
   // Do a main frame, record the picture layers.
   EXPECT_EQ(0, layer->update_count());
   layer->SetBounds(gfx::Size(500, 500));
-  host1->Composite(base::TimeTicks::Now());
+  host1->Composite(base::TimeTicks::Now(), false);
   EXPECT_EQ(1, layer->update_count());
   EXPECT_EQ(1, host1->SourceFrameNumber());
   EXPECT_EQ(gfx::Size(500, 500), layer->bounds());
@@ -442,7 +441,7 @@ TEST(PictureLayerTest, ChangingHostsWithCollidingFrames) {
 
   // Change its bounds while it's in a state that can't update.
   layer->SetBounds(gfx::Size(600, 600));
-  host2->Composite(base::TimeTicks::Now());
+  host2->Composite(base::TimeTicks::Now(), false);
 
   // This layer should not have been updated because it is invisible.
   EXPECT_EQ(1, layer->update_count());

@@ -1,0 +1,213 @@
+// Copyright (c) 2018 Vivaldi Technologies AS. All rights reserved.
+
+[
+  {
+    "namespace": "mailPrivate",
+    "description": "Vivaldi mail api. API for reading/writing mails.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/mail/mail_private_api.h"
+    },
+    "functions": [
+      {
+        "name": "getPaths",
+        "type": "function",
+        "description": "Returns array of mail paths (.vmail and .vflags) under a given directory. The root folder location is the profile directory of the current running instance. / Mail",
+        "parameters": [
+          {
+            "name": "paths",
+            "type": "array",
+            "description": "String array that that builds up a folder structure as starting point for searching for mails and flags",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "paths",
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "description": "Paths to mail and flags files"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "save",
+        "type": "function",
+        "description": "Saves a mail to disk. The root folder location is the profile directory of the current running instance /Mail",
+        "parameters": [
+          {
+            "name": "paths",
+            "type": "array",
+            "description": "String array that is used to create a folder structure, starting at user default profile /Mail The function returns error if empty",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fileName",
+            "type": "string",
+            "description": "The file name to be created/saved/overridden."
+          },
+          {
+            "name": "raw",
+            "type": "string",
+            "description": "The raw mail content."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "delete",
+        "type": "function",
+        "description": "Deletes a mail (.vmail) and its associated flag file (.vflags). The root folder location is the profile directory of the current running instance /Mail",
+        "parameters": [
+          {
+            "name": "paths",
+            "type": "array",
+            "description": "String array that is used to build path to the file. Starting at user default profile/Mail.",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fileName",
+            "type": "string",
+            "description": "The file name to be deleted. Do not specicy file endings. The function automatically adds .vflag and .vmail "
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "read",
+        "type": "function",
+        "description": "Reads a mail. The root folder location is the profile directory of the current running instance /Mail",
+        "parameters": [
+          {
+            "name": "paths",
+            "type": "array",
+            "description": "String array that is used to build path to the file. Starting at user default profile/Mail.",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fileName",
+            "type": "string",
+            "description": "The file name to be read."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "raw",
+                "type": "string",
+                "description": "The mail raw content."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "readFile",
+        "type": "function",
+        "description": "Reads a file. Returns the file content as text.",
+        "parameters": [
+          {
+            "name": "path",
+            "type": "string",
+            "description": "Absoulout path to the file to be read."
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "raw",
+                "type": "string",
+                "description": "The file raw content."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getDataDirectory",
+        "type": "function",
+        "description": "Returns the user mail data directory and verfies that the directory exists.",
+        "parameters": [
+          {
+            "name": "hashedAccountId",
+            "type": "string",
+            "description": "First 6 characters from the MD5 hash of the accountId. Appended to the end of the default mail data directory"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "paths",
+                "type": "string",
+                "description": "The directory path to the user mail data directory."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "createDataDirectory",
+        "type": "function",
+        "description": "Creates the user mail data directory.",
+        "parameters": [
+          {
+            "name": "hashedAccountId",
+            "type": "string",
+            "description": "First 6 characters from the MD5 hash of the accountId. Appended to the end of the default mail data directory"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "type": "string"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

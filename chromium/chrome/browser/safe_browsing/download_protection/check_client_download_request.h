@@ -22,13 +22,12 @@
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/common/safe_browsing/binary_feature_extractor.h"
+#include "chrome/services/file_util/public/cpp/sandboxed_rar_analyzer.h"
 #include "chrome/services/file_util/public/cpp/sandboxed_zip_analyzer.h"
+#include "components/download/public/common/download_item.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/safe_browsing/db/database_manager.h"
-#include "content/public/browser/download_item.h"
-#include "net/url_request/url_fetcher.h"
-#include "net/url_request/url_fetcher_delegate.h"
-#include "net/url_request/url_request_context_getter.h"
+#include "content/public/browser/browser_thread.h"
 #include "url/gurl.h"
 
 #if defined(OS_MACOSX)
@@ -38,16 +37,19 @@
 
 using content::BrowserThread;
 
+namespace network {
+class SimpleURLLoader;
+}
+
 namespace safe_browsing {
 
 class CheckClientDownloadRequest
     : public base::RefCountedThreadSafe<CheckClientDownloadRequest,
                                         BrowserThread::DeleteOnUIThread>,
-      public net::URLFetcherDelegate,
-      public content::DownloadItem::Observer {
+      public download::DownloadItem::Observer {
  public:
   CheckClientDownloadRequest(
-      content::DownloadItem* item,
+      download::DownloadItem* item,
       const CheckDownloadCallback& callback,
       DownloadProtectionService* service,
       const scoped_refptr<SafeBrowsingDatabaseManager>& database_manager,
@@ -55,10 +57,13 @@ class CheckClientDownloadRequest
   bool ShouldSampleUnsupportedFile(const base::FilePath& filename);
   void Start();
   void StartTimeout();
-  void Cancel();
-  void OnDownloadDestroyed(content::DownloadItem* download) override;
-  void OnURLFetchComplete(const net::URLFetcher* source) override;
-  static bool IsSupportedDownload(const content::DownloadItem& item,
+
+  // |download_destroyed| indicates if cancellation is due to the destruction of
+  // the download item.
+  void Cancel(bool download_destroyed);
+  void OnDownloadDestroyed(download::DownloadItem* download) override;
+  void OnURLLoaderComplete(std::unique_ptr<std::string> response_body);
+  static bool IsSupportedDownload(const download::DownloadItem& item,
                                   const base::FilePath& target_path,
                                   DownloadCheckResultReason* reason,
                                   ClientDownloadRequest::DownloadType* type);
@@ -77,6 +82,8 @@ class CheckClientDownloadRequest
   void OnFileFeatureExtractionDone();
   void StartExtractFileFeatures();
   void ExtractFileFeatures(const base::FilePath& file_path);
+  void StartExtractRarFeatures();
+  void OnRarAnalysisFinished(const ArchiveAnalyzerResults& results);
   void StartExtractZipFeatures();
   void OnZipAnalysisFinished(const ArchiveAnalyzerResults& results);
 
@@ -111,7 +118,7 @@ class CheckClientDownloadRequest
 
   // The DownloadItem we are checking. Will be NULL if the request has been
   // canceled. Must be accessed only on UI thread.
-  content::DownloadItem* item_;
+  download::DownloadItem* item_;
   // Copies of data from |item_| for access on other threads.
   std::vector<GURL> url_chain_;
   GURL referrer_url_;
@@ -126,6 +133,9 @@ class CheckClientDownloadRequest
 
 #if defined(OS_MACOSX)
   std::unique_ptr<std::vector<uint8_t>> disk_image_signature_;
+  google::protobuf::RepeatedPtrField<
+      ClientDownloadRequest_DetachedCodeSignature>
+      detached_code_signatures_;
 #endif
 
   ClientDownloadRequest_SignatureInfo signature_info_;
@@ -137,8 +147,10 @@ class CheckClientDownloadRequest
   scoped_refptr<BinaryFeatureExtractor> binary_feature_extractor_;
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager_;
   const bool pingback_enabled_;
-  std::unique_ptr<net::URLFetcher> fetcher_;
-  scoped_refptr<SandboxedZipAnalyzer> analyzer_;
+  std::unique_ptr<network::SimpleURLLoader> loader_;
+  scoped_refptr<SandboxedRarAnalyzer> rar_analyzer_;
+  scoped_refptr<SandboxedZipAnalyzer> zip_analyzer_;
+  base::TimeTicks rar_analysis_start_time_;
   base::TimeTicks zip_analysis_start_time_;
 #if defined(OS_MACOSX)
   scoped_refptr<SandboxedDMGAnalyzer> dmg_analyzer_;

@@ -160,7 +160,6 @@ struct ProcessManager::ExtensionRenderFrameData {
       case VIEW_TYPE_EXTENSION_DIALOG:
       case VIEW_TYPE_EXTENSION_GUEST:
       case VIEW_TYPE_EXTENSION_POPUP:
-      case VIEW_TYPE_PANEL:
       case VIEW_TYPE_TAB_CONTENTS:
         return true;
 
@@ -336,6 +335,9 @@ void ProcessManager::RemoveObserver(ProcessManagerObserver* observer) {
 
 bool ProcessManager::CreateBackgroundHost(const Extension* extension,
                                           const GURL& url) {
+  DCHECK(!BackgroundInfo::IsServiceWorkerBased(extension))
+      << "CreateBackgroundHostForExtensionLoad called for service worker based"
+         "background page";
   // Hosted apps are taken care of from BackgroundContentsService. Ignore them
   // here.
   if (extension->is_hosted_app())

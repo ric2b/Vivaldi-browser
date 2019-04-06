@@ -35,9 +35,9 @@ class ReportingEndpointManagerImpl : public ReportingEndpointManager {
 
   ~ReportingEndpointManagerImpl() override = default;
 
-  bool FindEndpointForOriginAndGroup(const url::Origin& origin,
-                                     const std::string& group,
-                                     GURL* endpoint_url_out) override {
+  const ReportingClient* FindClientForOriginAndGroup(
+      const url::Origin& origin,
+      const std::string& group) override {
     std::vector<const ReportingClient*> clients;
     cache()->GetClientsForOriginAndGroup(origin, group, &clients);
 
@@ -50,8 +50,6 @@ class ReportingEndpointManagerImpl : public ReportingEndpointManager {
     base::TimeTicks now = tick_clock()->NowTicks();
     for (const ReportingClient* client : clients) {
       if (client->expires < now)
-        continue;
-      if (base::ContainsKey(pending_endpoints_, client->endpoint))
         continue;
       if (base::ContainsKey(endpoint_backoff_, client->endpoint) &&
           endpoint_backoff_[client->endpoint]->ShouldRejectRequest()) {
@@ -79,8 +77,7 @@ class ReportingEndpointManagerImpl : public ReportingEndpointManager {
     }
 
     if (available_clients.empty()) {
-      *endpoint_url_out = GURL();
-      return false;
+      return nullptr;
     }
 
     int random_index = rand_callback_.Run(0, total_weight - 1);
@@ -89,24 +86,13 @@ class ReportingEndpointManagerImpl : public ReportingEndpointManager {
       const ReportingClient* client = available_clients[i];
       weight_so_far += client->weight;
       if (random_index < weight_so_far) {
-        *endpoint_url_out = client->endpoint;
-        return true;
+        return client;
       }
     }
 
     // TODO(juliatuttle): Can we reach this in some weird overflow case?
     NOTREACHED();
-    return false;
-  }
-
-  void SetEndpointPending(const GURL& endpoint) override {
-    DCHECK(!base::ContainsKey(pending_endpoints_, endpoint));
-    pending_endpoints_.insert(endpoint);
-  }
-
-  void ClearEndpointPending(const GURL& endpoint) override {
-    DCHECK(base::ContainsKey(pending_endpoints_, endpoint));
-    pending_endpoints_.erase(endpoint);
+    return nullptr;
   }
 
   void InformOfEndpointRequest(const GURL& endpoint, bool succeeded) override {
@@ -119,15 +105,13 @@ class ReportingEndpointManagerImpl : public ReportingEndpointManager {
 
  private:
   const ReportingPolicy& policy() { return context_->policy(); }
-  base::TickClock* tick_clock() { return context_->tick_clock(); }
+  const base::TickClock* tick_clock() { return context_->tick_clock(); }
   ReportingDelegate* delegate() { return context_->delegate(); }
   ReportingCache* cache() { return context_->cache(); }
 
   ReportingContext* context_;
 
   RandIntCallback rand_callback_;
-
-  std::set<GURL> pending_endpoints_;
 
   // Note: Currently the ReportingBrowsingDataRemover does not clear this data
   // because it's not persisted to disk. If it's ever persisted, it will need

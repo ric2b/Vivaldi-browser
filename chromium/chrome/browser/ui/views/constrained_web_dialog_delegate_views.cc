@@ -15,6 +15,7 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
 #include "ui/views/controls/webview/webview.h"
@@ -41,6 +42,17 @@ class InitiatorWebContentsObserver
     DISALLOW_COPY_AND_ASSIGN(InitiatorWebContentsObserver);
 };
 
+gfx::Size RestrictToPlatformMinimumSize(const gfx::Size& min_size) {
+#if defined(OS_MACOSX)
+  // http://crbug.com/78973 - MacOS does not handle zero-sized windows well.
+  gfx::Size adjusted_min_size(1, 1);
+  adjusted_min_size.SetToMax(min_size);
+  return adjusted_min_size;
+#else
+  return min_size;
+#endif
+}
+
 // The specialized WebView that lives in a constrained dialog.
 class ConstrainedDialogWebView : public views::WebView,
                                  public ConstrainedWebDialogDelegate,
@@ -52,8 +64,6 @@ class ConstrainedDialogWebView : public views::WebView,
                            const gfx::Size& min_size,
                            const gfx::Size& max_size);
   ~ConstrainedDialogWebView() override;
-
-  void SetAutoResizeSize(const gfx::Size& auto_resize_size);
 
   // ConstrainedWebDialogDelegate:
   const ui::WebDialogDelegate* GetWebDialogDelegate() const override;
@@ -83,26 +93,12 @@ class ConstrainedDialogWebView : public views::WebView,
   gfx::Size CalculatePreferredSize() const override;
   gfx::Size GetMinimumSize() const override;
   gfx::Size GetMaximumSize() const override;
-  void RenderViewCreated(content::RenderViewHost* render_view_host) override;
-  void RenderViewHostChanged(content::RenderViewHost* old_host,
-                             content::RenderViewHost* new_host) override;
   void DocumentOnLoadCompletedInMainFrame() override;
 
  private:
-  void EnableAutoResize();
-
   InitiatorWebContentsObserver initiator_observer_;
 
   std::unique_ptr<ConstrainedWebDialogDelegateViews> impl_;
-
-  // Minimum and maximum sizes to determine dialog bounds for auto-resizing.
-  const gfx::Size min_size_;
-  const gfx::Size max_size_;
-
-  // The self-reported desired size of the WebContents. Empty if auto resize is
-  // not enabled. This will be passed to and possibly adjusted by the
-  // WebDialogDelegate in order to calculate the preferred size of the dialog.
-  gfx::Size auto_resize_size_;
 
   DISALLOW_COPY_AND_ASSIGN(ConstrainedDialogWebView);
 };
@@ -145,7 +141,11 @@ class WebDialogWebContentsDelegateViews
     if (!initiator_observer_->web_contents())
       return;
 
-    web_view_->SetAutoResizeSize(new_size);
+    // views::WebView is only a delegate for a WebContents it creates itself via
+    // views::WebView::GetWebContents(). ConstrainedDialogWebView's constructor
+    // sets its own WebContents (via an override of WebView::GetWebContents()).
+    // So forward this notification to views::WebView.
+    web_view_->ResizeDueToAutoResize(source, new_size);
 
     content::WebContents* top_level_web_contents =
         constrained_window::GetTopLevelWebContents(
@@ -222,162 +222,134 @@ ConstrainedDialogWebView::ConstrainedDialogWebView(
       impl_(new ConstrainedWebDialogDelegateViews(browser_context,
                                                   delegate,
                                                   &initiator_observer_,
-                                                  this)),
-      min_size_(min_size),
-      max_size_(max_size) {
+                                                  this)) {
   SetWebContents(GetWebContents());
   AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
-  if (!max_size_.IsEmpty())
-    EnableAutoResize();
+  if (!max_size.IsEmpty()) {
+    EnableSizingFromWebContents(RestrictToPlatformMinimumSize(min_size),
+                                max_size);
+  }
 }
 ConstrainedDialogWebView::~ConstrainedDialogWebView() {}
 
-void ConstrainedDialogWebView::SetAutoResizeSize(
-    const gfx::Size& default_size) {
-  auto_resize_size_ = default_size;
-  PreferredSizeChanged();
-  }
+const ui::WebDialogDelegate* ConstrainedDialogWebView::GetWebDialogDelegate()
+    const {
+  return impl_->GetWebDialogDelegate();
+}
 
-  const ui::WebDialogDelegate* ConstrainedDialogWebView::GetWebDialogDelegate()
-      const {
-    return impl_->GetWebDialogDelegate();
-  }
+ui::WebDialogDelegate* ConstrainedDialogWebView::GetWebDialogDelegate() {
+  return impl_->GetWebDialogDelegate();
+}
 
-  ui::WebDialogDelegate* ConstrainedDialogWebView::GetWebDialogDelegate() {
-    return impl_->GetWebDialogDelegate();
-  }
+void ConstrainedDialogWebView::OnDialogCloseFromWebUI() {
+  return impl_->OnDialogCloseFromWebUI();
+}
 
-  void ConstrainedDialogWebView::OnDialogCloseFromWebUI() {
-    return impl_->OnDialogCloseFromWebUI();
-  }
+std::unique_ptr<content::WebContents>
+ConstrainedDialogWebView::ReleaseWebContents() {
+  return impl_->ReleaseWebContents();
+}
 
-  std::unique_ptr<content::WebContents>
-  ConstrainedDialogWebView::ReleaseWebContents() {
-    return impl_->ReleaseWebContents();
-  }
+gfx::NativeWindow ConstrainedDialogWebView::GetNativeDialog() {
+  return impl_->GetNativeDialog();
+}
 
-  gfx::NativeWindow ConstrainedDialogWebView::GetNativeDialog() {
-    return impl_->GetNativeDialog();
-  }
+content::WebContents* ConstrainedDialogWebView::GetWebContents() {
+  return impl_->GetWebContents();
+}
 
-  content::WebContents* ConstrainedDialogWebView::GetWebContents() {
-    return impl_->GetWebContents();
-  }
+gfx::Size ConstrainedDialogWebView::GetConstrainedWebDialogPreferredSize()
+    const {
+  return GetPreferredSize();
+}
 
-  gfx::Size ConstrainedDialogWebView::GetConstrainedWebDialogPreferredSize()
-      const {
-    return GetPreferredSize();
-  }
+gfx::Size ConstrainedDialogWebView::GetConstrainedWebDialogMinimumSize() const {
+  return GetMinimumSize();
+}
 
-  gfx::Size ConstrainedDialogWebView::GetConstrainedWebDialogMinimumSize()
-      const {
-    return GetMinimumSize();
-  }
+gfx::Size ConstrainedDialogWebView::GetConstrainedWebDialogMaximumSize() const {
+  return GetMaximumSize();
+}
 
-  gfx::Size ConstrainedDialogWebView::GetConstrainedWebDialogMaximumSize()
-      const {
-    return GetMaximumSize();
-  }
+views::View* ConstrainedDialogWebView::GetInitiallyFocusedView() {
+  return this;
+}
 
-  views::View* ConstrainedDialogWebView::GetInitiallyFocusedView() {
-    return this;
-  }
+void ConstrainedDialogWebView::WindowClosing() {
+  if (!impl_->closed_via_webui())
+    GetWebDialogDelegate()->OnDialogClosed(std::string());
+}
 
-  void ConstrainedDialogWebView::WindowClosing() {
-    if (!impl_->closed_via_webui())
-      GetWebDialogDelegate()->OnDialogClosed(std::string());
-  }
+views::Widget* ConstrainedDialogWebView::GetWidget() {
+  return View::GetWidget();
+}
 
-  views::Widget* ConstrainedDialogWebView::GetWidget() {
-    return View::GetWidget();
-  }
+const views::Widget* ConstrainedDialogWebView::GetWidget() const {
+  return View::GetWidget();
+}
 
-  const views::Widget* ConstrainedDialogWebView::GetWidget() const {
-    return View::GetWidget();
-  }
+base::string16 ConstrainedDialogWebView::GetWindowTitle() const {
+  return impl_->closed_via_webui() ? base::string16()
+                                   : GetWebDialogDelegate()->GetDialogTitle();
+}
 
-  base::string16 ConstrainedDialogWebView::GetWindowTitle() const {
-    return impl_->closed_via_webui() ? base::string16() :
-        GetWebDialogDelegate()->GetDialogTitle();
-  }
+views::View* ConstrainedDialogWebView::GetContentsView() {
+  return this;
+}
 
-  views::View* ConstrainedDialogWebView::GetContentsView() {
-    return this;
-  }
+views::NonClientFrameView* ConstrainedDialogWebView::CreateNonClientFrameView(
+    views::Widget* widget) {
+  return views::DialogDelegate::CreateDialogFrameView(widget);
+}
 
-  views::NonClientFrameView* ConstrainedDialogWebView::CreateNonClientFrameView(
-      views::Widget* widget) {
-    return views::DialogDelegate::CreateDialogFrameView(widget);
-  }
+bool ConstrainedDialogWebView::ShouldShowCloseButton() const {
+  // No close button if the dialog doesn't want a title bar.
+  return impl_->GetWebDialogDelegate()->ShouldShowDialogTitle();
+}
 
-  bool ConstrainedDialogWebView::ShouldShowCloseButton() const {
-    // No close button if the dialog doesn't want a title bar.
-    return impl_->GetWebDialogDelegate()->ShouldShowDialogTitle();
-  }
+ui::ModalType ConstrainedDialogWebView::GetModalType() const {
+  return ui::MODAL_TYPE_CHILD;
+}
 
-  ui::ModalType ConstrainedDialogWebView::GetModalType() const {
-    return ui::MODAL_TYPE_CHILD;
-  }
+bool ConstrainedDialogWebView::AcceleratorPressed(
+    const ui::Accelerator& accelerator) {
+  // Pressing ESC closes the dialog.
+  DCHECK_EQ(ui::VKEY_ESCAPE, accelerator.key_code());
+  GetWidget()->Close();
+  return true;
+}
 
-  bool ConstrainedDialogWebView::AcceleratorPressed(
-      const ui::Accelerator& accelerator) {
-    // Pressing ESC closes the dialog.
-    DCHECK_EQ(ui::VKEY_ESCAPE, accelerator.key_code());
-    GetWidget()->Close();
-    return true;
-  }
+gfx::Size ConstrainedDialogWebView::CalculatePreferredSize() const {
+  if (impl_->closed_via_webui())
+    return gfx::Size();
 
-  gfx::Size ConstrainedDialogWebView::CalculatePreferredSize() const {
-    if (impl_->closed_via_webui())
-      return gfx::Size();
+  // If auto-resizing is enabled and the dialog has been auto-resized,
+  // View::GetPreferredSize() won't try to calculate the size again, since a
+  // preferred size has been set explicitly from the renderer.
+  gfx::Size size = WebView::CalculatePreferredSize();
+  GetWebDialogDelegate()->GetDialogSize(&size);
+  return size;
+}
 
-    // If auto-resizing is enabled and the dialog has been auto-resized,
-    // |auto_resize_size_| will hold the appropriate current size.  In this
-    // case, GetDialogSize() should leave its argument untouched.  In all
-    // other cases, GetDialogSize() will overwrite the passed-in size.
-    gfx::Size size = auto_resize_size_;
-    GetWebDialogDelegate()->GetDialogSize(&size);
-    return size;
-  }
+gfx::Size ConstrainedDialogWebView::GetMinimumSize() const {
+  return min_size();
+}
 
-  gfx::Size ConstrainedDialogWebView::GetMinimumSize() const {
-    return min_size_;
-  }
+gfx::Size ConstrainedDialogWebView::GetMaximumSize() const {
+  return !max_size().IsEmpty() ? max_size() : WebView::GetMaximumSize();
+}
 
-  gfx::Size ConstrainedDialogWebView::GetMaximumSize() const {
-    return !max_size_.IsEmpty() ? max_size_ : WebView::GetMaximumSize();
-  }
-
-  void ConstrainedDialogWebView::RenderViewCreated(
-      content::RenderViewHost* render_view_host) {
-    if (!max_size_.IsEmpty())
-      EnableAutoResize();
-  }
-
-  void ConstrainedDialogWebView::RenderViewHostChanged(
-      content::RenderViewHost* old_host,
-      content::RenderViewHost* new_host) {
-    if (!max_size_.IsEmpty())
-      EnableAutoResize();
-  }
-
-  void ConstrainedDialogWebView::DocumentOnLoadCompletedInMainFrame() {
-    if (!max_size_.IsEmpty() && initiator_observer_.web_contents()) {
-      content::WebContents* top_level_web_contents =
-          constrained_window::GetTopLevelWebContents(
-              initiator_observer_.web_contents());
-      if (top_level_web_contents) {
-        constrained_window::ShowModalDialog(GetWidget()->GetNativeWindow(),
-                                            top_level_web_contents);
-      }
+void ConstrainedDialogWebView::DocumentOnLoadCompletedInMainFrame() {
+  if (!max_size().IsEmpty() && initiator_observer_.web_contents()) {
+    content::WebContents* top_level_web_contents =
+        constrained_window::GetTopLevelWebContents(
+            initiator_observer_.web_contents());
+    if (top_level_web_contents) {
+      constrained_window::ShowModalDialog(GetWidget()->GetNativeWindow(),
+                                          top_level_web_contents);
     }
   }
-
-  void ConstrainedDialogWebView::EnableAutoResize() {
-    content::RenderViewHost* render_view_host =
-        GetWebContents()->GetRenderViewHost();
-    render_view_host->EnableAutoResize(min_size_, max_size_);
-  }
+}
 
 }  // namespace
 

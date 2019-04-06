@@ -19,7 +19,7 @@ void PostAsyncTask(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
     const base::Callback<void(Args...)>& callback,
     Args... args) {
-  task_runner->PostTask(FROM_HERE, base::Bind(callback, args...));
+  task_runner->PostTask(FROM_HERE, base::BindOnce(callback, args...));
 }
 
 template <typename... Args>
@@ -37,7 +37,7 @@ void PostAsyncTaskOnce(
 // executing.
 void PostSyncTask(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
-    const base::Closure& callback);
+    base::OnceClosure callback);
 
 // Creates a callback that will run |callback| on the calling thread. Useful
 // when posting a task on a different thread and expecting a callback when the

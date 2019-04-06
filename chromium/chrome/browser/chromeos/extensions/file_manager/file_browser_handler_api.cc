@@ -39,6 +39,7 @@
 #include "base/macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
+#include "chrome/browser/extensions/chrome_extension_function_details.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
@@ -160,7 +161,7 @@ class FileSelectorImpl : public FileSelector,
   DISALLOW_COPY_AND_ASSIGN(FileSelectorImpl);
 };
 
-FileSelectorImpl::FileSelectorImpl() {}
+FileSelectorImpl::FileSelectorImpl() = default;
 
 FileSelectorImpl::~FileSelectorImpl() {
   if (dialog_.get())
@@ -185,7 +186,7 @@ void FileSelectorImpl::SelectFile(
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::BindOnce(&FileSelectorImpl::FileSelectionCanceled,
-                       base::Unretained(this), static_cast<void*>(NULL)));
+                       base::Unretained(this), static_cast<void*>(nullptr)));
   }
 }
 
@@ -214,13 +215,11 @@ bool FileSelectorImpl::StartSelectFile(
   allowed_file_info.allowed_paths =
       ui::SelectFileDialog::FileTypeInfo::ANY_PATH;
 
-  dialog_->SelectFile(ui::SelectFileDialog::SELECT_SAVEAS_FILE,
-                      base::string16() /* dialog title*/,
-                      suggested_name,
-                      &allowed_file_info,
-                      0 /* file type index */,
-                      std::string() /* default file extension */,
-                      browser->window()->GetNativeWindow(), NULL /* params */);
+  dialog_->SelectFile(
+      ui::SelectFileDialog::SELECT_SAVEAS_FILE,
+      base::string16() /* dialog title*/, suggested_name, &allowed_file_info,
+      0 /* file type index */, std::string() /* default file extension */,
+      browser->window()->GetNativeWindow(), nullptr /* params */);
 
   return dialog_->IsRunning(browser->window()->GetNativeWindow());
 }
@@ -251,14 +250,14 @@ void FileSelectorImpl::SendResponse(bool success,
   // We don't want to send multiple responses.
   if (function_.get())
     function_->OnFilePathSelected(success, selected_path);
-  function_ = NULL;
+  function_ = nullptr;
 }
 
 // FileSelectorFactory implementation.
 class FileSelectorFactoryImpl : public FileSelectorFactory {
  public:
-  FileSelectorFactoryImpl() {}
-  ~FileSelectorFactoryImpl() override {}
+  FileSelectorFactoryImpl() = default;
+  ~FileSelectorFactoryImpl() override = default;
 
   // FileSelectorFactory implementation.
   // Creates new FileSelectorImplementation for the function.
@@ -288,7 +287,7 @@ FileBrowserHandlerInternalSelectFileFunction::
 }
 
 FileBrowserHandlerInternalSelectFileFunction::
-    ~FileBrowserHandlerInternalSelectFileFunction() {}
+    ~FileBrowserHandlerInternalSelectFileFunction() = default;
 
 bool FileBrowserHandlerInternalSelectFileFunction::RunAsync() {
   std::unique_ptr<SelectFile::Params> params(
@@ -305,10 +304,9 @@ bool FileBrowserHandlerInternalSelectFileFunction::RunAsync() {
   }
 
   FileSelector* file_selector = file_selector_factory_->CreateFileSelector();
-  file_selector->SelectFile(suggested_name.BaseName(),
-                            allowed_extensions,
-                            GetCurrentBrowser(),
-                            this);
+  file_selector->SelectFile(
+      suggested_name.BaseName(), allowed_extensions,
+      ChromeExtensionFunctionDetails(this).GetCurrentBrowser(), this);
   return true;
 }
 
@@ -367,7 +365,7 @@ void FileBrowserHandlerInternalSelectFileFunction::Respond(
   // If the file was selected, add 'entry' object which will be later used to
   // create a FileEntry instance for the selected file.
   if (success && entry_definition.error == base::File::FILE_OK) {
-    result->entry.reset(new FileEntryInfo());
+    result->entry = std::make_unique<FileEntryInfo>();
     // TODO(mtomasz): Make the response fields consistent with other files.
     result->entry->file_system_name = entry_definition.file_system_name;
     result->entry->file_system_root = entry_definition.file_system_root_url;

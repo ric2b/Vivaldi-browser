@@ -22,7 +22,8 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "content/public/test/mock_download_item.h"
+#include "components/download/public/common/mock_download_item.h"
+#include "content/public/browser/download_item_utils.h"
 #include "content/public/test/mock_download_manager.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -61,24 +62,24 @@ class DownloadItemNotificationTest : public testing::Test {
         new DownloadNotificationManagerForProfile(profile_, nullptr));
 
     base::FilePath download_item_target_path(kDownloadItemTargetPathString);
-    download_item_.reset(new NiceMock<content::MockDownloadItem>());
+    download_item_.reset(new NiceMock<download::MockDownloadItem>());
     ON_CALL(*download_item_, GetId()).WillByDefault(Return(12345));
     ON_CALL(*download_item_, GetGuid())
         .WillByDefault(ReturnRefOfCopy(base::GenerateGUID()));
     ON_CALL(*download_item_, GetState())
-        .WillByDefault(Return(content::DownloadItem::IN_PROGRESS));
+        .WillByDefault(Return(download::DownloadItem::IN_PROGRESS));
     ON_CALL(*download_item_, IsDangerous()).WillByDefault(Return(false));
     ON_CALL(*download_item_, GetFileNameToReportUser())
         .WillByDefault(Return(base::FilePath("TITLE.bin")));
     ON_CALL(*download_item_, GetTargetFilePath())
         .WillByDefault(ReturnRefOfCopy(download_item_target_path));
     ON_CALL(*download_item_, GetDangerType())
-        .WillByDefault(Return(content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS));
+        .WillByDefault(Return(download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS));
     ON_CALL(*download_item_, IsDone()).WillByDefault(Return(false));
     ON_CALL(*download_item_, GetURL()).WillByDefault(ReturnRefOfCopy(
         GURL("http://www.example.com/download.bin")));
-    ON_CALL(*download_item_, GetBrowserContext())
-        .WillByDefault(Return(profile_));
+    content::DownloadItemUtils::AttachInfo(download_item_.get(), profile_,
+                                           nullptr);
   }
 
   void TearDown() override {
@@ -96,7 +97,7 @@ class DownloadItemNotificationTest : public testing::Test {
   std::unique_ptr<message_center::Notification> LookUpNotification() const {
     std::vector<message_center::Notification> notifications =
         service_tester_->GetDisplayedNotificationsForType(
-            NotificationHandler::Type::DOWNLOAD);
+            NotificationHandler::Type::TRANSIENT);
     for (const auto& notification : notifications) {
       if (notification.id() == download_item_notification_->GetNotificationId())
         return std::make_unique<message_center::Notification>(notification);
@@ -106,32 +107,22 @@ class DownloadItemNotificationTest : public testing::Test {
 
   size_t NotificationCount() const {
     return service_tester_
-        ->GetDisplayedNotificationsForType(NotificationHandler::Type::DOWNLOAD)
+        ->GetDisplayedNotificationsForType(NotificationHandler::Type::TRANSIENT)
         .size();
   }
 
   void RemoveNotification() {
     service_tester_->RemoveNotification(
-        NotificationHandler::Type::DOWNLOAD,
+        NotificationHandler::Type::TRANSIENT,
         download_item_notification_->GetNotificationId(), false);
   }
-
-  // Trampoline methods to access a private method in DownloadItemNotification.
-  void NotificationItemClick() {
-    return download_item_notification_->OnNotificationClick();
-  }
-  void NotificationItemButtonClick(int index) {
-    return download_item_notification_->OnNotificationButtonClick(index);
-  }
-
-  bool ShownAsPopUp() { return !LookUpNotification()->shown_as_popup(); }
 
   void CreateDownloadItemNotification() {
     download_notification_manager_->OnNewDownloadReady(download_item_.get());
     download_item_notification_ =
         download_notification_manager_->items_[download_item_.get()].get();
     NotificationDisplayServiceFactory::GetForProfile(profile_)->Display(
-        NotificationHandler::Type::DOWNLOAD,
+        NotificationHandler::Type::TRANSIENT,
         *download_item_notification_->notification_);
   }
 
@@ -140,7 +131,7 @@ class DownloadItemNotificationTest : public testing::Test {
   std::unique_ptr<TestingProfileManager> profile_manager_;
   Profile* profile_;
 
-  std::unique_ptr<NiceMock<content::MockDownloadItem>> download_item_;
+  std::unique_ptr<NiceMock<download::MockDownloadItem>> download_item_;
   std::unique_ptr<DownloadNotificationManagerForProfile>
       download_notification_manager_;
   DownloadItemNotification* download_item_notification_;
@@ -153,9 +144,6 @@ TEST_F(DownloadItemNotificationTest, ShowAndCloseNotification) {
   // Shows a notification
   CreateDownloadItemNotification();
   download_item_->NotifyObserversDownloadOpened();
-
-  // Confirms that the notification is shown as a popup.
-  EXPECT_TRUE(ShownAsPopUp());
   EXPECT_EQ(1u, NotificationCount());
 
   // Makes sure the DownloadItem::Cancel() is not called.
@@ -181,19 +169,19 @@ TEST_F(DownloadItemNotificationTest, PauseAndResumeNotification) {
   // Pauses and makes sure the DownloadItem::Pause() is called.
   EXPECT_CALL(*download_item_, Pause()).Times(1);
   EXPECT_CALL(*download_item_, IsPaused()).WillRepeatedly(Return(true));
-  NotificationItemButtonClick(0);
+  download_item_notification_->Click(0, base::nullopt);
   download_item_->NotifyObserversDownloadUpdated();
 
   // Resumes and makes sure the DownloadItem::Resume() is called.
   EXPECT_CALL(*download_item_, Resume()).Times(1);
   EXPECT_CALL(*download_item_, IsPaused()).WillRepeatedly(Return(false));
-  NotificationItemButtonClick(0);
+  download_item_notification_->Click(0, base::nullopt);
   download_item_->NotifyObserversDownloadUpdated();
 }
 
 TEST_F(DownloadItemNotificationTest, OpenDownload) {
   EXPECT_CALL(*download_item_, GetState())
-      .WillRepeatedly(Return(content::DownloadItem::COMPLETE));
+      .WillRepeatedly(Return(download::DownloadItem::COMPLETE));
   EXPECT_CALL(*download_item_, IsDone()).WillRepeatedly(Return(true));
 
   // Shows a notification.
@@ -204,7 +192,7 @@ TEST_F(DownloadItemNotificationTest, OpenDownload) {
   // Clicks and confirms that the OpenDownload() is called.
   EXPECT_CALL(*download_item_, OpenDownload()).Times(1);
   EXPECT_CALL(*download_item_, SetOpenWhenComplete(_)).Times(0);
-  NotificationItemClick();
+  download_item_notification_->Click(base::nullopt, base::nullopt);
 }
 
 TEST_F(DownloadItemNotificationTest, OpenWhenComplete) {
@@ -218,7 +206,7 @@ TEST_F(DownloadItemNotificationTest, OpenWhenComplete) {
   EXPECT_CALL(*download_item_, SetOpenWhenComplete(true))
       .Times(1)
       .WillOnce(Return());
-  NotificationItemClick();
+  download_item_notification_->Click(base::nullopt, base::nullopt);
   EXPECT_CALL(*download_item_, GetOpenWhenComplete())
       .WillRepeatedly(Return(true));
 
@@ -226,7 +214,7 @@ TEST_F(DownloadItemNotificationTest, OpenWhenComplete) {
   EXPECT_CALL(*download_item_, SetOpenWhenComplete(false))
       .Times(1)
       .WillOnce(Return());
-  NotificationItemClick();
+  download_item_notification_->Click(base::nullopt, base::nullopt);
   EXPECT_CALL(*download_item_, GetOpenWhenComplete())
       .WillRepeatedly(Return(false));
 
@@ -234,13 +222,13 @@ TEST_F(DownloadItemNotificationTest, OpenWhenComplete) {
   EXPECT_CALL(*download_item_, SetOpenWhenComplete(true))
       .Times(1)
       .WillOnce(Return());
-  NotificationItemClick();
+  download_item_notification_->Click(base::nullopt, base::nullopt);
   EXPECT_CALL(*download_item_, GetOpenWhenComplete())
       .WillRepeatedly(Return(true));
 
   // Downloading is completed.
   EXPECT_CALL(*download_item_, GetState())
-      .WillRepeatedly(Return(content::DownloadItem::COMPLETE));
+      .WillRepeatedly(Return(download::DownloadItem::COMPLETE));
   EXPECT_CALL(*download_item_, IsDone()).WillRepeatedly(Return(true));
   download_item_->NotifyObserversDownloadUpdated();
 
@@ -260,7 +248,7 @@ TEST_F(DownloadItemNotificationTest, DisablePopup) {
 
   // Downloading is completed.
   EXPECT_CALL(*download_item_, GetState())
-      .WillRepeatedly(Return(content::DownloadItem::COMPLETE));
+      .WillRepeatedly(Return(download::DownloadItem::COMPLETE));
   EXPECT_CALL(*download_item_, IsDone()).WillRepeatedly(Return(true));
   download_item_->NotifyObserversDownloadUpdated();
 

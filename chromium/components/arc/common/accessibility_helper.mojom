@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Next MinVersion: 10
+// Next MinVersion: 11
 
 module arc.mojom;
 
-import "gfx.mojom";
+import "components/arc/common/gfx.mojom";
 
 // For future maintainers, each of the below enums were hand picked
 // from their equivalents in the Android source. Keep them in the
@@ -106,7 +106,10 @@ enum AccessibilityBooleanProperty {
   MULTI_LINE,
   CONTENT_INVALID,
   CONTEXT_CLICKABLE,
-  IMPORTANCE
+  IMPORTANCE,
+  SCREEN_READER_FOCUSABLE,
+  SHOWING_HINT_TEXT,
+  HEADING
 };
 
 // These fields are taken from string instance members of
@@ -119,7 +122,8 @@ enum AccessibilityStringProperty {
   CONTENT_DESCRIPTION,
   VIEW_ID_RESOURCE_NAME,
   CHROME_ROLE,  // Chrome only
-  ROLE_DESCRIPTION  // Chrome only
+  ROLE_DESCRIPTION,  // Chrome only
+  TOOLTIP
 };
 
 // These fields are taken from int instance members of
@@ -142,7 +146,8 @@ enum AccessibilityIntProperty {
 [Extensible]
 enum AccessibilityIntListProperty {
   CHILD_NODE_IDS,
-  CUSTOM_ACTION_IDS
+  CUSTOM_ACTION_IDS,
+  STANDARD_ACTION_IDS
 };
 
 // These fields are taken from List<String> instance members of
@@ -244,6 +249,17 @@ enum AccessibilityFilterType {
   [MinVersion=2] WHITELISTED_PACKAGE_NAME
 };
 
+[Extensible]
+enum AccessibilityNotificationStateType {
+  // Surface for a notification is created. OnNotificationStateChanged of
+  // SURFACE_CREATED for a notification must be called before
+  // OnAccessibilityEvent of WINDOW_STATE_CHANGED for it is called.
+  SURFACE_CREATED,
+
+  // Surface for a notification is removed.
+  SURFACE_REMOVED,
+};
+
 // AccessibilityEventData is a struct to contain info of
 // AccessibilityEvent in Android.
 // https://developer.android.com/reference/android/view/accessibility/AccessibilityEvent.html
@@ -280,7 +296,7 @@ struct AccessibilityActionData {
   [MinVersion=6] int32 window_id;
 };
 
-// Next method ID: 2
+// Next method ID: 3
 interface AccessibilityHelperHost {
   OnAccessibilityEventDeprecated@0(AccessibilityEventType event_type,
                                    AccessibilityNodeInfoData? event_source);
@@ -288,6 +304,11 @@ interface AccessibilityHelperHost {
   // OnAccessibilityEvent is called when a converted Android accessibility event
   // is sent from Android.
   OnAccessibilityEvent@1(AccessibilityEventData event_data);
+
+  // OnNotificationStateChanged is called when state of a notification is
+  // changed, e.g. surface for a notification is created.
+  [MinVersion=10] OnNotificationStateChanged@2(
+      string notification_key, AccessibilityNotificationStateType state);
 };
 
 // Next method ID: 8

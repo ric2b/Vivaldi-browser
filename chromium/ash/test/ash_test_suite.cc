@@ -11,10 +11,12 @@
 #include "base/files/file_path.h"
 #include "base/i18n/rtl.h"
 #include "base/path_service.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/test/aura_test_context_factory.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/test/context_factories_for_test.h"
@@ -40,7 +42,7 @@ void AshTestSuite::Initialize() {
 
   // Load ash test resources and en-US strings; not 'common' (Chrome) resources.
   base::FilePath path;
-  PathService::Get(base::DIR_MODULE, &path);
+  base::PathService::Get(base::DIR_MODULE, &path);
   base::FilePath ash_test_strings =
       path.Append(FILE_PATH_LITERAL("ash_test_strings.pak"));
   ui::ResourceBundle::InitSharedInstanceWithPakPath(ash_test_strings);
@@ -58,24 +60,17 @@ void AshTestSuite::Initialize() {
         ash_test_resources_200, ui::SCALE_FACTOR_200P);
   }
 
-  const bool is_mus = base::CommandLine::ForCurrentProcess()->HasSwitch("mus");
-  const bool is_mash =
-      base::CommandLine::ForCurrentProcess()->HasSwitch("mash");
-  AshTestHelper::config_ =
-      is_mus ? Config::MUS : is_mash ? Config::MASH : Config::CLASSIC;
+  const bool is_mash = base::FeatureList::IsEnabled(features::kMashDeprecated);
+  AshTestHelper::config_ = is_mash ? Config::MASH_DEPRECATED : Config::CLASSIC;
 
   base::DiscardableMemoryAllocator::SetInstance(&discardable_memory_allocator_);
-  env_ = aura::Env::CreateInstance(is_mus || is_mash ? aura::Env::Mode::MUS
-                                                     : aura::Env::Mode::LOCAL);
+  env_ = aura::Env::CreateInstance(is_mash ? aura::Env::Mode::MUS
+                                           : aura::Env::Mode::LOCAL);
 
   if (is_mash) {
     context_factory_ = std::make_unique<aura::test::AuraTestContextFactory>();
     env_->set_context_factory(context_factory_.get());
     env_->set_context_factory_private(nullptr);
-    // mus needs to host viz, because ash by itself cannot.
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(switches::kMus);
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kMusHostingViz);
   }
 }
 

@@ -59,29 +59,21 @@ const EVP_MD* GetEvpAlg(ct::DigitallySigned::HashAlgorithm alg) {
 // static
 scoped_refptr<const CTLogVerifier> CTLogVerifier::Create(
     const base::StringPiece& public_key,
-    const base::StringPiece& description,
-    const base::StringPiece& url,
-    const base::StringPiece& dns_domain) {
-  GURL log_url(url);
-  if (!log_url.is_valid())
-    return nullptr;
+    std::string description,
+    std::string dns_domain) {
   scoped_refptr<CTLogVerifier> result(
-      new CTLogVerifier(description, log_url, dns_domain));
+      new CTLogVerifier(std::move(description), std::move(dns_domain)));
   if (!result->Init(public_key))
     return nullptr;
   return result;
 }
 
-CTLogVerifier::CTLogVerifier(const base::StringPiece& description,
-                             const GURL& url,
-                             const base::StringPiece& dns_domain)
-    : description_(description.as_string()),
-      url_(url),
-      dns_domain_(dns_domain.as_string()),
+CTLogVerifier::CTLogVerifier(std::string description, std::string dns_domain)
+    : description_(std::move(description)),
+      dns_domain_(std::move(dns_domain)),
       hash_algorithm_(ct::DigitallySigned::HASH_ALGO_NONE),
       signature_algorithm_(ct::DigitallySigned::SIG_ALGO_ANONYMOUS),
       public_key_(NULL) {
-  DCHECK(url_.is_valid());
   DCHECK(!dns_domain_.empty());
 }
 

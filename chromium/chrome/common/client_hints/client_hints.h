@@ -16,7 +16,7 @@ struct WebEnabledClientHints;
 namespace client_hints {
 
 // Retrieves the persistent client hints that should be set when fetching a
-// resource from |url|, and updates |client_hints| with the result.
+// resource from |url|. The method updates |client_hints| with the result.
 // |client_hints_rules| contains the content settings for the client hints.
 void GetAllowedClientHintsFromSource(
     const GURL& url,

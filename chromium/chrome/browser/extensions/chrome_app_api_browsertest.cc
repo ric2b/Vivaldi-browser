@@ -25,9 +25,9 @@
 
 using extensions::Extension;
 
-class ChromeAppAPITest : public ExtensionBrowserTest {
+class ChromeAppAPITest : public extensions::ExtensionBrowserTest {
   void SetUpOnMainThread() override {
-    ExtensionBrowserTest::SetUpOnMainThread();
+    extensions::ExtensionBrowserTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
     ASSERT_TRUE(embedded_test_server()->Start());
   }
@@ -171,6 +171,34 @@ IN_PROC_BROWSER_TEST_F(ChromeAppAPITest, IsInstalled) {
   EXPECT_EQ("true", result);
 }
 
+// Test accessing app.isInstalled when the context has been invalidated (e.g.
+// by removing the frame). Regression test for https://crbug.com/855853.
+IN_PROC_BROWSER_TEST_F(ChromeAppAPITest, IsInstalledFromRemovedFrame) {
+  GURL app_url =
+      embedded_test_server()->GetURL("app.com", "/extensions/test_file.html");
+  const Extension* extension =
+      LoadExtension(test_data_dir_.AppendASCII("app_dot_com_app"));
+  ASSERT_TRUE(extension);
+  ui_test_utils::NavigateToURL(browser(), app_url);
+
+  constexpr char kScript[] =
+      R"(var i = document.createElement('iframe');
+         i.onload = function() {
+           var frameApp = i.contentWindow.chrome.app;
+           document.body.removeChild(i);
+           var isInstalled = frameApp.isInstalled;
+           window.domAutomationController.send(
+               isInstalled === undefined);
+         };
+         i.src = '%s';
+         document.body.appendChild(i);)";
+  bool result = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      base::StringPrintf(kScript, app_url.spec().c_str()), &result));
+  EXPECT_TRUE(result);
+}
+
 IN_PROC_BROWSER_TEST_F(ChromeAppAPITest, InstallAndRunningState) {
   GURL app_url = embedded_test_server()->GetURL(
       "app.com", "/extensions/get_app_details_for_frame.html");
@@ -199,8 +227,9 @@ IN_PROC_BROWSER_TEST_F(ChromeAppAPITest, InstallAndRunningState) {
   EXPECT_TRUE(IsAppInstalledInMainFrame());
 
   // Disable the extension and verify the state.
-  ExtensionService* service = extensions::ExtensionSystem::Get(
-      browser()->profile())->extension_service();
+  extensions::ExtensionService* service =
+      extensions::ExtensionSystem::Get(browser()->profile())
+          ->extension_service();
   service->DisableExtension(
       extension->id(),
       extensions::disable_reason::DISABLE_PERMISSIONS_INCREASE);

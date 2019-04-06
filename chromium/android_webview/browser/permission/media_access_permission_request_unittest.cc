@@ -12,10 +12,10 @@ class TestMediaAccessPermissionRequest : public MediaAccessPermissionRequest {
  public:
   TestMediaAccessPermissionRequest(
       const content::MediaStreamRequest& request,
-      const content::MediaResponseCallback& callback,
+      content::MediaResponseCallback callback,
       const content::MediaStreamDevices& audio_devices,
       const content::MediaStreamDevices& video_devices)
-      : MediaAccessPermissionRequest(request, callback) {
+      : MediaAccessPermissionRequest(request, std::move(callback)) {
     audio_test_devices_ = audio_devices;
     video_test_devices_ = video_devices;
   }
@@ -54,8 +54,8 @@ class MediaAccessPermissionRequestTest : public testing::Test {
     std::unique_ptr<TestMediaAccessPermissionRequest> permission_request;
     permission_request.reset(new TestMediaAccessPermissionRequest(
         request,
-        base::Bind(&MediaAccessPermissionRequestTest::Callback,
-                   base::Unretained(this)),
+        base::BindRepeating(&MediaAccessPermissionRequestTest::Callback,
+                            base::Unretained(this)),
         audio_devices, video_devices));
     return permission_request;
   }

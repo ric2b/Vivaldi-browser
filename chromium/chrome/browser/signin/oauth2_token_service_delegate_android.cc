@@ -137,13 +137,6 @@ std::string AndroidAccessTokenFetcher::CombineScopes(
 
 bool OAuth2TokenServiceDelegateAndroid::is_testing_profile_ = false;
 
-OAuth2TokenServiceDelegateAndroid::ErrorInfo::ErrorInfo()
-    : error(GoogleServiceAuthError::NONE) {}
-
-OAuth2TokenServiceDelegateAndroid::ErrorInfo::ErrorInfo(
-    const GoogleServiceAuthError& error)
-    : error(error) {}
-
 OAuth2TokenServiceDelegateAndroid::OAuth2TokenServiceDelegateAndroid(
     AccountTrackerService* account_tracker_service)
     : account_tracker_service_(account_tracker_service),
@@ -212,11 +205,11 @@ bool OAuth2TokenServiceDelegateAndroid::RefreshTokenIsAvailable(
   return refresh_token_is_available == JNI_TRUE;
 }
 
-bool OAuth2TokenServiceDelegateAndroid::RefreshTokenHasError(
+GoogleServiceAuthError OAuth2TokenServiceDelegateAndroid::GetAuthError(
     const std::string& account_id) const {
   auto it = errors_.find(account_id);
-  // TODO(rogerta): should we distinguish between transient and persistent?
-  return it == errors_.end() ? false : IsError(it->second.error);
+  return (it == errors_.end()) ? GoogleServiceAuthError::AuthErrorNone()
+                               : it->second;
 }
 
 void OAuth2TokenServiceDelegateAndroid::UpdateAuthError(
@@ -225,12 +218,21 @@ void OAuth2TokenServiceDelegateAndroid::UpdateAuthError(
   DVLOG(1) << "OAuth2TokenServiceDelegateAndroid::UpdateAuthError"
            << " account=" << account_id
            << " error=" << error.ToString();
+
+  if (error.IsTransientError())
+    return;
+
+  auto it = errors_.find(account_id);
   if (error.state() == GoogleServiceAuthError::NONE) {
-    errors_.erase(account_id);
+    if (it == errors_.end())
+      return;
+    errors_.erase(it);
   } else {
-    // TODO(rogerta): should we distinguish between transient and persistent?
-    errors_[account_id] = ErrorInfo(error);
+    if (it != errors_.end() && it->second == error)
+      return;
+    errors_[account_id] = error;
   }
+  FireAuthErrorChanged(account_id, error);
 }
 
 std::vector<std::string> OAuth2TokenServiceDelegateAndroid::GetAccounts() {
@@ -258,7 +260,7 @@ OAuth2TokenServiceDelegateAndroid::GetSystemAccountNames() {
 OAuth2AccessTokenFetcher*
 OAuth2TokenServiceDelegateAndroid::CreateAccessTokenFetcher(
     const std::string& account_id,
-    net::URLRequestContextGetter* getter,
+    scoped_refptr<network::SharedURLLoaderFactory> url_factory,
     OAuth2AccessTokenConsumer* consumer) {
   DVLOG(1) << "OAuth2TokenServiceDelegateAndroid::CreateAccessTokenFetcher"
            << " account= " << account_id;
@@ -553,11 +555,14 @@ void JNI_OAuth2TokenService_OAuth2TokenFetched(
     token = ConvertJavaStringToUTF8(env, authToken);
   std::unique_ptr<FetchOAuth2TokenCallback> heap_callback(
       reinterpret_cast<FetchOAuth2TokenCallback*>(nativeCallback));
-  GoogleServiceAuthError
-      err(authToken
-              ? GoogleServiceAuthError::NONE
-              : isTransientError
-                    ? GoogleServiceAuthError::CONNECTION_FAILED
-                    : GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS);
+  GoogleServiceAuthError err = GoogleServiceAuthError::AuthErrorNone();
+  if (!authToken) {
+    err =
+        isTransientError
+            ? GoogleServiceAuthError(GoogleServiceAuthError::CONNECTION_FAILED)
+            : GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
+                  GoogleServiceAuthError::InvalidGaiaCredentialsReason::
+                      CREDENTIALS_REJECTED_BY_SERVER);
+  }
   heap_callback->Run(err, token, base::Time());
 }

@@ -26,6 +26,11 @@ namespace content {
 class BrowserContext;
 }
 
+namespace service_manager {
+class Connector;
+class TestConnectorFactory;
+}  // namespace service_manager
+
 namespace extensions {
 
 class TestValueStoreFactory;
@@ -72,7 +77,10 @@ class TestExtensionSystem : public ExtensionSystem {
   void InstallUpdate(const std::string& extension_id,
                      const std::string& public_key,
                      const base::FilePath& temp_dir,
+                     bool install_immediately,
                      InstallUpdateCallback install_update_callback) override;
+  bool FinishDelayedInstallationIfReady(const std::string& extension_id,
+                                        bool install_immediately) override;
 
   // Note that you probably want to use base::RunLoop().RunUntilIdle() right
   // after this to run all the accumulated tasks.
@@ -99,6 +107,8 @@ class TestExtensionSystem : public ExtensionSystem {
   std::unique_ptr<QuotaService> quota_service_;
   std::unique_ptr<AppSorting> app_sorting_;
   OneShotEvent ready_;
+  std::unique_ptr<service_manager::TestConnectorFactory> connector_factory_;
+  std::unique_ptr<service_manager::Connector> connector_;
 
 #if defined(OS_CHROMEOS)
   std::unique_ptr<chromeos::ScopedTestUserManager> test_user_manager_;

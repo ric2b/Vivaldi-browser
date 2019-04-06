@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/service/display/output_surface_client.h"
@@ -37,12 +36,14 @@ BrowserCompositorOutputSurface::BrowserCompositorOutputSurface(
       update_vsync_parameters_callback_(update_vsync_parameters_callback),
       reflector_(nullptr) {}
 
+#if BUILDFLAG(ENABLE_VULKAN)
 BrowserCompositorOutputSurface::BrowserCompositorOutputSurface(
     const scoped_refptr<viz::VulkanContextProvider>& vulkan_context_provider,
     const UpdateVSyncParametersCallback& update_vsync_parameters_callback)
     : OutputSurface(std::move(vulkan_context_provider)),
       update_vsync_parameters_callback_(update_vsync_parameters_callback),
       reflector_(nullptr) {}
+#endif
 
 BrowserCompositorOutputSurface::~BrowserCompositorOutputSurface() {
   if (reflector_)

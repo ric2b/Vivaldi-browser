@@ -4,8 +4,8 @@
 
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
-import("//ppapi/features/features.gni")
-import("//third_party/WebKit/public/public_features.gni")
+import("//ppapi/buildflags/buildflags.gni")
+import("//third_party/blink/public/public_features.gni")
 
 if (is_component_build) {
   link_target_type = "source_set"
@@ -43,10 +43,10 @@ target(link_target_type, "child") {
     "child_process.h",
     "child_process_sandbox_support_impl_linux.cc",
     "child_process_sandbox_support_impl_linux.h",
+    "child_process_sandbox_support_impl_mac.cc",
+    "child_process_sandbox_support_impl_mac.h",
     "child_thread_impl.cc",
     "child_thread_impl.h",
-    "content_child_helpers.cc",
-    "content_child_helpers.h",
     "dwrite_font_proxy/dwrite_font_proxy_init_impl_win.cc",
     "dwrite_font_proxy/dwrite_font_proxy_init_impl_win.h",
     "dwrite_font_proxy/dwrite_font_proxy_win.cc",
@@ -67,13 +67,10 @@ target(link_target_type, "child") {
     "runtime_features.h",
     "scoped_child_process_reference.cc",
     "scoped_child_process_reference.h",
-    "scoped_web_callbacks.h",
     "service_factory.cc",
     "service_factory.h",
     "thread_safe_sender.cc",
     "thread_safe_sender.h",
-    "webfallbackthemeengine_impl.cc",
-    "webfallbackthemeengine_impl.h",
     "webthemeengine_impl_android.cc",
     "webthemeengine_impl_android.h",
     "webthemeengine_impl_default.cc",
@@ -86,7 +83,7 @@ target(link_target_type, "child") {
   public_deps = [
     "//gpu/ipc/client:client",
     "//ipc",
-    "//services/service_manager/public/interfaces:interfaces_blink",
+    "//services/service_manager/public/mojom:mojom_blink",
   ]
 
   deps = [
@@ -106,24 +103,24 @@ target(link_target_type, "child") {
     "//gpu/command_buffer/client",
     "//media",
     "//media/blink",
-    "//mojo/common",
-    "//mojo/edk/system",
+    "//mojo/core/embedder",
     "//net",
     "//services/device/public/cpp:device_features",
     "//services/device/public/cpp/power_monitor",
-    "//services/device/public/interfaces:constants",
+    "//services/device/public/mojom:constants",
     "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
     "//services/service_manager/public/cpp",
-    "//services/service_manager/public/interfaces",
+    "//services/service_manager/public/mojom",
     "//services/service_manager/runner/common",
+    "//services/tracing/public/cpp",
     "//skia",
     "//storage/common",
-    "//third_party/WebKit/common:blink_common",
-    "//third_party/WebKit/public:blink_headers",
-    "//third_party/WebKit/public:features",
-    "//third_party/WebKit/public:mojo_bindings",
-    "//third_party/WebKit/public:resources",
-    "//third_party/WebKit/public:scaled_resources",
+    "//third_party/blink/public:blink_headers",
+    "//third_party/blink/public:buildflags",
+    "//third_party/blink/public:mojo_bindings",
+    "//third_party/blink/public:resources",
+    "//third_party/blink/public:scaled_resources",
+    "//third_party/blink/public/common",
     "//third_party/ced",
     "//third_party/zlib/google:compression_utils",
     "//ui/base",
@@ -145,6 +142,14 @@ target(link_target_type, "child") {
 
   if (is_android) {
     deps += [ "//third_party/android_tools:cpu_features" ]
+  }
+
+  if (is_linux) {
+    deps += [
+      "//components/services/font/public/cpp",
+      "//components/services/font/public/interfaces",
+      "//services/service_manager/zygote",
+    ]
   }
 
   if (is_win) {

@@ -11,7 +11,6 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/rand_util.h"
 #include "base/stl_util.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -60,9 +59,6 @@ WebrtcDummyVideoEncoder::WebrtcDummyVideoEncoder(
     : main_task_runner_(main_task_runner),
       state_(kUninitialized),
       video_channel_state_observer_(video_channel_state_observer) {
-  // Initialize randomly to avoid replay attacks.
-  base::RandBytes(&picture_id_, sizeof(picture_id_));
-  picture_id_ &= 0x7fff;
 }
 
 WebrtcDummyVideoEncoder::~WebrtcDummyVideoEncoder() = default;
@@ -134,10 +130,12 @@ int32_t WebrtcDummyVideoEncoder::SetRates(uint32_t bitrate,
 
 webrtc::EncodedImageCallback::Result WebrtcDummyVideoEncoder::SendEncodedFrame(
     const WebrtcVideoEncoder::EncodedFrame& frame,
-    base::TimeTicks capture_time) {
+    base::TimeTicks capture_time,
+    base::TimeTicks encode_started_time,
+    base::TimeTicks encode_finished_time) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
-  uint8_t* buffer = reinterpret_cast<uint8_t*>(
-      base::string_as_array(const_cast<std::string*>(&frame.data)));
+  uint8_t* buffer = const_cast<uint8_t*>(
+      reinterpret_cast<const uint8_t*>(base::data(frame.data)));
   size_t buffer_size = frame.data.size();
   base::AutoLock lock(lock_);
   if (state_ == kUninitialized) {
@@ -153,10 +151,17 @@ webrtc::EncodedImageCallback::Result WebrtcDummyVideoEncoder::SendEncodedFrame(
   encoded_image._frameType =
       frame.key_frame ? webrtc::kVideoFrameKey : webrtc::kVideoFrameDelta;
   int64_t capture_time_ms = (capture_time - base::TimeTicks()).InMilliseconds();
+  int64_t encode_started_time_ms =
+      (encode_started_time - base::TimeTicks()).InMilliseconds();
+  int64_t encode_finished_time_ms =
+      (encode_finished_time - base::TimeTicks()).InMilliseconds();
   encoded_image.capture_time_ms_ = capture_time_ms;
   encoded_image._timeStamp = static_cast<uint32_t>(capture_time_ms * 90);
   encoded_image.playout_delay_.min_ms = 0;
   encoded_image.playout_delay_.max_ms = 0;
+  encoded_image.timing_.encode_start_ms = encode_started_time_ms;
+  encoded_image.timing_.encode_finish_ms = encode_finished_time_ms;
+  encoded_image.content_type_ = webrtc::VideoContentType::SCREENSHARE;
 
   webrtc::CodecSpecificInfo codec_specific_info;
   memset(&codec_specific_info, 0, sizeof(codec_specific_info));
@@ -167,9 +172,6 @@ webrtc::EncodedImageCallback::Result WebrtcDummyVideoEncoder::SendEncodedFrame(
         &codec_specific_info.codecSpecific.VP8;
     vp8_info->simulcastIdx = 0;
     vp8_info->temporalIdx = webrtc::kNoTemporalIdx;
-    vp8_info->tl0PicIdx = webrtc::kNoTl0PicIdx;
-    vp8_info->pictureId = picture_id_;
-    picture_id_ = (picture_id_ + 1) & 0x7fff;
   } else if (frame.codec == webrtc::kVideoCodecVP9) {
     webrtc::CodecSpecificInfoVP9* vp9_info =
         &codec_specific_info.codecSpecific.VP9;
@@ -184,9 +186,6 @@ webrtc::EncodedImageCallback::Result WebrtcDummyVideoEncoder::SendEncodedFrame(
     vp9_info->gof_idx = webrtc::kNoGofIdx;
     vp9_info->temporal_idx = webrtc::kNoTemporalIdx;
     vp9_info->spatial_idx = webrtc::kNoSpatialIdx;
-    vp9_info->tl0_pic_idx = webrtc::kNoTl0PicIdx;
-    vp9_info->picture_id = picture_id_;
-    picture_id_ = (picture_id_ + 1) & 0x7fff;
   } else if (frame.codec == webrtc::kVideoCodecH264) {
 #if defined(USE_H264_ENCODER)
     webrtc::CodecSpecificInfoH264* h264_info =
@@ -280,7 +279,9 @@ void WebrtcDummyVideoEncoderFactory::DestroyVideoEncoder(
 webrtc::EncodedImageCallback::Result
 WebrtcDummyVideoEncoderFactory::SendEncodedFrame(
     const WebrtcVideoEncoder::EncodedFrame& frame,
-    base::TimeTicks capture_time) {
+    base::TimeTicks capture_time,
+    base::TimeTicks encode_started_time,
+    base::TimeTicks encode_finished_time) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   base::AutoLock lock(lock_);
   if (encoders_.size() != 1) {
@@ -288,7 +289,8 @@ WebrtcDummyVideoEncoderFactory::SendEncodedFrame(
     return webrtc::EncodedImageCallback::Result(
         webrtc::EncodedImageCallback::Result::ERROR_SEND_FAILED);
   }
-  return encoders_.front()->SendEncodedFrame(frame, capture_time);
+  return encoders_.front()->SendEncodedFrame(
+      frame, capture_time, encode_started_time, encode_finished_time);
 }
 
 void WebrtcDummyVideoEncoderFactory::RegisterEncoderSelectedCallback(

@@ -17,6 +17,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_piece.h"
 #include "base/win/scoped_handle.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/util_constants.h"
@@ -92,6 +93,14 @@ class InstallUtil {
 
   // Returns true if the sentinel file exists (or the path cannot be obtained).
   static bool IsFirstRunSentinelPresent();
+
+  // Test to see if a Start menu shortcut exists with the right toast activator
+  // CLSID registered.
+  static bool IsStartMenuShortcutWithActivatorGuidInstalled();
+
+  // Returns the toast activator registry path if found, or an empty string in
+  // case of error.
+  static base::string16 GetToastActivatorRegistryPath();
 
   // Populates |path| with EULA sentinel file path. Returns false on error.
   static bool GetEULASentinelFilePath(base::FilePath* path);
@@ -186,6 +195,23 @@ class InstallUtil {
       const BrowserDistribution* dist,
       WorkItemList* list);
 
+  // Returns the registry key path and value name where the enrollment token is
+  // stored for machine level user cloud policies.
+  static void GetMachineLevelUserCloudPolicyEnrollmentTokenRegistryPath(
+      std::wstring* key_path,
+      std::wstring* value_name);
+
+  // Returns the registry key path and value name where the enrollment token is
+  // stored for machine level user cloud policies.
+  static void GetMachineLevelUserCloudPolicyDMTokenRegistryPath(
+      std::wstring* key_path,
+      std::wstring* value_name);
+
+  // Returns the token used to enroll this chrome instance for machine level
+  // user cloud policies.  Returns an empty string if this machine should not
+  // be enrolled.
+  static std::wstring GetMachineLevelUserCloudPolicyEnrollmentToken();
+
   // A predicate that compares the program portion of a command line with a
   // given file path.  First, the file paths are compared directly.  If they do
   // not match, the filesystem is consulted to determine if the paths reference
@@ -209,6 +235,10 @@ class InstallUtil {
    private:
     DISALLOW_COPY_AND_ASSIGN(ProgramCompare);
   };  // class ProgramCompare
+
+  // Converts a product GUID into a SQuished gUID that is used for MSI installer
+  // registry entries.
+  static base::string16 GuidToSquid(base::StringPiece16 guid);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(InstallUtil);

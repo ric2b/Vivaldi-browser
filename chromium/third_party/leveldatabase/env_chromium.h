@@ -19,6 +19,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
+#include "leveldb/cache.h"
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "leveldb/export.h"
@@ -134,8 +135,6 @@ class LEVELDB_EXPORT RetrierProvider {
       MethodID method) const = 0;
 };
 
-class Semaphore;
-
 class LEVELDB_EXPORT ChromiumEnv : public leveldb::Env,
                                    public UMALogger,
                                    public RetrierProvider {
@@ -146,34 +145,35 @@ class LEVELDB_EXPORT ChromiumEnv : public leveldb::Env,
 
   virtual ~ChromiumEnv();
 
-  virtual bool FileExists(const std::string& fname);
-  virtual leveldb::Status GetChildren(const std::string& dir,
-                                      std::vector<std::string>* result);
-  virtual leveldb::Status DeleteFile(const std::string& fname);
-  virtual leveldb::Status CreateDir(const std::string& name);
-  virtual leveldb::Status DeleteDir(const std::string& name);
-  virtual leveldb::Status GetFileSize(const std::string& fname, uint64_t* size);
-  virtual leveldb::Status RenameFile(const std::string& src,
-                                     const std::string& dst);
-  virtual leveldb::Status LockFile(const std::string& fname,
-                                   leveldb::FileLock** lock);
-  virtual leveldb::Status UnlockFile(leveldb::FileLock* lock);
-  virtual void Schedule(ScheduleFunc*, void* arg);
-  virtual void StartThread(void (*function)(void* arg), void* arg);
-  virtual leveldb::Status GetTestDirectory(std::string* path);
-  virtual uint64_t NowMicros();
-  virtual void SleepForMicroseconds(int micros);
-  virtual leveldb::Status NewSequentialFile(const std::string& fname,
-                                            leveldb::SequentialFile** result);
-  virtual leveldb::Status NewRandomAccessFile(
+  bool FileExists(const std::string& fname) override;
+  leveldb::Status GetChildren(const std::string& dir,
+                              std::vector<std::string>* result) override;
+  leveldb::Status DeleteFile(const std::string& fname) override;
+  leveldb::Status CreateDir(const std::string& name) override;
+  leveldb::Status DeleteDir(const std::string& name) override;
+  leveldb::Status GetFileSize(const std::string& fname,
+                              uint64_t* size) override;
+  leveldb::Status RenameFile(const std::string& src,
+                             const std::string& dst) override;
+  leveldb::Status LockFile(const std::string& fname,
+                           leveldb::FileLock** lock) override;
+  leveldb::Status UnlockFile(leveldb::FileLock* lock) override;
+  void Schedule(ScheduleFunc*, void* arg) override;
+  void StartThread(void (*function)(void* arg), void* arg) override;
+  leveldb::Status GetTestDirectory(std::string* path) override;
+  uint64_t NowMicros() override;
+  void SleepForMicroseconds(int micros) override;
+  leveldb::Status NewSequentialFile(const std::string& fname,
+                                    leveldb::SequentialFile** result) override;
+  leveldb::Status NewRandomAccessFile(
       const std::string& fname,
-      leveldb::RandomAccessFile** result);
-  virtual leveldb::Status NewWritableFile(const std::string& fname,
-                                          leveldb::WritableFile** result);
-  virtual leveldb::Status NewAppendableFile(const std::string& fname,
-                                            leveldb::WritableFile** result);
-  virtual leveldb::Status NewLogger(const std::string& fname,
-                                    leveldb::Logger** result);
+      leveldb::RandomAccessFile** result) override;
+  leveldb::Status NewWritableFile(const std::string& fname,
+                                  leveldb::WritableFile** result) override;
+  leveldb::Status NewAppendableFile(const std::string& fname,
+                                    leveldb::WritableFile** result) override;
+  leveldb::Status NewLogger(const std::string& fname,
+                            leveldb::Logger** result) override;
   void SetReadOnlyFileLimitForTesting(int max_open_files);
 
  protected:
@@ -218,10 +218,10 @@ class LEVELDB_EXPORT ChromiumEnv : public leveldb::Env,
   base::HistogramBase* GetLockFileAncestorHistogram() const;
 
   // RetrierProvider implementation.
-  virtual int MaxRetryTimeMillis() const { return kMaxRetryTimeMillis; }
-  virtual base::HistogramBase* GetRetryTimeHistogram(MethodID method) const;
-  virtual base::HistogramBase* GetRecoveredFromErrorHistogram(
-      MethodID method) const;
+  int MaxRetryTimeMillis() const override { return kMaxRetryTimeMillis; }
+  base::HistogramBase* GetRetryTimeHistogram(MethodID method) const override;
+  base::HistogramBase* GetRecoveredFromErrorHistogram(
+      MethodID method) const override;
 
   base::FilePath test_directory_;
 
@@ -240,7 +240,7 @@ class LEVELDB_EXPORT ChromiumEnv : public leveldb::Env,
   using BGQueue = base::circular_deque<BGItem>;
   BGQueue queue_;
   LockTable locks_;
-  std::unique_ptr<Semaphore> file_semaphore_;
+  std::unique_ptr<leveldb::Cache> file_cache_;
 };
 
 // Tracks databases open via OpenDatabase() method and exposes them to
@@ -269,6 +269,15 @@ class LEVELDB_EXPORT DBTracker {
   static base::trace_event::MemoryAllocatorDump* GetOrCreateAllocatorDump(
       base::trace_event::ProcessMemoryDump* pmd,
       leveldb::DB* tracked_db);
+
+  // Returns the memory-infra dump for |tracked_memenv|. Can be used to attach
+  // additional info to the database dump, or to properly attribute memory
+  // usage in memory dump providers that also dump |tracked_memenv|.
+  // Note that |tracked_memenv| should be a live Env instance produced by
+  // leveldb_chrome::NewMemEnv().
+  static base::trace_event::MemoryAllocatorDump* GetOrCreateAllocatorDump(
+      base::trace_event::ProcessMemoryDump* pmd,
+      leveldb::Env* tracked_memenv);
 
   // Report counts to UMA.
   void UpdateHistograms();
@@ -301,6 +310,7 @@ class LEVELDB_EXPORT DBTracker {
   friend class ChromiumEnvDBTrackerTest;
   FRIEND_TEST_ALL_PREFIXES(ChromiumEnvDBTrackerTest, IsTrackedDB);
   FRIEND_TEST_ALL_PREFIXES(ChromiumEnvDBTrackerTest, MemoryDumpCreation);
+  FRIEND_TEST_ALL_PREFIXES(ChromiumEnvDBTrackerTest, MemEnvMemoryDumpCreation);
 
   DBTracker();
   ~DBTracker();

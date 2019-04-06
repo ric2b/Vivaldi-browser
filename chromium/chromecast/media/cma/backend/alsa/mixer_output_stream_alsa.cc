@@ -77,7 +77,7 @@ constexpr int64_t kNoTimestamp = std::numeric_limits<int64_t>::min();
 constexpr char kOutputDeviceDefaultName[] = "default";
 
 constexpr bool kPcmRecoverIsSilent = false;
-constexpr int kDefaultOutputBufferSizeFrames = 4096;
+constexpr int kDefaultOutputBufferSizeFrames = 1024;
 
 // A list of supported sample rates.
 // TODO(jyw): move this up into chromecast/public for 1) documentation and
@@ -196,22 +196,9 @@ MixerOutputStreamAlsa::GetRenderingDelay() {
   return rendering_delay_;
 }
 
-bool MixerOutputStreamAlsa::GetTimeUntilUnderrun(base::TimeDelta* result) {
+int MixerOutputStreamAlsa::OptimalWriteFramesCount() {
   CHECK_PCM_INITIALIZED();
-  if (alsa_->PcmStatus(pcm_, pcm_status_) != 0) {
-    LOG(ERROR) << "Failed to get status";
-    return false;
-  }
-  if (alsa_->PcmStatusGetState(pcm_status_) == SND_PCM_STATE_XRUN) {
-    // Underrun already happened.
-    *result = base::TimeDelta();
-    return true;
-  }
-
-  int frames_in_buffer =
-      alsa_buffer_size_ - alsa_->PcmStatusGetAvail(pcm_status_);
-  *result = base::TimeDelta::FromSeconds(1) * frames_in_buffer / sample_rate_;
-  return true;
+  return alsa_period_size_;
 }
 
 bool MixerOutputStreamAlsa::Write(const float* data,
@@ -253,7 +240,7 @@ bool MixerOutputStreamAlsa::Write(const float* data,
     DCHECK_GE(frames_left, 0);
     output_data += frames_or_error * num_output_channels_ * bytes_per_sample;
   }
-  UpdateRenderingDelay(frames);
+  UpdateRenderingDelay();
 
   return true;
 }
@@ -395,19 +382,33 @@ int MixerOutputStreamAlsa::SetAlsaPlaybackParams(int requested_sample_rate) {
 
 void MixerOutputStreamAlsa::DefineAlsaParameters() {
   // Get the ALSA output configuration from the command line.
-  alsa_buffer_size_ = GetSwitchValueNonNegativeInt(
-      switches::kAlsaOutputBufferSize, kDefaultOutputBufferSizeFrames);
 
-  alsa_period_size_ = GetSwitchValueNonNegativeInt(
-      switches::kAlsaOutputPeriodSize, alsa_buffer_size_ / 16);
+  if (base::CommandLine::InitializedForCurrentProcess()) {
+    alsa_buffer_size_ = GetSwitchValueNonNegativeInt(
+        switches::kAlsaOutputBufferSize, kDefaultOutputBufferSizeFrames);
+    alsa_period_size_ = GetSwitchValueNonNegativeInt(
+        switches::kAlsaOutputPeriodSize, alsa_buffer_size_ / 2);
+  } else {
+    alsa_buffer_size_ = kDefaultOutputBufferSizeFrames;
+    alsa_period_size_ = alsa_buffer_size_ / 2;
+  }
+
   if (alsa_period_size_ >= alsa_buffer_size_) {
     LOG(DFATAL) << "ALSA period size must be smaller than the buffer size";
     alsa_period_size_ = alsa_buffer_size_ / 2;
   }
 
-  alsa_start_threshold_ = GetSwitchValueNonNegativeInt(
-      switches::kAlsaOutputStartThreshold,
-      (alsa_buffer_size_ / alsa_period_size_) * alsa_period_size_);
+  LOG(INFO) << "ALSA buffer = " << alsa_buffer_size_
+            << ", period = " << alsa_period_size_;
+
+  if (base::CommandLine::InitializedForCurrentProcess()) {
+    alsa_start_threshold_ = GetSwitchValueNonNegativeInt(
+        switches::kAlsaOutputStartThreshold,
+        (alsa_buffer_size_ / alsa_period_size_) * alsa_period_size_);
+  } else {
+    alsa_start_threshold_ =
+        (alsa_buffer_size_ / alsa_period_size_) * alsa_period_size_;
+  }
   if (alsa_start_threshold_ > alsa_buffer_size_) {
     LOG(DFATAL) << "ALSA start threshold must be no larger than "
                 << "the buffer size";
@@ -417,8 +418,12 @@ void MixerOutputStreamAlsa::DefineAlsaParameters() {
 
   // By default, allow the transfer when at least period_size samples can be
   // processed.
-  alsa_avail_min_ = GetSwitchValueNonNegativeInt(switches::kAlsaOutputAvailMin,
-                                                 alsa_period_size_);
+  if (base::CommandLine::InitializedForCurrentProcess()) {
+    alsa_avail_min_ = GetSwitchValueNonNegativeInt(
+        switches::kAlsaOutputAvailMin, alsa_period_size_);
+  } else {
+    alsa_avail_min_ = alsa_period_size_;
+  }
   if (alsa_avail_min_ > alsa_buffer_size_) {
     LOG(DFATAL) << "ALSA avail min must be no larger than the buffer size";
     alsa_avail_min_ = alsa_period_size_;
@@ -462,8 +467,7 @@ int MixerOutputStreamAlsa::DetermineOutputRate(int requested_sample_rate) {
   return unsigned_output_sample_rate;
 }
 
-void MixerOutputStreamAlsa::UpdateRenderingDelay(int newly_pushed_frames) {
-  // TODO(bshaya): Add rendering delay from post-processors.
+void MixerOutputStreamAlsa::UpdateRenderingDelay() {
   if (alsa_->PcmStatus(pcm_, pcm_status_) != 0 ||
       alsa_->PcmStatusGetState(pcm_status_) != SND_PCM_STATE_RUNNING) {
     rendering_delay_.timestamp_microseconds = kNoTimestamp;

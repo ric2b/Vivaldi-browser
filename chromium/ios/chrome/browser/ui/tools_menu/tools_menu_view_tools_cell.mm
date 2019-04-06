@@ -9,7 +9,7 @@
 #include "ios/chrome/browser/ui/toolbar/toolbar_resource_macros.h"
 #include "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
-#import "ios/chrome/browser/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/ui_util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -146,12 +146,10 @@
 }
 
 - (void)addConstraints {
-  UIView* contentView = [self contentView];
-
   for (UIButton* button in [self allButtons]) {
     NSDictionary* view = @{ @"button" : button };
     NSArray* constraints = @[ @"V:|-(0)-[button]-(0)-|", @"H:[button(==48)]" ];
-    ApplyVisualConstraints(constraints, view, self);
+    ApplyVisualConstraints(constraints, view);
   }
 
   NSDictionary* views = @{
@@ -170,8 +168,7 @@
     @"H:[star]-(space)-[stop]"
   ];
   // clang-format on
-  ApplyVisualConstraintsWithMetricsAndOptions(
-      constraints, views, metrics, LayoutOptionForRTLSupport(), contentView);
+  ApplyVisualConstraintsWithMetrics(constraints, views, metrics);
 }
 
 // These should be added in display order, so they are animated in display

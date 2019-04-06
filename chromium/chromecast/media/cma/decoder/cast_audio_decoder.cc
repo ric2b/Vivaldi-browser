@@ -14,6 +14,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
 #include "chromecast/media/cma/base/decoder_buffer_adapter.h"
 #include "chromecast/media/cma/base/decoder_buffer_base.h"
@@ -33,7 +34,7 @@ namespace media {
 
 namespace {
 
-const int kStereoChannelCount = 2;  // Number of channel for stereo
+constexpr int kMonoChannelCount = 1;
 
 class CastAudioDecoderImpl : public CastAudioDecoder {
  public:
@@ -50,7 +51,8 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
 
   ~CastAudioDecoderImpl() override {}
 
-  void Initialize(const media::AudioConfig& config) {
+  void Initialize(const media::AudioConfig& config,
+                  ::media::ChannelLayout output_channel_layout) {
     DCHECK(!initialized_);
     config_ = config;
 
@@ -59,18 +61,22 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
     // the decoder will report kDecodeError when decoding.
     config_.encryption_scheme = Unencrypted();
 
-    if (config_.channel_number == 1) {
-      // If the input is mono, create a ChannelMixer to convert mono to stereo.
-      // TODO(kmackay) Support other channel format conversions?
-      mixer_.reset(new ::media::ChannelMixer(::media::CHANNEL_LAYOUT_MONO,
-                                             ::media::CHANNEL_LAYOUT_STEREO));
+    ::media::ChannelLayout input_channel_layout =
+        ::media::GuessChannelLayout(config_.channel_number);
+    if (input_channel_layout != output_channel_layout) {
+      mixer_ = std::make_unique<::media::ChannelMixer>(input_channel_layout,
+                                                       output_channel_layout);
+      output_channel_count_ =
+          ::media::ChannelLayoutToChannelCount(output_channel_layout);
     }
+
     base::WeakPtr<CastAudioDecoderImpl> self = weak_factory_.GetWeakPtr();
     decoder_.reset(new ::media::FFmpegAudioDecoder(task_runner_, &media_log_));
     decoder_->Initialize(
         media::DecoderConfigAdapter::ToMediaAudioDecoderConfig(config_),
         nullptr, base::Bind(&CastAudioDecoderImpl::OnInitialized, self),
-        base::Bind(&CastAudioDecoderImpl::OnDecoderOutput, self));
+        base::Bind(&CastAudioDecoderImpl::OnDecoderOutput, self),
+        ::media::AudioDecoder::WaitingForDecryptionKeyCB());
     // Unfortunately there is no result from decoder_->Initialize() until later
     // (the pipeline status callback is posted to the task runner).
   }
@@ -85,8 +91,8 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
       LOG(ERROR) << "Audio decoder doesn't support encrypted stream";
       // Post the task to ensure that |decode_callback| is not called from
       // within a call to Decode().
-      task_runner_->PostTask(FROM_HERE,
-                             base::Bind(decode_callback, kDecodeError, data));
+      task_runner_->PostTask(
+          FROM_HERE, base::BindOnce(decode_callback, kDecodeError, data));
     } else if (!initialized_ || decode_pending_) {
       decode_queue_.push(std::make_pair(data, decode_callback));
     } else {
@@ -105,7 +111,7 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
       // Post the task to ensure that |decode_callback| is not called from
       // within a call to Decode().
       task_runner_->PostTask(FROM_HERE,
-                             base::Bind(decode_callback, kDecodeOk, data));
+                             base::BindOnce(decode_callback, kDecodeOk, data));
       return;
     }
 
@@ -202,11 +208,11 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
     }
 
     if (mixer_) {
-      // Convert mono to stereo if necessary.
-      std::unique_ptr<::media::AudioBus> converted_to_stereo =
-          ::media::AudioBus::Create(kStereoChannelCount, num_frames);
-      mixer_->Transform(decoded.get(), converted_to_stereo.get());
-      decoded.swap(converted_to_stereo);
+      DCHECK(output_channel_count_);
+      std::unique_ptr<::media::AudioBus> converted =
+          ::media::AudioBus::Create(output_channel_count_.value(), num_frames);
+      mixer_->Transform(decoded.get(), converted.get());
+      decoded.swap(converted);
     }
 
     // Convert to the desired output format.
@@ -246,6 +252,7 @@ class CastAudioDecoderImpl : public CastAudioDecoder {
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   InitializedCallback initialized_callback_;
   OutputFormat output_format_;
+  base::Optional<int> output_channel_count_;
   media::AudioConfig config_;
   std::unique_ptr<::media::AudioDecoder> decoder_;
   base::queue<DecodeBufferCallbackPair> decode_queue_;
@@ -265,10 +272,11 @@ std::unique_ptr<CastAudioDecoder> CastAudioDecoder::Create(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
     const media::AudioConfig& config,
     OutputFormat output_format,
+    ::media::ChannelLayout output_channel_layout,
     const InitializedCallback& initialized_callback) {
   std::unique_ptr<CastAudioDecoderImpl> decoder(new CastAudioDecoderImpl(
       task_runner, initialized_callback, output_format));
-  decoder->Initialize(config);
+  decoder->Initialize(config, output_channel_layout);
   return std::move(decoder);
 }
 
@@ -283,6 +291,16 @@ int CastAudioDecoder::OutputFormatSizeInBytes(
   }
   NOTREACHED();
   return 1;
+}
+
+// static
+::media::ChannelLayout CastAudioDecoder::OutputChannelLayoutFromConfig(
+    const AudioConfig& config) {
+  if (config.channel_number == kMonoChannelCount) {
+    return ::media::CHANNEL_LAYOUT_STEREO;
+  }
+
+  return ::media::GuessChannelLayout(config.channel_number);
 }
 
 }  // namespace media

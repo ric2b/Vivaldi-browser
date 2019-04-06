@@ -5,19 +5,28 @@
 #ifndef CONTENT_PUBLIC_TEST_TEST_DOWNLOAD_HTTP_RESPONSE_H_
 #define CONTENT_PUBLIC_TEST_TEST_DOWNLOAD_HTTP_RESPONSE_H_
 
-#include <set>
 #include <string>
+#include <vector>
 
 #include "base/containers/queue.h"
+#include "base/optional.h"
+#include "base/sequence_checker.h"
+#include "net/http/http_byte_range.h"
 #include "net/http/http_response_info.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 
+namespace net {
+class HttpByteRange;
+}  // namespace net
+
 namespace content {
 
 // Class for configuring and returning http responses for download requests.
-class TestDownloadHttpResponse : public net::test_server::HttpResponse {
+// Each instance can handle one http request.
+// Lives on embedded test server's IO thread.
+class TestDownloadHttpResponse {
  public:
   static const char kTestDownloadHostName[];
   static GURL GetNextURLForDownload();
@@ -28,6 +37,20 @@ class TestDownloadHttpResponse : public net::test_server::HttpResponse {
 
   // Called when an injected error triggers.
   using InjectErrorCallback = base::Callback<void(int64_t, int64_t)>;
+
+  struct HttpResponseData {
+    HttpResponseData() = default;
+    HttpResponseData(int64_t min_offset,
+                     int64_t max_offset,
+                     const std::string& response);
+    HttpResponseData(const HttpResponseData& other) = default;
+
+    // The range for first byte position in range header to use this response.
+    int64_t min_offset = -1;
+    int64_t max_offset = -1;
+
+    std::string response;
+  };
 
   struct Parameters {
     // Constructs a Parameters structure using the default constructor, but with
@@ -52,6 +75,12 @@ class TestDownloadHttpResponse : public net::test_server::HttpResponse {
     // Clears the errors in injected_errors.
     void ClearInjectedErrors();
 
+    // Sets the response for range request when the starting offset of
+    // the request falls into [min_offset, max_offset].
+    void SetResponseForRangeRequest(int64_t min_offset,
+                                    int64_t max_offset,
+                                    const std::string& response);
+
     // Contents of the ETag header field of the response.  No Etag header is
     // sent if this field is empty.
     std::string etag;
@@ -64,8 +93,8 @@ class TestDownloadHttpResponse : public net::test_server::HttpResponse {
     // field is empty.
     std::string content_type;
 
-    // The total size of the entity. If the entire entity is requested, then
-    // this would be the same as the value returned in the Content-Length
+    // The total size of the entity body. If the entire entity is requested,
+    // then this would be the same as the value returned in the Content-Length
     // header.
     int64_t size;
 
@@ -79,11 +108,21 @@ class TestDownloadHttpResponse : public net::test_server::HttpResponse {
     // response, or contains 'Content-Range' header for HTTP 206 response.
     bool support_byte_ranges;
 
+    // Whether the server supports partial range responses. A server can claim
+    // it support byte ranges, but actually doesn't send partial responses. In
+    // that case, Set |support_byte_ranges| to true and this variable to false
+    // to simulate the case.
+    bool support_partial_response;
+
     // The connection type in the response.
     net::HttpResponseInfo::ConnectionInfo connection_type;
 
     // If specified, return this as the http response to the client.
+    // No error injection or range request will be handled for static response.
     std::string static_response;
+
+    // List of responses for range requests.
+    std::vector<HttpResponseData> range_request_responses;
 
     // Error offsets to be injected. The response will successfully fulfill
     // requests to read up to offset. An attempt to read the byte at offset
@@ -133,7 +172,7 @@ class TestDownloadHttpResponse : public net::test_server::HttpResponse {
 
     // Offset of body to pause the response sending. A -1 offset will pause
     // the response before header is sent.
-    int64_t pause_offset;
+    base::Optional<int64_t> pause_offset;
   };
 
   // Information about completed requests.
@@ -151,11 +190,6 @@ class TestDownloadHttpResponse : public net::test_server::HttpResponse {
   // Called when response are sent to the client.
   using OnResponseSentCallback =
       base::Callback<void(std::unique_ptr<CompletedRequest>)>;
-
-  // Create an object of this class and return the pointer to the caller.
-  static std::unique_ptr<net::test_server::HttpResponse> Create(
-      const net::test_server::HttpRequest& request,
-      const OnResponseSentCallback& on_response_sent_callback);
 
   // Generate a pseudo random pattern.
   //
@@ -200,14 +234,25 @@ class TestDownloadHttpResponse : public net::test_server::HttpResponse {
       const net::test_server::HttpRequest& request,
       const Parameters& parameters,
       const OnResponseSentCallback& on_response_sent_callback);
-  ~TestDownloadHttpResponse() override;
+  ~TestDownloadHttpResponse();
 
-  // net::test_server::HttpResponse implementations.
-  void SendResponse(
-      const net::test_server::SendBytesCallback& send,
-      const net::test_server::SendCompleteCallback& done) override;
+  // Creates a shim HttpResponse object for embedded test server. This life time
+  // of the object returned is short.
+  std::unique_ptr<net::test_server::HttpResponse> CreateResponseForTestServer();
+
+  // Starts to send the response. |send| and |done| are functions to directly
+  // operate on HTTP connection in embedded test server, and will out live the
+  // shim HttpResponse object created by |CreateResponseForTestServer|.
+  void SendResponse(const net::test_server::SendBytesCallback& send,
+                    const net::test_server::SendCompleteCallback& done);
 
  private:
+  // Parses the request headers.
+  void ParseRequestHeader();
+
+  // Sends the response headers.
+  void SendResponseHeaders();
+
   // Called to append the range headers to |response| when validator matches.
   // Returns true if the range headers can be added, or false if the request
   // is invalid.
@@ -216,29 +261,76 @@ class TestDownloadHttpResponse : public net::test_server::HttpResponse {
   // Adds headers that describe the entity (Content-Type, ETag, Last-Modified).
   std::string GetCommonEntityHeaders();
 
-  // Gets the response headers to send.
-  std::string GetResponseHeaders();
+  // Gets the default response headers to send.
+  std::string GetDefaultResponseHeaders();
 
-  // Gets the response body to send.
-  std::string GetResponseBody();
+  // Gets response header and body for range request starts from
+  // |first_byte_position|.
+  // Returns false if no specific responses are found.
+  bool GetResponseForRangeRequest(std::string* output);
 
-  // The parsed beginning and end range offset from the |request_|.
-  int64_t requested_range_begin_;
-  int64_t requested_range_end_;
+  // Gets response body chunk based on random seed in |parameters_|.
+  std::string GetResponseChunk(const net::HttpByteRange& buffer_range);
+
+  // Pause or interrupt with injected errors.
+  bool ShouldAbortImmediately() const;
+  bool ShouldPauseImmediately() const;
+  bool HandlePause(const net::HttpByteRange& buffer_range);
+  bool HandleInjectedError(const net::HttpByteRange& buffer_range);
+
+  // Used to pause the response sending.
+  bool ShouldPause(const net::HttpByteRange& buffer_range) const;
+  void PauseResponsesAndWaitForResumption();
+
+  // Send part of the response entity body in small buffers, each chunk will be
+  // send in one IOBuffer from embedded test server.
+  // Will pause or throw error based on configuration in |paramters_|.
+  void SendResponseBodyChunk();
+  void SendBodyChunkInternal(const net::HttpByteRange& buffer_range,
+                             const base::RepeatingClosure& next);
+  net::test_server::SendCompleteCallback SendNextBodyChunkClosure();
+
+  // Generate CompletedRequest as result.
+  void GenerateResult();
+  net::test_server::SendCompleteCallback GenerateResultClosure();
+
+  // The parsed range of the HTTP request. The last byte position can be larger
+  // than the file size.
+  net::HttpByteRange request_range_;
+
+  // The range of the HTTP response sent from test server, computed based on
+  // range request header and |parameters_|. The last byte position may be
+  // adjusted to the end of file size.
+  net::HttpByteRange range_;
+
+  // The offset of response bytes sent, will send data according to |range_|.
+  int64_t response_sent_offset_;
 
   // Parameters associated with this response.
   Parameters parameters_;
 
-  // Request received from the client
+  // Request received from the client.
   net::test_server::HttpRequest request_;
+
+  // The function to send bytes on the network.
+  net::test_server::SendBytesCallback bytes_sender_;
+
+  // The number of bytes transferred.
+  int64_t transferred_bytes_;
+
+  // The callback that will close the HTTP connection to the test server.
+  net::test_server::SendCompleteCallback done_callback_;
 
   // Callback to run when the response is sent.
   OnResponseSentCallback on_response_sent_callback_;
+
+  base::WeakPtrFactory<TestDownloadHttpResponse> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(TestDownloadHttpResponse);
 };
 
 // Class for creating and monitoring the completed response from the server.
+// Lives on UI thread.
 //
 // Example usage with TestDownloadHttpResponse:
 //
@@ -252,8 +344,7 @@ class TestDownloadHttpResponse : public net::test_server::HttpResponse {
 
 class TestDownloadResponseHandler {
  public:
-  static std::unique_ptr<net::test_server::HttpResponse>
-  HandleTestDownloadRequest(
+  std::unique_ptr<net::test_server::HttpResponse> HandleTestDownloadRequest(
       const TestDownloadHttpResponse::OnResponseSentCallback& callback,
       const net::test_server::HttpRequest& request);
 
@@ -266,12 +357,23 @@ class TestDownloadResponseHandler {
   void OnRequestCompleted(
       std::unique_ptr<TestDownloadHttpResponse::CompletedRequest> request);
 
+  // Wait for a certain number of requests to complete.
+  void WaitUntilCompletion(size_t request_count);
+
   using CompletedRequests =
       std::vector<std::unique_ptr<TestDownloadHttpResponse::CompletedRequest>>;
   CompletedRequests const& completed_requests() { return completed_requests_; }
 
  private:
+  // Lives on on embedded test server's IO thread.
+  std::vector<std::unique_ptr<TestDownloadHttpResponse>> responses_;
+
   CompletedRequests completed_requests_;
+  size_t request_count_ = 0u;
+  std::unique_ptr<base::RunLoop> run_loop_;
+  scoped_refptr<base::SingleThreadTaskRunner> server_task_runner_;
+  SEQUENCE_CHECKER(sequence_checker_);
+
   DISALLOW_COPY_AND_ASSIGN(TestDownloadResponseHandler);
 };
 

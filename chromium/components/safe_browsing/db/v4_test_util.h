@@ -7,8 +7,10 @@
 
 // Contains classes and methods useful for tests.
 
+#include <map>
 #include <memory>
 #include <ostream>
+#include <vector>
 
 #include "components/safe_browsing/db/v4_database.h"
 #include "components/safe_browsing/db/v4_get_hash_protocol_manager.h"
@@ -31,6 +33,14 @@ class TestV4Store : public V4Store {
   bool HasValidData() const override;
 
   void MarkPrefixAsBad(HashPrefix prefix);
+
+  // |prefixes| does not need to be sorted.
+  void SetPrefixes(std::vector<HashPrefix> prefixes, PrefixSize size);
+
+ private:
+  // Holds mock prefixes from calls to MarkPrefixAsBad / SetPrefixes. Stored as
+  // a vector for simplicity.
+  std::map<PrefixSize, std::vector<HashPrefix>> mock_prefixes_;
 };
 
 class TestV4StoreFactory : public V4StoreFactory {
@@ -73,7 +83,7 @@ class TestV4DatabaseFactory : public V4DatabaseFactory {
 class TestV4GetHashProtocolManager : public V4GetHashProtocolManager {
  public:
   TestV4GetHashProtocolManager(
-      net::URLRequestContextGetter* request_context_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const StoresToCheck& stores_to_check,
       const V4ProtocolConfig& config);
 
@@ -87,7 +97,7 @@ class TestV4GetHashProtocolManagerFactory
   ~TestV4GetHashProtocolManagerFactory() override;
 
   std::unique_ptr<V4GetHashProtocolManager> CreateProtocolManager(
-      net::URLRequestContextGetter* request_context_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       const StoresToCheck& stores_to_check,
       const V4ProtocolConfig& config) override;
 

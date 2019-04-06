@@ -18,7 +18,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "storage/browser/storage_browser_export.h"
-#include "third_party/WebKit/common/quota/quota_types.mojom.h"
+#include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -161,9 +161,10 @@ class STORAGE_EXPORT QuotaDatabase {
     bool unique;
   };
 
-  typedef base::Callback<bool (const QuotaTableEntry&)> QuotaTableCallback;
-  typedef base::Callback<bool (const OriginInfoTableEntry&)>
-      OriginInfoTableCallback;
+  using QuotaTableCallback =
+      base::RepeatingCallback<bool(const QuotaTableEntry&)>;
+  using OriginInfoTableCallback =
+      base::RepeatingCallback<bool(const OriginInfoTableEntry&)>;
 
   struct QuotaTableImporter;
 

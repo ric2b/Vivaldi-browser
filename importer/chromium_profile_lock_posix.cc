@@ -12,7 +12,3 @@ void ChromiumProfileLock::Unlock() {}
 bool ChromiumProfileLock::HasAcquired() {
   return !base::IsLink(lock_file_);
 }
-
-bool ChromiumProfileLock::LockWithFcntl() {
-  return false;
-}

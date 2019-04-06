@@ -1,3 +1,10 @@
 rootWebArea
-++comboBoxMenuButton haspopup
+++comboBoxMenuButton haspopup=menu
 ++comboBoxMenuButton
+++comboBoxMenuButton haspopup=menu
+++comboBoxMenuButton haspopup=listbox
+++comboBoxMenuButton haspopup=grid
+++comboBoxMenuButton haspopup=dialog
+++comboBoxMenuButton haspopup=menu
+++comboBoxMenuButton haspopup=listbox
+++comboBoxMenuButton haspopup=listbox

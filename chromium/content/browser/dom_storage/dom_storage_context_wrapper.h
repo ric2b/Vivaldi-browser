@@ -13,10 +13,13 @@
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/synchronization/lock.h"
+#include "components/services/leveldb/public/interfaces/leveldb.mojom.h"
 #include "content/browser/dom_storage/dom_storage_context_impl.h"
 #include "content/common/content_export.h"
-#include "content/common/storage_partition_service.mojom.h"
 #include "content/public/browser/dom_storage_context.h"
+#include "third_party/blink/public/mojom/dom_storage/session_storage_namespace.mojom.h"
+#include "third_party/blink/public/mojom/dom_storage/storage_area.mojom.h"
 #include "url/origin.h"
 
 namespace base {
@@ -36,6 +39,7 @@ namespace content {
 class DOMStorageContextImpl;
 class LocalStorageContextMojo;
 class SessionStorageContextMojo;
+class SessionStorageNamespaceImpl;
 
 // This is owned by Storage Partition and encapsulates all its dom storage
 // state.
@@ -54,14 +58,13 @@ class CONTENT_EXPORT DOMStorageContextWrapper
   // DOMStorageContext implementation.
   void GetLocalStorageUsage(
       const GetLocalStorageUsageCallback& callback) override;
-  void GetSessionStorageUsage(
-      const GetSessionStorageUsageCallback& callback) override;
-  void DeleteLocalStorageForPhysicalOrigin(const GURL& origin) override;
-  void DeleteLocalStorage(const GURL& origin) override;
+  void GetSessionStorageUsage(GetSessionStorageUsageCallback callback) override;
+  void DeleteLocalStorage(const GURL& origin,
+                          base::OnceClosure callback) override;
   void DeleteSessionStorage(const SessionStorageUsageInfo& usage_info) override;
   void SetSaveSessionStorageOnDisk() override;
   scoped_refptr<SessionStorageNamespace> RecreateSessionStorage(
-      const std::string& persistent_id) override;
+      const std::string& namespace_id) override;
   void StartScavengingUnusedSessionStorage() override;
 
   // Used by content settings to alter the behavior around
@@ -77,26 +80,40 @@ class CONTENT_EXPORT DOMStorageContextWrapper
 
   // See mojom::StoragePartitionService interface.
   void OpenLocalStorage(const url::Origin& origin,
-                        mojom::LevelDBWrapperRequest request);
-  void OpenSessionStorage(int64_t namespace_id,
-                          const url::Origin& origin,
-                          mojom::LevelDBWrapperRequest request);
+                        blink::mojom::StorageAreaRequest request);
+  void OpenSessionStorage(int process_id,
+                          const std::string& namespace_id,
+                          blink::mojom::SessionStorageNamespaceRequest request);
 
   void SetLocalStorageDatabaseForTesting(
       leveldb::mojom::LevelDBDatabaseAssociatedPtr database);
+
+  SessionStorageContextMojo* mojo_session_state() {
+    return mojo_session_state_;
+  }
 
  private:
   friend class DOMStorageMessageFilter;  // for access to context()
   friend class SessionStorageNamespaceImpl;  // ditto
   friend class base::RefCountedThreadSafe<DOMStorageContextWrapper>;
-  friend class MojoDOMStorageBrowserTest;
+  friend class DOMStorageBrowserTest;
 
   ~DOMStorageContextWrapper() override;
   DOMStorageContextImpl* context() const { return context_.get(); }
-  SessionStorageContextMojo* mojo_session_state() {
-    return mojo_session_state_.get();
+
+  base::SequencedTaskRunner* mojo_task_runner() {
+    return mojo_task_runner_.get();
   }
-  base::WeakPtr<SessionStorageContextMojo> GetMojoSessionStateWeakPtr();
+
+  scoped_refptr<SessionStorageNamespaceImpl> MaybeGetExistingNamespace(
+      const std::string& namespace_id) const;
+
+  // Note: can be called on multiple threads, protected by a mutex.
+  void AddNamespace(const std::string& namespace_id,
+                    SessionStorageNamespaceImpl* session_namespace);
+
+  // Note: can be called on multiple threads, protected by a mutex.
+  void RemoveNamespace(const std::string& namespace_id);
 
   // Called on UI thread when the system is under memory pressure.
   void OnMemoryPressure(
@@ -111,8 +128,23 @@ class CONTENT_EXPORT DOMStorageContextWrapper
   // interface. The |mojo_state_| object is owned by this object, but destroyed
   // asynchronously on the |mojo_task_runner_|.
   LocalStorageContextMojo* mojo_state_ = nullptr;
-  scoped_refptr<base::SingleThreadTaskRunner> mojo_task_runner_;
-  std::unique_ptr<SessionStorageContextMojo> mojo_session_state_;
+  SessionStorageContextMojo* mojo_session_state_ = nullptr;
+  scoped_refptr<base::SequencedTaskRunner> mojo_task_runner_;
+
+  // Since the tab restore code keeps a reference to the session namespaces
+  // of recently closed tabs (see sessions::ContentPlatformSpecificTabData and
+  // sessions::TabRestoreService), a SessionStorageNamespaceImpl can outlive the
+  // destruction of the browser window. A session restore can also happen
+  // without the browser context being shutdown or destroyed in between. The
+  // design of SessionStorageNamespaceImpl assumes there is only one object per
+  // namespace. A session restore creates new objects for all tabs while the
+  // Profile wasn't destructed. This map allows the restored session to re-use
+  // the SessionStorageNamespaceImpl objects that are still alive thanks to the
+  // sessions component.
+  std::map<std::string, SessionStorageNamespaceImpl*> alive_namespaces_;
+  mutable base::Lock alive_namespaces_lock_;
+
+  base::FilePath legacy_localstorage_path_;
 
   // To receive memory pressure signals.
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;

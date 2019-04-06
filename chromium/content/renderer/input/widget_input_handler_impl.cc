@@ -10,35 +10,20 @@
 #include "base/logging.h"
 #include "content/common/input/ime_text_span_conversions.h"
 #include "content/common/input_messages.h"
-#include "content/renderer/gpu/render_widget_compositor.h"
+#include "content/renderer/gpu/layer_tree_view.h"
 #include "content/renderer/ime_event_guard.h"
 #include "content/renderer/input/widget_input_handler_manager.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_widget.h"
-#include "third_party/WebKit/public/platform/Platform.h"
-#include "third_party/WebKit/public/platform/WebCoalescedInputEvent.h"
-#include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
-#include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
+#include "third_party/blink/public/platform/web_coalesced_input_event.h"
+#include "third_party/blink/public/platform/web_keyboard_event.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 namespace content {
 
 namespace {
-
-std::vector<blink::WebImeTextSpan> ConvertUIImeTextSpansToBlinkImeTextSpans(
-    const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) {
-  std::vector<blink::WebImeTextSpan> ime_text_spans;
-  for (const auto& ime_text_span : ui_ime_text_spans) {
-    blink::WebImeTextSpan blink_ime_text_span(
-        ConvertUiImeTextSpanTypeToWebType(ime_text_span.type),
-        ime_text_span.start_offset, ime_text_span.end_offset,
-        ime_text_span.underline_color, ime_text_span.thick,
-        ime_text_span.background_color,
-        ime_text_span.suggestion_highlight_color, ime_text_span.suggestions);
-    ime_text_spans.push_back(blink_ime_text_span);
-  }
-  return ime_text_spans;
-}
 
 void RunClosureIfNotSwappedOut(base::WeakPtr<RenderWidget> render_widget,
                                base::OnceClosure closure) {
@@ -111,7 +96,7 @@ void WidgetInputHandlerImpl::ImeSetComposition(
     int32_t end) {
   RunOnMainThread(
       base::BindOnce(&RenderWidget::OnImeSetComposition, render_widget_, text,
-                     ConvertUIImeTextSpansToBlinkImeTextSpans(ime_text_spans),
+                     ConvertUiImeTextSpansToBlinkImeTextSpans(ime_text_spans),
                      range, start, end));
 }
 
@@ -122,7 +107,7 @@ void WidgetInputHandlerImpl::ImeCommitText(
     int32_t relative_cursor_position) {
   RunOnMainThread(
       base::BindOnce(&RenderWidget::OnImeCommitText, render_widget_, text,
-                     ConvertUIImeTextSpansToBlinkImeTextSpans(ime_text_spans),
+                     ConvertUiImeTextSpansToBlinkImeTextSpans(ime_text_spans),
                      range, relative_cursor_position));
 }
 
@@ -146,15 +131,23 @@ void WidgetInputHandlerImpl::RequestCompositionUpdates(bool immediate_request,
 void WidgetInputHandlerImpl::DispatchEvent(
     std::unique_ptr<content::InputEvent> event,
     DispatchEventCallback callback) {
-  if (!event || !event->web_event) {
-    return;
-  }
+  TRACE_EVENT0("input", "WidgetInputHandlerImpl::DispatchEvent");
   input_handler_manager_->DispatchEvent(std::move(event), std::move(callback));
 }
 
 void WidgetInputHandlerImpl::DispatchNonBlockingEvent(
     std::unique_ptr<content::InputEvent> event) {
-  DispatchEvent(std::move(event), DispatchEventCallback());
+  TRACE_EVENT0("input", "WidgetInputHandlerImpl::DispatchNonBlockingEvent");
+  input_handler_manager_->DispatchEvent(std::move(event),
+                                        DispatchEventCallback());
+}
+
+void WidgetInputHandlerImpl::AttachSynchronousCompositor(
+    mojom::SynchronousCompositorControlHostPtr control_host,
+    mojom::SynchronousCompositorHostAssociatedPtrInfo host,
+    mojom::SynchronousCompositorAssociatedRequest compositor_request) {
+  input_handler_manager_->AttachSynchronousCompositor(
+      std::move(control_host), std::move(host), std::move(compositor_request));
 }
 
 void WidgetInputHandlerImpl::RunOnMainThread(base::OnceClosure closure) {

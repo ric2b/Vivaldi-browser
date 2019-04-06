@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
@@ -15,6 +16,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/sessions/session_restore_test_helper.h"
+#include "chrome/browser/sessions/tab_loader_tester.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -40,6 +42,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "url/gurl.h"
 
@@ -71,8 +74,6 @@ class WaitForLoadObserver : public sessions::TabRestoreServiceObserver {
 
  private:
   // Overridden from TabRestoreServiceObserver:
-  void TabRestoreServiceChanged(sessions::TabRestoreService* service) override {
-  }
   void TabRestoreServiceDestroyed(
       sessions::TabRestoreService* service) override {}
   void TabRestoreServiceLoaded(sessions::TabRestoreService* service) override {
@@ -97,6 +98,13 @@ class TabRestoreTest : public InProcessBrowserTest {
         base::FilePath().AppendASCII("session_history"),
         base::FilePath().AppendASCII("bot2.html"));
   }
+
+#if BUILDFLAG(ENABLE_SESSION_SERVICE)
+  void SetMaxSimultaneousLoadsForTesting(TabLoader* tab_loader) {
+    TabLoaderTester tester(tab_loader);
+    tester.SetMaxSimultaneousLoadsForTesting(1);
+  }
+#endif
 
  protected:
   void SetUpOnMainThread() override {
@@ -359,11 +367,7 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreWindowAndTab) {
   EXPECT_EQ(2u, active_browser_list_->size());
 
   // Close the first browser.
-  content::WindowedNotificationObserver observer(
-      chrome::NOTIFICATION_BROWSER_CLOSED,
-      content::NotificationService::AllSources());
-  chrome::CloseWindow(browser());
-  observer.Wait();
+  CloseBrowserSynchronously(browser());
   EXPECT_EQ(1u, active_browser_list_->size());
 
   // Restore the first window. The expected_tabstrip_index (second argument)
@@ -451,11 +455,7 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreWindowBounds) {
   EXPECT_EQ(bounds, bounds2);
 
   // Close the first window.
-  content::WindowedNotificationObserver close_window_observer(
-      chrome::NOTIFICATION_BROWSER_CLOSED,
-      content::NotificationService::AllSources());
-  chrome::CloseWindow(browser());
-  close_window_observer.Wait();
+  CloseBrowserSynchronously(browser());
   EXPECT_EQ(1u, active_browser_list_->size());
 
   // Check that the TabRestoreService has the contents of the closed window and
@@ -504,11 +504,7 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreTabFromClosedWindowByID) {
   EXPECT_EQ(2u, active_browser_list_->size());
 
   // Close the window.
-  content::WindowedNotificationObserver close_window_observer(
-      chrome::NOTIFICATION_BROWSER_CLOSED,
-      content::NotificationService::AllSources());
-  chrome::CloseWindow(browser());
-  close_window_observer.Wait();
+  CloseBrowserSynchronously(browser());
   EXPECT_EQ(1u, active_browser_list_->size());
 
   // Check that the TabRestoreService has the contents of the closed window.
@@ -523,9 +519,13 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreTabFromClosedWindowByID) {
       static_cast<sessions::TabRestoreService::Window*>(entry);
   auto& tabs = entry_win->tabs;
   EXPECT_EQ(3u, tabs.size());
+  EXPECT_EQ(url::kAboutBlankURL, tabs[0]->navigations.front().virtual_url());
+  EXPECT_EQ(url1_, tabs[1]->navigations.front().virtual_url());
+  EXPECT_EQ(url2_, tabs[2]->navigations.front().virtual_url());
+  EXPECT_EQ(2, entry_win->selected_tab_index);
 
   // Find the Tab to restore.
-  SessionID::id_type tab_id_to_restore = 0;
+  SessionID tab_id_to_restore = SessionID::InvalidValue();
   bool found_tab_to_restore = false;
   for (const auto& tab_ptr : tabs) {
     auto& tab = *tab_ptr;
@@ -554,6 +554,12 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreTabFromClosedWindowByID) {
   EXPECT_EQ(2, browser->tab_strip_model()->count());
   EXPECT_EQ(url1_,
             browser->tab_strip_model()->GetActiveWebContents()->GetURL());
+
+  // Check that the window entry was adjusted.
+  EXPECT_EQ(2u, tabs.size());
+  EXPECT_EQ(url::kAboutBlankURL, tabs[0]->navigations.front().virtual_url());
+  EXPECT_EQ(url2_, tabs[1]->navigations.front().virtual_url());
+  EXPECT_EQ(1, entry_win->selected_tab_index);
 }
 
 // Tests that a duplicate history entry is not created when we restore a page
@@ -683,11 +689,7 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreWindow) {
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 
   // Close the window.
-  content::WindowedNotificationObserver close_window_observer(
-      chrome::NOTIFICATION_BROWSER_CLOSED,
-      content::NotificationService::AllSources());
-  chrome::CloseWindow(browser());
-  close_window_observer.Wait();
+  CloseBrowserSynchronously(browser());
   EXPECT_EQ(window_count - 1, active_browser_list_->size());
 
   // Restore the window.
@@ -717,9 +719,18 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreWindow) {
   EXPECT_EQ(url1_, restored_tab->GetURL());
 }
 
+// https://crbug.com/835305: Timeout flakiness on Win7 Tests (dbg)(1) bot and
+// PASS/FAIL flakiness on Linux Chromium OS ASan LSan Tests (1) bot.
+#if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || \
+    (defined(OS_WIN) && !defined(NDEBUG))
+#define MAYBE_RestoreTabWithSpecialURL DISABLED_RestoreTabWithSpecialURL
+#else
+#define MAYBE_RestoreTabWithSpecialURL RestoreTabWithSpecialURL
+#endif
+
 // Restore tab with special URL chrome://credits/ and make sure the page loads
 // properly after restore. See http://crbug.com/31905.
-IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreTabWithSpecialURL) {
+IN_PROC_BROWSER_TEST_F(TabRestoreTest, MAYBE_RestoreTabWithSpecialURL) {
   // Navigate new tab to a special URL.
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GURL(chrome::kChromeUICreditsURL),
@@ -742,7 +753,9 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreTabWithSpecialURL) {
 }
 
 // https://crbug.com/667932: Flakiness on linux_chromium_asan_rel_ng bot.
-#if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER)
+// https://crbug.com/835305: Timeout flakiness on Win7 Tests (dbg)(1) bot.
+#if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || \
+    (defined(OS_WIN) && !defined(NDEBUG))
 #define MAYBE_RestoreTabWithSpecialURLOnBack DISABLED_RestoreTabWithSpecialURLOnBack
 #else
 #define MAYBE_RestoreTabWithSpecialURLOnBack RestoreTabWithSpecialURLOnBack
@@ -813,11 +826,7 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest,
   AddSomeTabs(browser(), 3);
   // 1st tab is about:blank added by InProcessBrowserTest.
   EXPECT_EQ(4, browser()->tab_strip_model()->count());
-  content::WindowedNotificationObserver observer(
-      chrome::NOTIFICATION_BROWSER_CLOSED,
-      content::NotificationService::AllSources());
-  chrome::CloseWindow(browser());
-  observer.Wait();
+  CloseBrowserSynchronously(browser());
 
   SessionRestoreTestHelper helper;
   // Restore browser (this is what Cmd-Shift-T does on Mac).
@@ -842,14 +851,17 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest,
   const int tabs_count = 4;
   AddSomeTabs(browser2, tabs_count - browser2->tab_strip_model()->count());
   EXPECT_EQ(tabs_count, browser2->tab_strip_model()->count());
-  content::WindowedNotificationObserver observer(
-      chrome::NOTIFICATION_BROWSER_CLOSED,
-      content::NotificationService::AllSources());
-  chrome::CloseWindow(browser2);
-  observer.Wait();
+  CloseBrowserSynchronously(browser2);
 
   // Limit the number of restored tabs that are loaded.
-  TabLoader::SetMaxLoadedTabCountForTest(2);
+  TabLoaderTester::SetMaxLoadedTabCountForTesting(2);
+
+  // When the tab loader is created configure it for this test. This ensures
+  // that no more than 1 loading slot is used for the test.
+  base::RepeatingCallback<void(TabLoader*)> callback =
+      base::BindRepeating(&TabRestoreTest::SetMaxSimultaneousLoadsForTesting,
+                          base::Unretained(this));
+  TabLoaderTester::SetConstructionCallbackForTesting(&callback);
 
   // Restore recently closed window.
   content::WindowedNotificationObserver open_window_observer(
@@ -876,5 +888,8 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest,
     EXPECT_FALSE(contents->IsLoading());
     EXPECT_TRUE(contents->GetController().NeedsReload());
   }
+
+  // Clean up the callback.
+  TabLoaderTester::SetConstructionCallbackForTesting(nullptr);
 }
 #endif  // BUILDFLAG(ENABLE_SESSION_SERVICE)

@@ -212,6 +212,31 @@ internal::PageLoadTimingStatus IsValidPageLoadTiming(
     return internal::INVALID_NULL_FIRST_INPUT_DELAY;
   }
 
+  if (timing.interactive_timing->longest_input_delay.has_value() &&
+      !timing.interactive_timing->longest_input_timestamp.has_value()) {
+    return internal::INVALID_NULL_LONGEST_INPUT_TIMESTAMP;
+  }
+
+  if (!timing.interactive_timing->longest_input_delay.has_value() &&
+      timing.interactive_timing->longest_input_timestamp.has_value()) {
+    return internal::INVALID_NULL_LONGEST_INPUT_DELAY;
+  }
+
+  if (timing.interactive_timing->longest_input_delay.has_value() &&
+      timing.interactive_timing->first_input_delay.has_value() &&
+      timing.interactive_timing->longest_input_delay <
+          timing.interactive_timing->first_input_delay) {
+    return internal::INVALID_LONGEST_INPUT_DELAY_LESS_THAN_FIRST_INPUT_DELAY;
+  }
+
+  if (timing.interactive_timing->longest_input_timestamp.has_value() &&
+      timing.interactive_timing->first_input_timestamp.has_value() &&
+      timing.interactive_timing->longest_input_timestamp <
+          timing.interactive_timing->first_input_timestamp) {
+    return internal::
+        INVALID_LONGEST_INPUT_TIMESTAMP_LESS_THAN_FIRST_INPUT_TIMESTAMP;
+  }
+
   return internal::VALID;
 }
 
@@ -350,6 +375,20 @@ class PageLoadTimingMerger {
       target_interactive_timing->first_input_delay =
           new_interactive_timing.first_input_delay;
     }
+
+    if (new_interactive_timing.longest_input_delay.has_value()) {
+      base::TimeDelta new_longest_input_timestamp =
+          navigation_start_offset +
+          new_interactive_timing.longest_input_timestamp.value();
+      if (!target_interactive_timing->longest_input_delay.has_value() ||
+          new_interactive_timing.longest_input_delay.value() >
+              target_interactive_timing->longest_input_delay.value()) {
+        target_interactive_timing->longest_input_delay =
+            new_interactive_timing.longest_input_delay;
+        target_interactive_timing->longest_input_timestamp =
+            new_longest_input_timestamp;
+      }
+    }
   }
 
   // The target PageLoadTiming we are merging values into.
@@ -391,10 +430,12 @@ void PageLoadMetricsUpdateDispatcher::UpdateMetrics(
     content::RenderFrameHost* render_frame_host,
     const mojom::PageLoadTiming& new_timing,
     const mojom::PageLoadMetadata& new_metadata,
-    const mojom::PageLoadFeatures& new_features) {
+    const mojom::PageLoadFeatures& new_features,
+    const mojom::PageLoadDataUse& new_data_use) {
   if (render_frame_host->GetLastCommittedURL().SchemeIs(
           extensions::kExtensionScheme)) {
-    // Ignore updates from Chrome extensions.
+    // Extensions can inject child frames into a page. We don't want to track
+    // these as they could skew metrics. See http://crbug.com/761037
     return;
   }
 
@@ -404,6 +445,19 @@ void PageLoadMetricsUpdateDispatcher::UpdateMetrics(
   } else {
     UpdateSubFrameMetadata(new_metadata);
     UpdateSubFrameTiming(render_frame_host, new_timing);
+  }
+  client_->UpdateFeaturesUsage(new_features);
+  client_->UpdateDataUse(new_data_use);
+}
+
+void PageLoadMetricsUpdateDispatcher::UpdateFeatures(
+    content::RenderFrameHost* render_frame_host,
+    const mojom::PageLoadFeatures& new_features) {
+  if (render_frame_host->GetLastCommittedURL().SchemeIs(
+          extensions::kExtensionScheme)) {
+    // Extensions can inject child frames into a page. We don't want to track
+    // these as they could skew metrics. See http://crbug.com/761037
+    return;
   }
   client_->UpdateFeaturesUsage(new_features);
 }
@@ -438,7 +492,7 @@ void PageLoadMetricsUpdateDispatcher::UpdateSubFrameTiming(
     return;
   }
 
-  client_->OnSubFrameTimingChanged(new_timing);
+  client_->OnSubFrameTimingChanged(render_frame_host, new_timing);
 
   base::TimeDelta navigation_start_offset = it->second;
   PageLoadTimingMerger merger(pending_merged_page_timing_.get());

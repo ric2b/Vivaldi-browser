@@ -23,73 +23,64 @@ std::string RegistrationKey(const std::string& unique_id) {
   return kRegistrationKeyPrefix + unique_id;
 }
 
-std::string RequestKeyPrefix(const std::string& unique_id) {
-  // Allows looking up all requests within a registration.
-  return kRequestKeyPrefix + unique_id + kSeparator;
+std::string TitleKey(const std::string& unique_id) {
+  return kTitleKeyPrefix + unique_id;
 }
 
-std::string PendingRequestKeyPrefix(
-    int64_t registration_creation_microseconds_since_unix_epoch,
-    const std::string& unique_id) {
-  // These keys are ordered by the registration's creation time rather than by
-  // its |unique_id|, so that the highest priority pending requests in FIFO
-  // order can be looked up by fetching the lexicographically smallest keys.
-  // https://crbug.com/741609 may introduce more advanced prioritisation.
-  //
-  // Since the ordering must survive restarts, wall clock time is used, but that
-  // is not monotonically increasing, so the ordering is not exact, and the
-  // |unique_id| is appended to break ties in case the wall clock returns the
-  // same values more than once.
-  //
-  // On Nov 20 2286 17:46:39 the microseconds will transition from 9999999999999
-  // to 10000000000000 and pending requests will briefly sort incorrectly.
-  return kPendingRequestKeyPrefix +
-         base::Int64ToString(
-             registration_creation_microseconds_since_unix_epoch) +
-         kSeparator + unique_id + kSeparator;
+std::string PendingRequestKeyPrefix(const std::string& unique_id) {
+  return kPendingRequestKeyPrefix + unique_id + kSeparator;
 }
 
-std::string PendingRequestKey(
-    int64_t registration_creation_microseconds_since_unix_epoch,
-    const std::string& unique_id,
-    int request_index) {
-  // In addition to the ordering from PendingRequestKeyPrefix, the requests
-  // within each registration should be prioritized according to their index.
-  return PendingRequestKeyPrefix(
-             registration_creation_microseconds_since_unix_epoch, unique_id) +
-         base::IntToString(request_index);
+std::string PendingRequestKey(const std::string& unique_id, int request_index) {
+  return PendingRequestKeyPrefix(unique_id) + std::to_string(request_index);
 }
 
-DatabaseStatus ToDatabaseStatus(ServiceWorkerStatusCode status) {
+std::string ActiveRequestKeyPrefix(const std::string& unique_id) {
+  return kActiveRequestKeyPrefix + unique_id + kSeparator;
+}
+
+std::string ActiveRequestKey(const std::string& unique_id, int request_index) {
+  return ActiveRequestKeyPrefix(unique_id) + std::to_string(request_index);
+}
+
+std::string CompletedRequestKeyPrefix(const std::string& unique_id) {
+  return kCompletedRequestKeyPrefix + unique_id + kSeparator;
+}
+
+std::string CompletedRequestKey(const std::string& unique_id,
+                                int request_index) {
+  return CompletedRequestKeyPrefix(unique_id) + std::to_string(request_index);
+}
+
+DatabaseStatus ToDatabaseStatus(blink::ServiceWorkerStatusCode status) {
   switch (status) {
-    case SERVICE_WORKER_OK:
+    case blink::ServiceWorkerStatusCode::kOk:
       return DatabaseStatus::kOk;
-    case SERVICE_WORKER_ERROR_FAILED:
-    case SERVICE_WORKER_ERROR_ABORT:
+    case blink::ServiceWorkerStatusCode::kErrorFailed:
+    case blink::ServiceWorkerStatusCode::kErrorAbort:
       // FAILED is for invalid arguments (e.g. empty key) or database errors.
       // ABORT is for unexpected failures, e.g. because shutdown is in progress.
       // BackgroundFetchDataManager handles both of these the same way.
       return DatabaseStatus::kFailed;
-    case SERVICE_WORKER_ERROR_NOT_FOUND:
+    case blink::ServiceWorkerStatusCode::kErrorNotFound:
       // This can also happen for writes, if the ServiceWorkerRegistration has
       // been deleted.
       return DatabaseStatus::kNotFound;
-    case SERVICE_WORKER_ERROR_START_WORKER_FAILED:
-    case SERVICE_WORKER_ERROR_PROCESS_NOT_FOUND:
-    case SERVICE_WORKER_ERROR_EXISTS:
-    case SERVICE_WORKER_ERROR_INSTALL_WORKER_FAILED:
-    case SERVICE_WORKER_ERROR_ACTIVATE_WORKER_FAILED:
-    case SERVICE_WORKER_ERROR_IPC_FAILED:
-    case SERVICE_WORKER_ERROR_NETWORK:
-    case SERVICE_WORKER_ERROR_SECURITY:
-    case SERVICE_WORKER_ERROR_EVENT_WAITUNTIL_REJECTED:
-    case SERVICE_WORKER_ERROR_STATE:
-    case SERVICE_WORKER_ERROR_TIMEOUT:
-    case SERVICE_WORKER_ERROR_SCRIPT_EVALUATE_FAILED:
-    case SERVICE_WORKER_ERROR_DISK_CACHE:
-    case SERVICE_WORKER_ERROR_REDUNDANT:
-    case SERVICE_WORKER_ERROR_DISALLOWED:
-    case SERVICE_WORKER_ERROR_MAX_VALUE:
+    case blink::ServiceWorkerStatusCode::kErrorStartWorkerFailed:
+    case blink::ServiceWorkerStatusCode::kErrorProcessNotFound:
+    case blink::ServiceWorkerStatusCode::kErrorExists:
+    case blink::ServiceWorkerStatusCode::kErrorInstallWorkerFailed:
+    case blink::ServiceWorkerStatusCode::kErrorActivateWorkerFailed:
+    case blink::ServiceWorkerStatusCode::kErrorIpcFailed:
+    case blink::ServiceWorkerStatusCode::kErrorNetwork:
+    case blink::ServiceWorkerStatusCode::kErrorSecurity:
+    case blink::ServiceWorkerStatusCode::kErrorEventWaitUntilRejected:
+    case blink::ServiceWorkerStatusCode::kErrorState:
+    case blink::ServiceWorkerStatusCode::kErrorTimeout:
+    case blink::ServiceWorkerStatusCode::kErrorScriptEvaluateFailed:
+    case blink::ServiceWorkerStatusCode::kErrorDiskCache:
+    case blink::ServiceWorkerStatusCode::kErrorRedundant:
+    case blink::ServiceWorkerStatusCode::kErrorDisallowed:
       break;
   }
   NOTREACHED();

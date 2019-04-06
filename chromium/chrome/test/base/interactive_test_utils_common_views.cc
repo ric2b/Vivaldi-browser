@@ -15,8 +15,9 @@ namespace ui_test_utils {
 
 void MoveMouseToCenterAndPress(views::View* view,
                                ui_controls::MouseButton button,
-                               int state,
-                               const base::Closure& closure) {
+                               int button_state,
+                               const base::RepeatingClosure& closure,
+                               int accelerator_state) {
   DCHECK(view);
   DCHECK(view->GetWidget());
   // Complete any in-progress animation before sending the events so that the
@@ -32,9 +33,9 @@ void MoveMouseToCenterAndPress(views::View* view,
   gfx::Point view_center(view->width() / 2, view->height() / 2);
   views::View::ConvertPointToScreen(view, &view_center);
   ui_controls::SendMouseMoveNotifyWhenDone(
-      view_center.x(),
-      view_center.y(),
-      base::Bind(&internal::ClickTask, button, state, closure));
+      view_center.x(), view_center.y(),
+      base::BindOnce(&internal::ClickTask, button, button_state, closure,
+                     accelerator_state));
 }
 
 }  // namespace ui_test_utils

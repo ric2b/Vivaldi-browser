@@ -34,7 +34,6 @@ class Profile;
 namespace base {
 class DictionaryValue;
 class ListValue;
-class SimpleTestTickClock;
 class TickClock;
 }
 
@@ -80,12 +79,7 @@ class PrerenderManager : public content::NotificationObserver,
                          public MediaCaptureDevicesDispatcher::Observer {
  public:
   enum PrerenderManagerMode {
-    // WARNING: Legacy code, not for use. Disables prerendering and avoids
-    // creating an instance of PrerenderManager. This mode overrides forced
-    // prerenders which breaks the assumptions of the CustomTabActivityTest.
-    PRERENDER_MODE_DISABLED,
-
-    // Enables all types of prerendering for any origin.
+    // Deprecated: Enables all types of prerendering for any origin.
     PRERENDER_MODE_ENABLED,
 
     // For each request to prerender performs a NoStatePrefetch for the same URL
@@ -155,11 +149,35 @@ class PrerenderManager : public content::NotificationObserver,
   // Cancels all active prerenders.
   void CancelAllPrerenders();
 
+  // Wraps input and output parameters to MaybeUsePrerenderedPage.
+  struct Params {
+    Params(NavigateParams* params,
+           content::WebContents* contents_being_navigated);
+    Params(bool uses_post,
+           const std::string& extra_headers,
+           bool should_replace_current_entry,
+           content::WebContents* contents_being_navigated);
+
+    // Input parameters.
+    const bool uses_post;
+    const std::string extra_headers;
+    const bool should_replace_current_entry;
+    content::WebContents* const contents_being_navigated;
+
+    // Output parameters.
+    content::WebContents* replaced_contents = nullptr;
+  };
+
   // If |url| matches a valid prerendered page and |params| are compatible, try
-  // to swap it and merge browsing histories. Returns |true| and updates
-  // |params->target_contents| if a prerendered page is swapped in, |false|
-  // otherwise.
-  bool MaybeUsePrerenderedPage(const GURL& url, NavigateParams* params);
+  // to swap it and merge browsing histories.
+  //
+  // Returns true if a prerendered page is swapped in. When this happens, the
+  // PrerenderManager has already swapped out |contents_being_navigated| with
+  // |replaced_contents| in the WebContents container [e.g. TabStripModel on
+  // desktop].
+  //
+  // Returns false if nothing is swapped.
+  bool MaybeUsePrerenderedPage(const GURL& url, Params* params);
 
   // Moves a PrerenderContents to the pending delete list from the list of
   // active prerenders when prerendering should be cancelled.
@@ -195,12 +213,8 @@ class PrerenderManager : public content::NotificationObserver,
                                            bool was_hidden,
                                            base::TimeTicks ticks);
 
-  static PrerenderManagerMode GetMode(Origin origin);
-  static void SetMode(PrerenderManagerMode mode);
-  static void SetOmniboxMode(PrerenderManagerMode mode);
-  static bool IsAnyPrerenderingPossible();
-  static bool IsNoStatePrefetch(Origin origin);
-  static bool IsSimpleLoadExperiment(Origin origin);
+  static PrerenderManagerMode GetMode() { return mode_; }
+  static void SetMode(PrerenderManagerMode mode) { mode_ = mode; }
 
   // Query the list of current prerender pages to see if the given web contents
   // is prerendering a page. The optional parameter |origin| is an output
@@ -285,8 +299,7 @@ class PrerenderManager : public content::NotificationObserver,
   // testing.
   base::Time GetCurrentTime() const;
   base::TimeTicks GetCurrentTimeTicks() const;
-  void SetTickClockForTesting(
-      std::unique_ptr<base::SimpleTestTickClock> tick_clock);
+  void SetTickClockForTesting(const base::TickClock* tick_clock);
 
   void DisablePageLoadMetricsObserverForTesting() {
     page_load_metric_observer_disabled_ = true;
@@ -322,6 +335,13 @@ class PrerenderManager : public content::NotificationObserver,
       PrerenderContents::Factory* prerender_contents_factory);
 
   base::WeakPtr<PrerenderManager> AsWeakPtr();
+
+  // Clears the list of recently prefetched URLs. Allows, for example, to reuse
+  // the same URL in tests, without running into FINAL_STATUS_DUPLICATE.
+  void ClearPrefetchInformationForTesting();
+
+  // Returns true iff the |url| is found in the list of recent prefetches.
+  bool HasRecentlyPrefetchedUrlForTesting(const GURL& url);
 
  protected:
   class PrerenderData : public base::SupportsWeakPtr<PrerenderData> {
@@ -449,6 +469,8 @@ class PrerenderManager : public content::NotificationObserver,
 
   void DeleteOldEntries();
 
+  void DeleteToDeletePrerenders();
+
   // Virtual so unit tests can override this.
   virtual std::unique_ptr<PrerenderContents> CreatePrerenderContents(
       const GURL& url,
@@ -484,6 +506,10 @@ class PrerenderManager : public content::NotificationObserver,
                               base::TimeDelta* prefetch_age,
                               Origin* origin);
 
+  // Called when PrerenderContents gets destroyed. Attaches the |final_status|
+  // to the most recent prefetch matching the |url|.
+  void SetPrefetchFinalStatusForUrl(const GURL& url, FinalStatus final_status);
+
   // Called when a prefetch has been used. Prefetches avoid cache revalidation
   // only once.
   void OnPrefetchUsed(const GURL& url);
@@ -518,11 +544,10 @@ class PrerenderManager : public content::NotificationObserver,
   // |web_contents|.  Returns the new WebContents that was swapped in, or NULL
   // if a swap-in was not possible.  If |should_replace_current_entry| is true,
   // the current history entry in |web_contents| is replaced.
-  std::unique_ptr<content::WebContents> SwapInternal(
-      const GURL& url,
-      content::WebContents* web_contents,
-      PrerenderData* prerender_data,
-      bool should_replace_current_entry);
+  content::WebContents* SwapInternal(const GURL& url,
+                                     content::WebContents* web_contents,
+                                     PrerenderData* prerender_data,
+                                     bool should_replace_current_entry);
 
   // The configuration.
   Config config_;
@@ -546,7 +571,6 @@ class PrerenderManager : public content::NotificationObserver,
   std::unique_ptr<PrerenderContents::Factory> prerender_contents_factory_;
 
   static PrerenderManagerMode mode_;
-  static PrerenderManagerMode omnibox_mode_;
 
   // RepeatingTimer to perform periodic cleanups of pending prerendered
   // pages.
@@ -555,7 +579,7 @@ class PrerenderManager : public content::NotificationObserver,
   // Track time of last prerender to limit prerender spam.
   base::TimeTicks last_prerender_start_time_;
 
-  std::vector<content::WebContents*> old_web_contents_list_;
+  std::vector<std::unique_ptr<content::WebContents>> old_web_contents_list_;
 
   std::vector<std::unique_ptr<OnCloseWebContentsDeleter>>
       on_close_web_contents_deleters_;
@@ -577,7 +601,7 @@ class PrerenderManager : public content::NotificationObserver,
   using PrerenderProcessSet = std::set<content::RenderProcessHost*>;
   PrerenderProcessSet prerender_process_hosts_;
 
-  std::unique_ptr<base::TickClock> tick_clock_;
+  const base::TickClock* tick_clock_;
 
   bool page_load_metric_observer_disabled_;
 

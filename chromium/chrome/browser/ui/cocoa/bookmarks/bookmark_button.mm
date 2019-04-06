@@ -281,11 +281,15 @@ BookmarkButton* gDraggedButton = nil; // Weak
   int eventMask = NSLeftMouseUpMask | NSMouseEnteredMask | NSMouseExitedMask |
       NSLeftMouseDraggedMask;
 
-  BOOL keepGoing = YES;
-  [[self target] performSelector:[self action] withObject:self];
+  // The action may run a nested loop, so ensure the action is marked as fired
+  // before performing the action, and avoid spinning our own nested loop here
+  // if it would have already exited due to mouse up.
   self.draggableButton.actionHasFired = YES;
+  sawMouseUp_ = NO;
+  [[self target] performSelector:[self action] withObject:self];
 
   DraggableButton* insideBtn = nil;
+  BOOL keepGoing = !sawMouseUp_;
 
   while (keepGoing) {
     theEvent = [[self window] nextEventMatchingMask:eventMask];
@@ -370,6 +374,7 @@ BookmarkButton* gDraggedButton = nil; // Weak
 }
 
 - (void)mouseUp:(NSEvent*)theEvent {
+  sawMouseUp_ = YES;
   [super mouseUp:theEvent];
 
   // Update the highlight on mouse up.
@@ -449,14 +454,14 @@ BookmarkButton* gDraggedButton = nil; // Weak
 
 - (void)updateIconToMatchTheme {
   // During testing, the window might not be a browser window, and the
-  // superview might not be a BookmarkBarView.
+  // superview might not be a BookmarkBarViewCocoa.
   if (![[self window] respondsToSelector:@selector(hasDarkTheme)] ||
-      ![[self superview] isKindOfClass:[BookmarkBarView class]]) {
+      ![[self superview] isKindOfClass:[BookmarkBarViewCocoa class]]) {
     return;
   }
 
-  BookmarkBarView* bookmarkBarView =
-      base::mac::ObjCCastStrict<BookmarkBarView>([self superview]);
+  BookmarkBarViewCocoa* bookmarkBarView =
+      base::mac::ObjCCastStrict<BookmarkBarViewCocoa>([self superview]);
   BookmarkBarController* bookmarkBarController = [bookmarkBarView controller];
 
   // The apps page shortcut button does not need to be updated.

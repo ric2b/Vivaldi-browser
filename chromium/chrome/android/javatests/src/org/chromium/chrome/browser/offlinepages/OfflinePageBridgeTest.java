@@ -4,8 +4,11 @@
 
 package org.chromium.chrome.browser.offlinepages;
 
+import android.net.Uri;
+import android.os.Build;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
+import android.util.Base64;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -14,9 +17,12 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
@@ -29,9 +35,15 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.offlinepages.DeletePageResult;
 import org.chromium.components.offlinepages.SavePageResult;
 import org.chromium.components.offlinepages.background.UpdateRequestResult;
+import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.net.test.EmbeddedTestServer;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -53,8 +65,8 @@ public class OfflinePageBridgeTest {
     private static final String TEST_PAGE = "/chrome/test/data/android/about.html";
     private static final int TIMEOUT_MS = 5000;
     private static final long POLLING_INTERVAL = 100;
-    private static final ClientId BOOKMARK_ID =
-            new ClientId(OfflinePageBridge.BOOKMARK_NAMESPACE, "1234");
+    private static final ClientId TEST_CLIENT_ID =
+            new ClientId(OfflinePageBridge.DOWNLOAD_NAMESPACE, "1234");
 
     private OfflinePageBridge mOfflinePageBridge;
     private EmbeddedTestServer mTestServer;
@@ -125,6 +137,8 @@ public class OfflinePageBridgeTest {
     @Test
     @SmallTest
     @RetryOnFailure
+    @DisableIf.Build(
+            message = "https://crbug.com/853255", sdk_is_less_than = Build.VERSION_CODES.LOLLIPOP)
     public void testAddOfflinePageAndLoad() throws Exception {
         mActivityTestRule.loadUrl(mTestPage);
         savePage(SavePageResult.SUCCESS, mTestPage);
@@ -140,7 +154,7 @@ public class OfflinePageBridgeTest {
     public void testGetPageByBookmarkId() throws Exception {
         mActivityTestRule.loadUrl(mTestPage);
         savePage(SavePageResult.SUCCESS, mTestPage);
-        OfflinePageItem offlinePage = getPageByClientId(BOOKMARK_ID);
+        OfflinePageItem offlinePage = getPageByClientId(TEST_CLIENT_ID);
         Assert.assertEquals("Offline page item url incorrect.", mTestPage, offlinePage.getUrl());
         Assert.assertNull("Offline page is not supposed to exist",
                 getPageByClientId(new ClientId(OfflinePageBridge.BOOKMARK_NAMESPACE, "-42")));
@@ -149,15 +163,17 @@ public class OfflinePageBridgeTest {
     @Test
     @SmallTest
     @RetryOnFailure
+    @DisableIf.Build(
+            message = "https://crbug.com/853255", sdk_is_less_than = Build.VERSION_CODES.LOLLIPOP)
     public void testDeleteOfflinePage() throws Exception {
-        deletePage(BOOKMARK_ID, DeletePageResult.SUCCESS);
+        deletePage(TEST_CLIENT_ID, DeletePageResult.SUCCESS);
         mActivityTestRule.loadUrl(mTestPage);
         savePage(SavePageResult.SUCCESS, mTestPage);
-        Assert.assertNotNull(
-                "Offline page should be available, but it is not.", getPageByClientId(BOOKMARK_ID));
-        deletePage(BOOKMARK_ID, DeletePageResult.SUCCESS);
+        Assert.assertNotNull("Offline page should be available, but it is not.",
+                getPageByClientId(TEST_CLIENT_ID));
+        deletePage(TEST_CLIENT_ID, DeletePageResult.SUCCESS);
         Assert.assertNull("Offline page should be gone, but it is available.",
-                getPageByClientId(BOOKMARK_ID));
+                getPageByClientId(TEST_CLIENT_ID));
     }
 
     @Test
@@ -302,7 +318,7 @@ public class OfflinePageBridgeTest {
         long offlineIdToIgnore = savePage(SavePageResult.SUCCESS, urlToIgnore,
                 new ClientId(OfflinePageBridge.ASYNC_NAMESPACE, "-42"));
 
-        List<OfflinePageItem> pages = getPagesByNamespace(OfflinePageBridge.BOOKMARK_NAMESPACE);
+        List<OfflinePageItem> pages = getPagesByNamespace(OfflinePageBridge.DOWNLOAD_NAMESPACE);
         Assert.assertEquals(
                 "The number of pages returned does not match the number of pages saved.",
                 offlineIdsToFetch.size(), pages.size());
@@ -338,8 +354,7 @@ public class OfflinePageBridgeTest {
                         "Tab is null", mActivityTestRule.getActivity().getActivityTab());
                 Assert.assertEquals("URL does not match requested.", mTestPage,
                         mActivityTestRule.getActivity().getActivityTab().getUrl());
-                Assert.assertNotNull("WebContents is null",
-                        mActivityTestRule.getActivity().getActivityTab().getWebContents());
+                Assert.assertNotNull("WebContents is null", mActivityTestRule.getWebContents());
 
                 mOfflinePageBridge.addObserver(new OfflinePageModelObserver() {
                     @Override
@@ -378,9 +393,8 @@ public class OfflinePageBridgeTest {
                         semaphore.release();
                     }
                 });
-                mOfflinePageBridge.savePage(
-                        mActivityTestRule.getActivity().getActivityTab().getWebContents(),
-                        BOOKMARK_ID, origin, new SavePageCallback() {
+                mOfflinePageBridge.savePage(mActivityTestRule.getWebContents(), TEST_CLIENT_ID,
+                        origin, new SavePageCallback() {
                             @Override
                             public void onSavePageDone(
                                     int savePageResult, String url, long offlineId) {}
@@ -396,6 +410,7 @@ public class OfflinePageBridgeTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "crbug.com/842801")
     public void testSavePageNoOrigin() throws Exception {
         mActivityTestRule.loadUrl(mTestPage);
         savePage(SavePageResult.SUCCESS, mTestPage);
@@ -403,10 +418,73 @@ public class OfflinePageBridgeTest {
         Assert.assertEquals("", pages.get(0).getRequestOrigin());
     }
 
+    @Test
+    @SmallTest
+    @RetryOnFailure
+    @DisableIf.Build(
+            message = "https://crbug.com/853255", sdk_is_less_than = Build.VERSION_CODES.LOLLIPOP)
+    public void testGetLoadUrlParamsForOpeningMhtmlFileUrl() throws Exception {
+        mActivityTestRule.loadUrl(mTestPage);
+        savePage(SavePageResult.SUCCESS, mTestPage);
+        List<OfflinePageItem> allPages = getAllPages();
+        Assert.assertEquals(1, allPages.size());
+        OfflinePageItem offlinePage = allPages.get(0);
+        File archiveFile = new File(offlinePage.getFilePath());
+
+        // The file URL pointing to the archive file should be replaced with http/https URL of the
+        // offline page.
+        String fileUrl = Uri.fromFile(archiveFile).toString();
+        LoadUrlParams loadUrlParams = getLoadUrlParamsForOpeningMhtmlFileOrContent(fileUrl);
+        Assert.assertEquals(offlinePage.getUrl(), loadUrlParams.getUrl());
+        String extraHeaders = loadUrlParams.getVerbatimHeaders();
+        Assert.assertNotNull(extraHeaders);
+        Assert.assertNotEquals(-1, extraHeaders.indexOf("reason=file_url_intent"));
+        Assert.assertNotEquals("intent_url field not found in header: " + extraHeaders, -1,
+                extraHeaders.indexOf("intent_url="
+                        + Base64.encodeToString(
+                                  ApiCompatibilityUtils.getBytesUtf8(fileUrl), Base64.NO_WRAP)));
+        Assert.assertNotEquals(
+                -1, extraHeaders.indexOf("id=" + Long.toString(offlinePage.getOfflineId())));
+
+        // Make a copy of the original archive file.
+        File tempFile = File.createTempFile("Test", "");
+        copyFile(archiveFile, tempFile);
+
+        // The file URL pointing to file copy should also be replaced with http/https URL of the
+        // offline page.
+        String tempFileUrl = Uri.fromFile(tempFile).toString();
+        loadUrlParams = getLoadUrlParamsForOpeningMhtmlFileOrContent(tempFileUrl);
+        Assert.assertEquals(offlinePage.getUrl(), loadUrlParams.getUrl());
+        extraHeaders = loadUrlParams.getVerbatimHeaders();
+        Assert.assertNotNull(extraHeaders);
+        Assert.assertNotEquals("reason field not found in header: " + extraHeaders, -1,
+                extraHeaders.indexOf("reason=file_url_intent"));
+        Assert.assertNotEquals("intent_url field not found in header: " + extraHeaders, -1,
+                extraHeaders.indexOf("intent_url="
+                        + Base64.encodeToString(ApiCompatibilityUtils.getBytesUtf8(tempFileUrl),
+                                  Base64.NO_WRAP)));
+        Assert.assertNotEquals("id field not found in header: " + extraHeaders, -1,
+                extraHeaders.indexOf("id=" + Long.toString(offlinePage.getOfflineId())));
+
+        // Modify the copied file.
+        FileChannel tempFileChannel = new FileOutputStream(tempFile, true).getChannel();
+        tempFileChannel.truncate(10);
+        tempFileChannel.close();
+
+        // The file URL pointing to modified file copy should still get the file URL.
+        loadUrlParams = getLoadUrlParamsForOpeningMhtmlFileOrContent(tempFileUrl);
+        Assert.assertEquals(tempFileUrl, loadUrlParams.getUrl());
+        extraHeaders = loadUrlParams.getVerbatimHeaders();
+        Assert.assertEquals("", extraHeaders);
+
+        // Cleans up.
+        Assert.assertTrue(tempFile.delete());
+    }
+
     // Returns offline ID.
     private long savePage(final int expectedResult, final String expectedUrl)
             throws InterruptedException {
-        return savePage(expectedResult, expectedUrl, BOOKMARK_ID);
+        return savePage(expectedResult, expectedUrl, TEST_CLIENT_ID);
     }
 
     // Returns offline ID.
@@ -421,12 +499,10 @@ public class OfflinePageBridgeTest {
                         "Tab is null", mActivityTestRule.getActivity().getActivityTab());
                 Assert.assertEquals("URL does not match requested.", expectedUrl,
                         mActivityTestRule.getActivity().getActivityTab().getUrl());
-                Assert.assertNotNull("WebContents is null",
-                        mActivityTestRule.getActivity().getActivityTab().getWebContents());
+                Assert.assertNotNull("WebContents is null", mActivityTestRule.getWebContents());
 
                 mOfflinePageBridge.savePage(
-                        mActivityTestRule.getActivity().getActivityTab().getWebContents(), clientId,
-                        new SavePageCallback() {
+                        mActivityTestRule.getWebContents(), clientId, new SavePageCallback() {
                             @Override
                             public void onSavePageDone(
                                     int savePageResult, String url, long offlineId) {
@@ -643,5 +719,36 @@ public class OfflinePageBridgeTest {
         });
         Assert.assertTrue(semaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
         return ref.get();
+    }
+
+    private LoadUrlParams getLoadUrlParamsForOpeningMhtmlFileOrContent(String url)
+            throws InterruptedException {
+        final AtomicReference<LoadUrlParams> ref = new AtomicReference<>();
+        final Semaphore semaphore = new Semaphore(0);
+        ThreadUtils.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mOfflinePageBridge.getLoadUrlParamsForOpeningMhtmlFileOrContent(
+                        url, (loadUrlParams) -> {
+                            ref.set(loadUrlParams);
+                            semaphore.release();
+                        });
+            }
+        });
+        Assert.assertTrue(semaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
+        return ref.get();
+    }
+
+    private static void copyFile(File source, File dest) throws IOException {
+        FileChannel inputChannel = null;
+        FileChannel outputChannel = null;
+        try {
+            inputChannel = new FileInputStream(source).getChannel();
+            outputChannel = new FileOutputStream(dest).getChannel();
+            outputChannel.transferFrom(inputChannel, 0, inputChannel.size());
+        } finally {
+            inputChannel.close();
+            outputChannel.close();
+        }
     }
 }

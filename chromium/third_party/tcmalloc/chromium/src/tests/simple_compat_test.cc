@@ -1,3 +1,4 @@
+// -*- Mode: C++; c-basic-offset: 2; indent-tabs-mode: nil -*-
 // Copyright (c) 2012, Google Inc.
 // All rights reserved.
 //
@@ -37,6 +38,9 @@
 
 #include <stddef.h>
 #include <stdio.h>
+
+#define GPERFTOOLS_SUPPRESS_LEGACY_WARNING
+
 #include <google/heap-checker.h>
 #include <google/heap-profiler.h>
 #include <google/malloc_extension.h>

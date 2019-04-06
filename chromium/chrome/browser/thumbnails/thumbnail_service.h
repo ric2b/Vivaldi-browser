@@ -51,7 +51,7 @@ class ThumbnailService : public RefcountedKeyedService {
                                           ui::PageTransition transition) = 0;
 
   // Returns true if we have a thumbnail available for the given url.
-  virtual bool HasPageThumbnail(const GURL& url) = 0;
+  virtual bool HasPageThumbnail(const GURL& url);
 
  protected:
   ~ThumbnailService() override {}

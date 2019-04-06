@@ -25,6 +25,43 @@ Polymer({
       notify: true,
     },
 
+    /** @private Filter applied to passwords and password exceptions. */
+    passwordFilter_: String,
+
+    // <if expr="not chromeos">
+    /**
+     * This flag is used to conditionally show a set of new sign-in UIs to the
+     * profiles that have been migrated to be consistent with the web sign-ins.
+     * TODO(scottchen): In the future when all profiles are completely migrated,
+     * this should be removed, and UIs hidden behind it should become default.
+     * @private
+     */
+    diceEnabled_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('diceEnabled');
+      },
+    },
+    // </if>
+
+    /**
+     * This flag is used to conditionally show a set of sync UIs to the
+     * profiles that have been migrated to have a unified consent flow.
+     * TODO(scottchen): In the future when all profiles are completely migrated,
+     * this should be removed, and UIs hidden behind it should become default.
+     * @private
+     */
+    unifiedConsentEnabled_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('unifiedConsentEnabled');
+      },
+    },
+
+    // TODO(jdoerrie): https://crbug.com/854562.
+    // Remove once Autofill Home is launched.
+    autofillHomeEnabled: Boolean,
+
     /**
      * The current sync status, supplied by SyncBrowserProxy.
      * @type {?settings.SyncStatus}
@@ -32,34 +69,40 @@ Polymer({
     syncStatus: Object,
 
     /**
+     * Dictionary defining page visibility.
+     * @type {!GuestModePageVisibility}
+     */
+    pageVisibility: Object,
+
+    /**
      * The currently selected profile icon URL. May be a data URL.
+     * @private
      */
     profileIconUrl_: String,
 
     /**
      * The current profile name.
+     * @private
      */
     profileName_: String,
-
-    /**
-     * True if the current profile manages supervised users.
-     */
-    profileManagesSupervisedUsers_: Boolean,
 
     /**
      * The profile deletion warning. The message indicates the number of
      * profile stats that will be deleted if a non-zero count for the profile
      * stats is returned from the browser.
+     * @private
      */
     deleteProfileWarning_: String,
 
     /**
      * True if the profile deletion warning is visible.
+     * @private
      */
     deleteProfileWarningVisible_: Boolean,
 
     /**
      * True if the checkbox to delete the profile has been checked.
+     * @private
      */
     deleteProfile_: Boolean,
 
@@ -93,39 +136,64 @@ Polymer({
       type: Object,
       value: function() {
         const map = new Map();
-        if (settings.routes.SYNC)
-          map.set(settings.routes.SYNC.path, '#sync-status .subpage-arrow');
+        if (settings.routes.SYNC) {
+          const syncId = loadTimeData.getBoolean('unifiedConsentEnabled') ?
+              '#sync-setup' :
+              '#sync-status';
+          map.set(settings.routes.SYNC.path, `${syncId} .subpage-arrow button`);
+        }
+        if (settings.routes.MANAGE_PASSWORDS) {
+          map.set(
+              settings.routes.MANAGE_PASSWORDS.path, '#passwordManagerButton');
+        }
+        if (settings.routes.AUTOFILL) {
+          map.set(settings.routes.AUTOFILL.path, '#paymentManagerButton');
+        }
         // <if expr="not chromeos">
         if (settings.routes.MANAGE_PROFILE) {
           map.set(
               settings.routes.MANAGE_PROFILE.path,
-              '#picture-subpage-trigger .subpage-arrow');
+              '#picture-subpage-trigger .subpage-arrow button');
         }
         // </if>
         // <if expr="chromeos">
         if (settings.routes.CHANGE_PICTURE) {
           map.set(
               settings.routes.CHANGE_PICTURE.path,
-              '#picture-subpage-trigger .subpage-arrow');
+              '#picture-subpage-trigger .subpage-arrow button');
         }
         if (settings.routes.LOCK_SCREEN) {
           map.set(
               settings.routes.LOCK_SCREEN.path,
-              '#lock-screen-subpage-trigger .subpage-arrow');
+              '#lock-screen-subpage-trigger .subpage-arrow button');
         }
         if (settings.routes.ACCOUNTS) {
           map.set(
               settings.routes.ACCOUNTS.path,
-              '#manage-other-people-subpage-trigger .subpage-arrow');
+              '#manage-other-people-subpage-trigger .subpage-arrow button');
         }
         // </if>
         return map;
       },
     },
+
+    /**
+     * True if current user is child user.
+     */
+    isChild_: Boolean,
   },
 
   /** @private {?settings.SyncBrowserProxy} */
   syncBrowserProxy_: null,
+
+  /** @override */
+  created: function() {
+    // <if expr="chromeos">
+    chrome.usersPrivate.getCurrentUser(user => {
+      this.isChild_ = user.isChild;
+    });
+    // </if>
+  },
 
   /** @override */
   attached: function() {
@@ -133,12 +201,6 @@ Polymer({
     profileInfoProxy.getProfileInfo().then(this.handleProfileInfo_.bind(this));
     this.addWebUIListener(
         'profile-info-changed', this.handleProfileInfo_.bind(this));
-
-    profileInfoProxy.getProfileManagesSupervisedUsers().then(
-        this.handleProfileManagesSupervisedUsers_.bind(this));
-    this.addWebUIListener(
-        'profile-manages-supervised-users-changed',
-        this.handleProfileManagesSupervisedUsers_.bind(this));
 
     this.addWebUIListener(
         'profile-stats-count-ready', this.handleProfileStatsCount_.bind(this));
@@ -148,6 +210,11 @@ Polymer({
         this.handleSyncStatus_.bind(this));
     this.addWebUIListener(
         'sync-status-changed', this.handleSyncStatus_.bind(this));
+    // <if expr="not chromeos">
+    this.addWebUIListener('sync-settings-saved', () => {
+      /** @type {!CrToastElement} */ (this.$.toast).show();
+    });
+    // </if>
   },
 
   /** @protected */
@@ -209,15 +276,6 @@ Polymer({
   },
 
   /**
-   * Handler for when the profile starts or stops managing supervised users.
-   * @private
-   * @param {boolean} managesSupervisedUsers
-   */
-  handleProfileManagesSupervisedUsers_: function(managesSupervisedUsers) {
-    this.profileManagesSupervisedUsers_ = managesSupervisedUsers;
-  },
-
-  /**
    * Handler for when the profile stats count is pushed from the browser.
    * @param {number} count
    * @private
@@ -241,17 +299,25 @@ Polymer({
    * @private
    */
   handleSyncStatus_: function(syncStatus) {
-    if (!this.syncStatus && syncStatus && !syncStatus.signedIn)
-      chrome.metricsPrivate.recordUserAction('Signin_Impression_FromSettings');
+    // Sign-in impressions should be recorded only if the sign-in promo is
+    // shown. They should be recorder only once, the first time
+    // |this.syncStatus| is set.
+    const shouldRecordSigninImpression =
+        !this.syncStatus && syncStatus && this.showSignin_(syncStatus);
 
     if (!syncStatus.signedIn && this.showDisconnectDialog_)
       this.$$('#disconnectDialog').close();
 
     this.syncStatus = syncStatus;
+
+    if (shouldRecordSigninImpression && !this.shouldShowSyncAccountControl_()) {
+      // SyncAccountControl records the impressions user actions.
+      chrome.metricsPrivate.recordUserAction('Signin_Impression_FromSettings');
+    }
   },
 
   /** @private */
-  onPictureTap_: function() {
+  onProfileTap_: function() {
     // <if expr="chromeos">
     settings.navigateTo(settings.routes.CHANGE_PICTURE);
     // </if>
@@ -260,22 +326,42 @@ Polymer({
     // </if>
   },
 
-  // <if expr="not chromeos">
-  /** @private */
-  onProfileNameTap_: function() {
-    settings.navigateTo(settings.routes.MANAGE_PROFILE);
-  },
-  // </if>
-
   /** @private */
   onSigninTap_: function() {
     this.syncBrowserProxy_.startSignIn();
   },
 
+  /**
+   * Shows the manage passwords sub page.
+   * @param {!Event} event
+   * @private
+   */
+  onPasswordsTap_: function(event) {
+    settings.navigateTo(settings.routes.MANAGE_PASSWORDS);
+  },
+
+  /**
+   * Shows the manage autofill sub page.
+   * @param {!Event} event
+   * @private
+   */
+  onAutofillTap_: function(event) {
+    settings.navigateTo(settings.routes.AUTOFILL);
+  },
+
   /** @private */
   onDisconnectClosed_: function() {
     this.showDisconnectDialog_ = false;
+    // <if expr="not chromeos">
+    if (!this.diceEnabled_) {
+      // If DICE-enabled, this button won't exist here.
+      cr.ui.focusWithoutInk(assert(this.$$('#disconnectButton')));
+    }
+    // </if>
+
+    // <if expr="chromeos">
     cr.ui.focusWithoutInk(assert(this.$$('#disconnectButton')));
+    // </if>
 
     if (settings.getCurrentRoute() == settings.routes.SIGN_OUT)
       settings.navigateToPreviousRoute();
@@ -310,6 +396,15 @@ Polymer({
 
   /** @private */
   onSyncTap_: function() {
+    // When unified-consent is enabled, users can go to sync subpage regardless
+    // of sync status.
+    // TODO(scottchen): figure out how to deal with sync error states in the
+    //    subpage (https://crbug.com/824546).
+    if (this.unifiedConsentEnabled_) {
+      settings.navigateTo(settings.routes.SYNC);
+      return;
+    }
+
     assert(this.syncStatus.signedIn);
     assert(this.syncStatus.syncSystemEnabled);
 
@@ -391,6 +486,18 @@ Polymer({
     settings.navigateToPreviousRoute();
     cr.ui.focusWithoutInk(assert(this.$.importDataDialogTrigger));
   },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  shouldShowSyncAccountControl_: function() {
+    if (this.syncStatus == undefined)
+      return false;
+
+    return this.diceEnabled_ && !!this.syncStatus.syncSystemEnabled &&
+        !!this.syncStatus.signinAllowed;
+  },
   // </if>
 
   /**
@@ -416,7 +523,7 @@ Polymer({
    */
   isAdvancedSyncSettingsVisible_: function(syncStatus) {
     return !!syncStatus && !!syncStatus.signedIn &&
-        !!syncStatus.syncSystemEnabled;
+        !!syncStatus.syncSystemEnabled && !this.unifiedConsentEnabled_;
   },
 
   /**
@@ -441,13 +548,14 @@ Polymer({
     if (!syncStatus)
       return '';
 
-    let syncIcon = 'settings:sync';
+    let syncIcon = 'cr:sync';
 
     if (syncStatus.hasError)
       syncIcon = 'settings:sync-problem';
 
     // Override the icon to the disabled icon if sync is managed.
-    if (syncStatus.managed)
+    if (syncStatus.managed ||
+        syncStatus.statusAction == settings.StatusAction.REAUTHENTICATE)
       syncIcon = 'settings:sync-disabled';
 
     return syncIcon;
@@ -456,10 +564,18 @@ Polymer({
   /**
    * @private
    * @param {?settings.SyncStatus} syncStatus
-   * @return {string} The class name for the sync status text.
+   * @return {string} The class name for the sync status row.
    */
-  getSyncStatusTextClass_: function(syncStatus) {
-    return (!!syncStatus && syncStatus.hasError) ? 'sync-error' : '';
+  getSyncStatusClass_: function(syncStatus) {
+    if (syncStatus && syncStatus.hasError) {
+      // Most of the time re-authenticate states are caused by intentional user
+      // action, so they will be displayed differently as other errors.
+      return syncStatus.statusAction == settings.StatusAction.REAUTHENTICATE ?
+          'auth-error' :
+          'sync-error';
+    }
+
+    return '';
   },
 
   /**
@@ -478,5 +594,16 @@ Polymer({
    */
   showSignin_: function(syncStatus) {
     return !!syncStatus.signinAllowed && !syncStatus.signedIn;
+  },
+
+  /**
+   * Looks up the translation id, which depends on PIN login support.
+   * @param {boolean} hasPinLogin
+   * @private
+   */
+  selectLockScreenTitleString(hasPinLogin) {
+    if (hasPinLogin)
+      return this.i18n('lockScreenTitleLoginLock');
+    return this.i18n('lockScreenTitleLock');
   },
 });

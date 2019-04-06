@@ -106,8 +106,18 @@ void FakeCrasAudioClient::GetDefaultOutputBufferSize(
   std::move(callback).Run(512);
 }
 
+void FakeCrasAudioClient::GetSystemAecSupported(
+    DBusMethodCallback<bool> callback) {
+  std::move(callback).Run(false);
+}
+
 void FakeCrasAudioClient::GetNodes(DBusMethodCallback<AudioNodeList> callback) {
   std::move(callback).Run(node_list_);
+}
+
+void FakeCrasAudioClient::GetNumberOfActiveOutputStreams(
+    DBusMethodCallback<int> callback) {
+  std::move(callback).Run(0);
 }
 
 void FakeCrasAudioClient::SetOutputNodeVolume(uint64_t node_id,

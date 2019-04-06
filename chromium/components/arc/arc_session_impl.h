@@ -8,15 +8,16 @@
 #include <memory>
 #include <ostream>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
+#include "base/files/file_path.h"
 #include "base/files/scoped_file.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/threading/thread_checker.h"
 #include "chromeos/dbus/session_manager_client.h"
-#include "components/arc/arc_instance_mode.h"
 #include "components/arc/arc_session.h"
 
 namespace arc {
@@ -30,29 +31,19 @@ class ArcSessionImpl : public ArcSession,
  public:
   // The possible states of the session. Expected state changes are as follows.
   //
-  // 1) Starting MINI_INSTANCE.
   // NOT_STARTED
-  //   -> StartMiniInstance() ->
+  // -> StartMiniInstance() ->
   // STARTING_MINI_INSTANCE
   //   -> OnMiniInstanceStarted() ->
   // RUNNING_MINI_INSTANCE.
-  //
-  // 2) Starting FULL_INSTANCE.
-  // NOT_STARTED
-  //   -> StartFullInstance() ->
+  //   -> RequestUpgrade() ->
   // STARTING_FULL_INSTANCE
-  //   -> OnFullInstanceStarted() ->
+  //   -> OnUpgraded() ->
   // CONNECTING_MOJO
   //   -> OnMojoConnected() ->
   // RUNNING_FULL_INSTANCE
   //
-  // 3) Upgrading from a MINI_INSTANCE to FULL_INSTANCE.
-  // RUNNING_MINI_INSTANCE
-  //   -> StartFullInstance() ->
-  // STARTING_FULL_INSTANCE
-  //   -> ... (remaining is as same as (2)).
-  //
-  // Note that, if Start(FULL_INSTANCE) is called during STARTING_MINI_INSTANCE
+  // Note that, if RequestUpgrade() is called during STARTING_MINI_INSTANCE
   // state, the state change to STARTING_FULL_INSTANCE is suspended until
   // the state becomes RUNNING_MINI_INSTANCE.
   //
@@ -108,7 +99,7 @@ class ArcSessionImpl : public ArcSession,
     // arcbridgeservice (i.e. mojo endpoint) are running.
     RUNNING_MINI_INSTANCE,
 
-    // The request to start or upgrade to a full instance has been sent.
+    // The request to upgrade to a full instance has been sent.
     STARTING_FULL_INSTANCE,
 
     // The instance has started. Waiting for it to connect to the IPC bridge.
@@ -150,38 +141,27 @@ class ArcSessionImpl : public ArcSession,
   State GetStateForTesting() { return state_; }
 
   // ArcSession overrides:
-  void Start(ArcInstanceMode request_mode) override;
+  void StartMiniInstance() override;
+  void RequestUpgrade(UpgradeParams params) override;
   void Stop() override;
-  base::Optional<ArcInstanceMode> GetTargetMode() override;
   bool IsStopRequested() override;
   void OnShutdown() override;
 
  private:
-  // Sends a D-Bus message to start a mini instance.
-  void StartMiniInstance();
+  // D-Bus callback for StartArcMiniContainer().
+  void OnMiniInstanceStarted(base::Optional<std::string> container_instance_id);
 
-  // D-Bus callback for StartArcInstance() for a mini instance.
-  // In case of success, |container_instance_id| must not be empty, and
-  // |socket_fd| is /dev/null.
-  // TODO(hidehiko): Remove |socket_fd| from this callback.
-  void OnMiniInstanceStarted(
-      chromeos::SessionManagerClient::StartArcInstanceResult result,
-      const std::string& container_instance_id,
-      base::ScopedFD socket_fd);
+  // Sends a D-Bus message to upgrade to a full instance.
+  void DoUpgrade();
 
-  // Sends a D-Bus message to start or to upgrade to a full instance.
-  void StartFullInstance();
+  // D-Bus callback for UpgradeArcContainer(). |socket_fd| should be a socket
+  // which should be accept(2)ed to connect ArcBridgeService Mojo channel.
+  void OnUpgraded(base::ScopedFD socket_fd);
 
-  // D-Bus callback for StartArcInstance() for a full instance.
-  // In case of success, |container_instance_id| must not be empty, if this is
-  // actually starting an instance, or empty if this is upgrade from a mini
-  // instance to a full instance.
-  // In either start or upgrade case, |socket_fd| should be a socket which
-  // shold be accept(2)ed to connect ArcBridgeService Mojo channel.
-  void OnFullInstanceStarted(
-      chromeos::SessionManagerClient::StartArcInstanceResult result,
-      const std::string& container_instance_id,
-      base::ScopedFD socket_fd);
+  // D-Bus callback for UpgradeArcContainer when the upgrade fails.
+  // |low_free_disk_space| signals whether the failure was due to low free disk
+  // space.
+  void OnUpgradeError(bool low_free_disk_space);
 
   // Called when Mojo connection is established (or canceled during the
   // connect.)
@@ -191,17 +171,12 @@ class ArcSessionImpl : public ArcSession,
   void StopArcInstance();
 
   // chromeos::SessionManagerClient::Observer:
-  void ArcInstanceStopped(bool clean,
+  void ArcInstanceStopped(login_manager::ArcContainerStopReason stop_reason,
                           const std::string& container_instance_id) override;
 
   // Completes the termination procedure. Note that calling this may end up with
   // deleting |this| because the function calls observers' OnSessionStopped().
   void OnStopped(ArcStopReason reason);
-
-  // Sends a StartArcInstance D-Bus request to session_manager.
-  static void SendStartArcInstanceDBusMessage(
-      ArcInstanceMode target_mode,
-      chromeos::SessionManagerClient::StartArcInstanceCallback callback);
 
   // Checks whether a function runs on the thread where the instance is
   // created.
@@ -216,9 +191,8 @@ class ArcSessionImpl : public ArcSession,
   // When Stop() is called, this flag is set.
   bool stop_requested_ = false;
 
-  // In which mode this instance should be running eventually.
-  // Initialized in nullopt.
-  base::Optional<ArcInstanceMode> target_mode_;
+  // Whether the full container has been requested
+  bool upgrade_requested_ = false;
 
   // Container instance id passed from session_manager.
   // Should be available only after On{Mini,Full}InstanceStarted().
@@ -227,6 +201,9 @@ class ArcSessionImpl : public ArcSession,
   // In CONNECTING_MOJO state, this is set to the write side of the pipe
   // to notify cancelling of the procedure.
   base::ScopedFD accept_cancel_pipe_;
+
+  // Parameters to upgrade request.
+  UpgradeParams upgrade_params_;
 
   // Mojo endpoint.
   std::unique_ptr<mojom::ArcBridgeHost> arc_bridge_host_;

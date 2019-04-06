@@ -25,6 +25,7 @@ class FrameCoordinationUnitImpl
 
   FrameCoordinationUnitImpl(
       const CoordinationUnitID& id,
+      CoordinationUnitGraph* graph,
       std::unique_ptr<service_manager::ServiceContextRef> service_ref);
   ~FrameCoordinationUnitImpl() override;
 
@@ -33,6 +34,7 @@ class FrameCoordinationUnitImpl
   void RemoveChildFrame(const CoordinationUnitID& cu_id) override;
   void SetAudibility(bool audible) override;
   void SetNetworkAlmostIdle(bool idle) override;
+  void SetLifecycleState(mojom::LifecycleState state) override;
   void OnAlertFired() override;
   void OnNonPersistentNotificationCreated() override;
 

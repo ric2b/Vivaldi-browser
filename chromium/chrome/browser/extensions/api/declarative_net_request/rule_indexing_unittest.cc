@@ -11,7 +11,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/extensions/api/declarative_net_request/dnr_test_base.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -24,6 +24,7 @@
 #include "extensions/common/file_util.h"
 #include "extensions/common/install_warning.h"
 #include "extensions/common/manifest_constants.h"
+#include "extensions/common/url_pattern.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace extensions {
@@ -129,10 +130,12 @@ class RuleIndexingTest : public DNRTestBase {
 
     if (rules_value_) {
       WriteManifestAndRuleset(extension_dir_, kJSONRulesetFilepath,
-                              kJSONRulesFilename, *rules_value_);
+                              kJSONRulesFilename, *rules_value_,
+                              {URLPattern::kAllUrlsPattern});
     } else {
       WriteManifestAndRuleset(extension_dir_, kJSONRulesetFilepath,
-                              kJSONRulesFilename, rules_list_);
+                              kJSONRulesFilename, rules_list_,
+                              {URLPattern::kAllUrlsPattern});
     }
 
     // Overwrite the JSON rules file with some invalid json.
@@ -220,8 +223,9 @@ TEST_P(RuleIndexingTest, InvalidRedirectRulePriority) {
 TEST_P(RuleIndexingTest, NoApplicableResourceTypes) {
   TestRule rule = CreateGenericRule();
   rule.condition->excluded_resource_types = std::vector<std::string>(
-      {"sub_frame", "stylesheet", "script", "image", "font", "object",
-       "xmlhttprequest", "ping", "media", "websocket", "other"});
+      {"main_frame", "sub_frame", "stylesheet", "script", "image", "font",
+       "object", "xmlhttprequest", "ping", "csp_report", "media", "websocket",
+       "other"});
   AddRule(rule);
   LoadAndExpectError(
       ParseInfo(ParseResult::ERROR_NO_APPLICABLE_RESOURCE_TYPES, 0u)
@@ -264,7 +268,8 @@ TEST_P(RuleIndexingTest, InvalidRedirectURL) {
 
 TEST_P(RuleIndexingTest, ListNotPassed) {
   SetRules(std::make_unique<base::DictionaryValue>());
-  LoadAndExpectError(manifest_errors::kDeclarativeNetRequestListNotPassed);
+  LoadAndExpectError(ParseInfo(ParseResult::ERROR_LIST_NOT_PASSED)
+                         .GetErrorDescription(kJSONRulesFilename));
 }
 
 TEST_P(RuleIndexingTest, DuplicateIDS) {

@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_reuse_detector_consumer.h"
 #include "url/gurl.h"
 
@@ -30,20 +31,25 @@ class PasswordReuseDetectionManager : public PasswordReuseDetectorConsumer {
   void OnKeyPressed(const base::string16& text);
 
   // PasswordReuseDetectorConsumer implementation
-  void OnReuseFound(size_t password_length,
-                    bool matches_sync_password,
-                    const std::vector<std::string>& matching_domains,
-                    int saved_passwords) override;
+  void OnReuseFound(
+      size_t password_length,
+      base::Optional<PasswordHashData> reused_protected_password_hash,
+      const std::vector<std::string>& matching_domains,
+      int saved_passwords) override;
 
-  void SetClockForTesting(std::unique_ptr<base::Clock> clock);
+  void SetClockForTesting(base::Clock* clock);
 
  private:
+  // Determines the type of password being reused.
+  metrics_util::PasswordType GetReusedPasswordType(
+      base::Optional<PasswordHashData> reused_protected_password_hash,
+      size_t match_domain_count);
   PasswordManagerClient* client_;
   base::string16 input_characters_;
   GURL main_frame_url_;
   base::Time last_keystroke_time_;
   // Used to retrieve the current time, in base::Time units.
-  std::unique_ptr<base::Clock> clock_;
+  base::Clock* clock_;
   bool reuse_on_this_page_was_found_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordReuseDetectionManager);

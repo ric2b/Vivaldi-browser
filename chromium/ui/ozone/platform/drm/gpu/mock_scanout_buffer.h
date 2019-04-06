@@ -13,6 +13,8 @@
 
 namespace ui {
 
+class DrmDevice;
+
 class MockScanoutBuffer : public ScanoutBuffer {
  public:
   MockScanoutBuffer(const gfx::Size& size,
@@ -28,7 +30,7 @@ class MockScanoutBuffer : public ScanoutBuffer {
   uint32_t GetFramebufferPixelFormat() const override;
   uint32_t GetOpaqueFramebufferPixelFormat() const override;
   uint64_t GetFormatModifier() const override;
-  const DrmDevice* GetDrmDevice() const override;
+  const GbmDeviceLinux* GetGbmDeviceLinux() const override;
   bool RequiresGlFinish() const override;
 
  private:
@@ -38,6 +40,7 @@ class MockScanoutBuffer : public ScanoutBuffer {
   uint32_t format_;
   uint64_t modifier_;
   uint32_t id_;
+  uint32_t opaque_id_;
   scoped_refptr<DrmDevice> drm_;
 
   DISALLOW_COPY_AND_ASSIGN(MockScanoutBuffer);

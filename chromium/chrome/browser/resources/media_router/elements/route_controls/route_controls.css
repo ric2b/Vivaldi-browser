@@ -79,10 +79,6 @@
   padding: 0.3em 0;
 }
 
-paper-checkbox {
-  --paper-checkbox-checked-color: #1976D2;
-}
-
 #hangouts-local-present-controls {
   cursor: pointer;
   display: inline-block;
@@ -92,8 +88,11 @@ paper-checkbox {
 }
 
 #hangouts-local-present-checkbox {
-  --paper-checkbox-vertical-align: top;
-};
+  --cr-checkbox-label-container: {
+    -webkit-padding-start: 14px;
+  }
+  align-items: start;
+}
 
 #hangouts-local-present-checkbox-subtitle {
   display: block;
@@ -110,5 +109,6 @@ paper-checkbox {
 }
 
 #mirroring-fullscreen-video-dropdown {
+  -webkit-margin-start: 8px;
   width: auto;
 }

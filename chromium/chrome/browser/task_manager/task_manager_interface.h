@@ -20,7 +20,8 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/task_manager/providers/task.h"
 #include "chrome/browser/task_manager/task_manager_observer.h"
-#include "third_party/WebKit/public/platform/WebCache.h"
+#include "components/sessions/core/session_id.h"
+#include "third_party/blink/public/platform/web_cache.h"
 #include "ui/gfx/image/image_skia.h"
 
 class PrefRegistrySimple;
@@ -87,13 +88,10 @@ class TaskManagerInterface {
   // Only implemented in Windows now.
   virtual base::TimeDelta GetCpuTime(TaskId task_id) const = 0;
 
-  // Returns the current footprint/physical/private/shared memory usage of the
-  // task with |task_id| in bytes. A value of -1 means no valid value is
-  // currently available.
+  // Returns the current memory footprint/swapped memory of the task with
+  // |task_id| in bytes. A value of -1 means no valid value is currently
+  // available.
   virtual int64_t GetMemoryFootprintUsage(TaskId task_id) const = 0;
-  virtual int64_t GetPhysicalMemoryUsage(TaskId task_id) const = 0;
-  virtual int64_t GetPrivateMemoryUsage(TaskId task_id) const = 0;
-  virtual int64_t GetSharedMemoryUsage(TaskId task_id) const = 0;
   virtual int64_t GetSwappedMemoryUsage(TaskId task_id) const = 0;
 
   // Returns the GPU memory usage of the task with |task_id| in bytes. A value
@@ -162,7 +160,7 @@ class TaskManagerInterface {
 
   // Gets the unique ID of the tab if the task with |task_id| represents a
   // WebContents of a tab. Returns -1 otherwise.
-  virtual int GetTabId(TaskId task_id) const = 0;
+  virtual SessionID GetTabId(TaskId task_id) const = 0;
 
   // Returns the unique ID of the BrowserChildProcessHost/RenderProcessHost on
   // which the task with |task_id| is running. It is not the PID nor the handle
@@ -277,7 +275,7 @@ class TaskManagerInterface {
 
   int64_t enabled_resources_flags() const { return enabled_resources_flags_; }
 
-  void set_timer_for_testing(std::unique_ptr<base::Timer> timer) {
+  void set_timer_for_testing(std::unique_ptr<base::RepeatingTimer> timer) {
     refresh_timer_ = std::move(timer);
   }
 
@@ -302,7 +300,7 @@ class TaskManagerInterface {
   base::ObserverList<TaskManagerObserver> observers_;
 
   // The timer that will be used to schedule the successive refreshes.
-  std::unique_ptr<base::Timer> refresh_timer_;
+  std::unique_ptr<base::RepeatingTimer> refresh_timer_;
 
   // The flags containing the enabled resources types calculations.
   int64_t enabled_resources_flags_;

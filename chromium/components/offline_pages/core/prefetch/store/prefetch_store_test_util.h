@@ -60,6 +60,10 @@ class PrefetchStoreTestUtil {
   // Gets all existing items from the store, inserting them into |all_items|.
   // Returns the number of items found.
   std::size_t GetAllItems(std::set<PrefetchItem>* all_items);
+  std::set<PrefetchItem> GetAllItems();
+
+  // Prints a representation of the prefetch store contents.
+  std::string ToString();
 
   // Sets to the ZOMBIE state entries identified by |name_space| and
   // |url|, returning the number of entries found.

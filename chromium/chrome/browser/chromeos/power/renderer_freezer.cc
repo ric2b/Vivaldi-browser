@@ -9,7 +9,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/process/process_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
@@ -85,9 +84,9 @@ void RendererFreezer::Observe(int type,
   }
 }
 
-void RendererFreezer::RenderProcessExited(content::RenderProcessHost* host,
-                                          base::TerminationStatus status,
-                                          int exit_code) {
+void RendererFreezer::RenderProcessExited(
+    content::RenderProcessHost* host,
+    const content::ChildProcessTerminationInfo& info) {
   auto it = gcm_extension_processes_.find(host->GetID());
   if (it == gcm_extension_processes_.end()) {
     LOG(ERROR) << "Received unrequested RenderProcessExited message";
@@ -155,7 +154,8 @@ void RendererFreezer::OnScreenLockStateChanged(chromeos::ScreenLocker* locker,
     content::WebContents* web_contents = locker->delegate()->GetWebContents();
     if (web_contents) {
       delegate_->SetShouldFreezeRenderer(
-          web_contents->GetMainFrame()->GetProcess()->GetHandle(), false);
+          web_contents->GetMainFrame()->GetProcess()->GetProcess().Handle(),
+          false);
     }
   }
 }
@@ -195,7 +195,7 @@ void RendererFreezer::OnRenderProcessCreated(content::RenderProcessHost* rph) {
 
     // This renderer has an extension that is using GCM.  Make sure it is not
     // frozen during suspend.
-    delegate_->SetShouldFreezeRenderer(rph->GetHandle(), false);
+    delegate_->SetShouldFreezeRenderer(rph->GetProcess().Handle(), false);
     gcm_extension_processes_.insert(rph_id);
 
     // Watch to see if the renderer process or the RenderProcessHost is
@@ -206,7 +206,7 @@ void RendererFreezer::OnRenderProcessCreated(content::RenderProcessHost* rph) {
 
   // We didn't find an extension in this RenderProcessHost that is using GCM so
   // we can go ahead and freeze it on suspend.
-  delegate_->SetShouldFreezeRenderer(rph->GetHandle(), true);
+  delegate_->SetShouldFreezeRenderer(rph->GetProcess().Handle(), true);
 }
 
 }  // namespace chromeos

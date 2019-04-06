@@ -9,9 +9,9 @@
 #include "base/bind.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/renderer/manifest/manifest_manager.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
-#include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
 
 namespace content {
 
@@ -38,7 +38,7 @@ void ManifestChangeNotifier::DidChangeManifest() {
   // of this notification and the favicon URL reporting.
   if (!render_frame()->GetWebFrame()->IsLoading()) {
     render_frame()
-        ->GetTaskRunner(blink::TaskType::kUnspecedLoading)
+        ->GetTaskRunner(blink::TaskType::kInternalLoading)
         ->PostTask(FROM_HERE,
                    base::BindOnce(&ManifestChangeNotifier::ReportManifestChange,
                                   weak_factory_.GetWeakPtr()));

@@ -21,6 +21,7 @@
 #include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/external_provider_impl.h"
 #include "chrome/browser/extensions/updater/chrome_extension_downloader_factory.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
@@ -29,6 +30,7 @@
 #include "extensions/browser/updater/extension_downloader.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
+#include "extensions/common/manifest.h"
 #include "net/url_request/url_request_context_getter.h"
 
 namespace chromeos {
@@ -285,8 +287,8 @@ void ExternalCacheImpl::CheckCache() {
 
       if (update_url.is_valid()) {
         downloader_->AddPendingExtension(
-            entry.first, update_url, false, 0,
-            extensions::ManifestFetchData::FetchPriority::BACKGROUND);
+            entry.first, update_url, extensions::Manifest::EXTERNAL_POLICY,
+            false, 0, extensions::ManifestFetchData::FetchPriority::BACKGROUND);
       }
     }
 

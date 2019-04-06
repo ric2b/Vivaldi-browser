@@ -21,18 +21,32 @@ class OverlayCandidateValidator;
 class VIZ_SERVICE_EXPORT OverlayStrategyUnderlay
     : public OverlayProcessor::Strategy {
  public:
-  explicit OverlayStrategyUnderlay(
-      OverlayCandidateValidator* capability_checker);
+  enum class OpaqueMode {
+    // Require candidates to be |is_opaque|.
+    RequireOpaqueCandidates,
+
+    // Allow non-|is_opaque| candidates to be promoted.
+    AllowTransparentCandidates,
+  };
+
+  // If |allow_nonopaque_overlays| is true, then we don't require that the
+  // the candidate is_opaque.
+  OverlayStrategyUnderlay(
+      OverlayCandidateValidator* capability_checker,
+      OpaqueMode opaque_mode = OpaqueMode::RequireOpaqueCandidates);
   ~OverlayStrategyUnderlay() override;
 
   bool Attempt(const SkMatrix44& output_color_matrix,
-               cc::DisplayResourceProvider* resource_provider,
+               DisplayResourceProvider* resource_provider,
                RenderPass* render_pass,
-               cc::OverlayCandidateList* candidate_list,
+               OverlayCandidateList* candidate_list,
                std::vector<gfx::Rect>* content_bounds) override;
+
+  OverlayProcessor::StrategyType GetUMAEnum() const override;
 
  private:
   OverlayCandidateValidator* capability_checker_;  // Weak.
+  OpaqueMode opaque_mode_;
 
   DISALLOW_COPY_AND_ASSIGN(OverlayStrategyUnderlay);
 };

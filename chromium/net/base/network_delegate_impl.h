@@ -7,12 +7,14 @@
 
 #include <stdint.h>
 
+#include <set>
+
 #include "base/strings/string16.h"
-#include "net/base/completion_callback.h"
+#include "net/base/completion_once_callback.h"
 #include "net/base/net_export.h"
 #include "net/base/network_delegate.h"
 #include "net/cookies/canonical_cookie.h"
-#include "net/proxy/proxy_retry_info.h"
+#include "net/proxy_resolution/proxy_retry_info.h"
 
 class GURL;
 
@@ -38,11 +40,11 @@ class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
 
  private:
   int OnBeforeURLRequest(URLRequest* request,
-                         const CompletionCallback& callback,
+                         CompletionOnceCallback callback,
                          GURL* new_url) override;
 
   int OnBeforeStartTransaction(URLRequest* request,
-                               const CompletionCallback& callback,
+                               CompletionOnceCallback callback,
                                HttpRequestHeaders* headers) override;
 
   void OnBeforeSendHeaders(URLRequest* request,
@@ -55,7 +57,7 @@ class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
 
   int OnHeadersReceived(
       URLRequest* request,
-      const CompletionCallback& callback,
+      CompletionOnceCallback callback,
       const HttpResponseHeaders* original_response_headers,
       scoped_refptr<HttpResponseHeaders>* override_response_headers,
       GURL* allowed_unsafe_redirect_url) override;
@@ -70,7 +72,6 @@ class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
   void OnNetworkBytesSent(URLRequest* request, int64_t bytes_sent) override;
 
   void OnCompleted(URLRequest* request, bool started, int net_error) override;
-  void OnCompleted(URLRequest* request, bool started) override;
 
   void OnURLRequestDestroyed(URLRequest* request) override;
 
@@ -78,7 +79,7 @@ class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
 
   AuthRequiredResponse OnAuthRequired(URLRequest* request,
                                       const AuthChallengeInfo& auth_info,
-                                      const AuthCallback& callback,
+                                      AuthCallback callback,
                                       AuthCredentials* credentials) override;
 
   bool OnCanGetCookies(const URLRequest& request,
@@ -104,7 +105,9 @@ class NET_EXPORT NetworkDelegateImpl : public NetworkDelegate {
 
   bool OnCanQueueReportingReport(const url::Origin& origin) const override;
 
-  bool OnCanSendReportingReport(const url::Origin& origin) const override;
+  void OnCanSendReportingReports(std::set<url::Origin> origins,
+                                 base::OnceCallback<void(std::set<url::Origin>)>
+                                     result_callback) const override;
 
   bool OnCanSetReportingClient(const url::Origin& origin,
                                const GURL& endpoint) const override;

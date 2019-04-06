@@ -12,19 +12,18 @@
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
 #include "media/audio/audio_output_delegate.h"
+#include "media/mojo/interfaces/audio_logging.mojom.h"
 #include "media/mojo/interfaces/audio_output_stream.mojom.h"
 
 namespace content {
-class AudioMirroringManager;
-class AudioSyncReader;
 class MediaObserver;
 }
 
 namespace media {
-class AudioLog;
 class AudioManager;
 class AudioOutputController;
 class AudioParameters;
+class AudioSyncReader;
 }
 
 namespace content {
@@ -37,8 +36,7 @@ class CONTENT_EXPORT AudioOutputDelegateImpl
   static std::unique_ptr<AudioOutputDelegate> Create(
       EventHandler* handler,
       media::AudioManager* audio_manager,
-      media::AudioLog* audio_log,
-      AudioMirroringManager* mirroring_manager,
+      media::mojom::AudioLogPtr audio_log,
       MediaObserver* media_observer,
       int stream_id,
       int render_frame_id,
@@ -48,12 +46,11 @@ class CONTENT_EXPORT AudioOutputDelegateImpl
       const std::string& output_device_id);
 
   AudioOutputDelegateImpl(
-      std::unique_ptr<AudioSyncReader> reader,
+      std::unique_ptr<media::AudioSyncReader> reader,
       std::unique_ptr<base::CancelableSyncSocket> foreign_socket,
       EventHandler* handler,
       media::AudioManager* audio_manager,
-      media::AudioLog* audio_log,
-      AudioMirroringManager* mirroring_manager,
+      media::mojom::AudioLogPtr audio_log,
       MediaObserver* media_observer,
       int stream_id,
       int render_frame_id,
@@ -83,18 +80,15 @@ class CONTENT_EXPORT AudioOutputDelegateImpl
 
   // This is the event handler which |this| send notifications to.
   EventHandler* subscriber_;
-  media::AudioLog* const audio_log_;
+  const media::mojom::AudioLogPtr audio_log_;
   // |controller_event_handler_| proxies events from controller to |this|.
-  // |controller_event_handler_|, |reader_| and |mirroring_manager_| will
-  // outlive |this|, see the destructor for details.
+  // |controller_event_handler_|, and |reader_| will outlive |this|, see the
+  // destructor for details.
   std::unique_ptr<ControllerEventHandler> controller_event_handler_;
-  std::unique_ptr<AudioSyncReader> reader_;
+  std::unique_ptr<media::AudioSyncReader> reader_;
   std::unique_ptr<base::CancelableSyncSocket> foreign_socket_;
-  AudioMirroringManager* mirroring_manager_;
   scoped_refptr<media::AudioOutputController> controller_;
   const int stream_id_;
-  const int render_frame_id_;
-  const int render_process_id_;
 
   // This flag ensures that we only send OnStreamStateChanged notifications
   // and (de)register with the stream monitor when the state actually changes.

@@ -9,8 +9,8 @@
 #include "ios/web/public/web_thread.h"
 #include "services/service_manager/public/cpp/identity.h"
 #include "services/service_manager/public/cpp/service.h"
-#include "services/service_manager/public/interfaces/constants.mojom.h"
-#include "services/service_manager/public/interfaces/service_factory.mojom.h"
+#include "services/service_manager/public/mojom/constants.mojom.h"
+#include "services/service_manager/public/mojom/service_factory.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
@@ -52,10 +52,9 @@ TEST_F(ServiceManagerConnectionImplTest, ServiceLaunchThreading) {
        service_manager::mojom::kRootUserID},
       service_manager::CapabilitySet());
   service_manager::mojom::ServiceFactoryPtr factory;
-  service->OnBindInterface(source_info,
-                           service_manager::mojom::ServiceFactory::Name_,
-                           mojo::MakeRequest(&factory).PassMessagePipe(),
-                           base::Bind(&base::DoNothing));
+  service->OnBindInterface(
+      source_info, service_manager::mojom::ServiceFactory::Name_,
+      mojo::MakeRequest(&factory).PassMessagePipe(), base::DoNothing());
   service_manager::mojom::ServicePtr created_service;
   service_manager::mojom::PIDReceiverPtr pid_receiver;
   mojo::MakeRequest(&pid_receiver);

@@ -6,7 +6,6 @@
 
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -59,14 +58,14 @@ void PluginPolicyHandler::ProcessPolicy(const policy::PolicyMap& policies,
                             plugin)) &&
         !policies.GetValue(policy::key::kAlwaysOpenPdfExternally)) {
       prefs->SetValue(prefs::kPluginsAlwaysOpenPdfExternally,
-                      base::MakeUnique<base::Value>(disable_pdf_plugin));
+                      std::make_unique<base::Value>(disable_pdf_plugin));
     }
     if ((base::MatchPattern(
              PluginMetadata::kAdobeFlashPlayerGroupName, plugin) ||
          base::MatchPattern(content::kFlashPluginName, plugin)) &&
         !policies.GetValue(policy::key::kDefaultPluginsSetting)) {
       prefs->SetValue(prefs::kManagedDefaultPluginsSetting,
-                      base::MakeUnique<base::Value>(flash_content_setting));
+                      std::make_unique<base::Value>(flash_content_setting));
     }
   }
 }

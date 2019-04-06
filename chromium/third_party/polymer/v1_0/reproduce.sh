@@ -43,10 +43,6 @@ cp ../../web-animations-js/sources/COPYING ../../web-animations-js/LICENSE
 sed -i 's/^\s*\/\/#\s*sourceMappingURL.*//' \
   ../../web-animations-js/sources/*.min.js
 
-# These components are needed only for demos and docs.
-rm -rf components/{hydrolysis,marked,marked-element,prism,prism-element,\
-iron-component-page,iron-doc-viewer,webcomponentsjs}
-
 # Test and demo directories aren't needed.
 rm -rf components/*/{test,demo}
 rm -rf components/polymer/explainer
@@ -66,14 +62,19 @@ find components -type f \( -name \*.html -o -name \*.css -o -name \*.js\
   -o -name \*.bat -o -name \*.svg \) -print0 | xargs -0 sed -i -e $'s/\r$//g'
 
 # Resolve a unicode encoding issue in dom-innerHTML.html.
+# TODO(dpapad): Examine if this is necessary for polymer2/ as well.
 NBSP=$(python -c 'print u"\u00A0".encode("utf-8")')
 sed -i 's/['"$NBSP"']/\\u00A0/g' components/polymer/polymer-mini.html
 
 rsync -c --delete -r -v --exclude-from="rsync_exclude.txt" \
     --prune-empty-dirs "components/" "components-chromium/"
 
-find "components-chromium/" -name "*.html" | \
-xargs grep -l "<script>" | \
+echo 'Minifying Polymer 2, since it comes non-minified from bower.'
+python minify_polymer.py
+
+find "components-chromium/" -name "*.html" \
+  ! -path "components-chromium/polymer2*" | \
+  xargs grep -l "<script>" | \
 while read original_html_name
 do
   echo "Crisping $original_html_name"
@@ -88,6 +89,11 @@ patch -p1 --forward -r - < chromium.patch
 # Undo any changes in paper-ripple, since Chromium's implementation is a fork of
 # the original paper-ripple.
 git checkout -- components-chromium/paper-ripple/*
+
+# Remove iron-flex-layout-extracted.js since it only contains an unnecessary
+# backwards compatibiilty code that was added at
+# https://github.com/PolymerElements/iron-flex-layout/commit/f1c967fddbced2ecb5f78456b837fec5117dad14
+rm components-chromium/iron-flex-layout/iron-flex-layout-extracted.js
 
 new=$(git status --porcelain components-chromium | grep '^??' | \
       cut -d' ' -f2 | egrep '\.(html|js|css)$' || true)
@@ -116,9 +122,6 @@ python css_strip_prefixes.py
 
 echo 'Creating a summary of components...'
 python create_components_summary.py > components_summary.txt
-
-echo 'Creating GYP files for interfaces and externs...'
-./generate_gyp.sh
 
 echo 'Creating GN files for interfaces and externs...'
 ./generate_gn.sh

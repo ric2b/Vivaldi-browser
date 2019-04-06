@@ -12,6 +12,7 @@
 #include "components/cast_channel/logger.h"
 #include "components/cast_channel/proto/cast_channel.pb.h"
 #include "net/base/net_errors.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace cast_channel {
 
@@ -39,8 +40,8 @@ KeepAliveDelegate::KeepAliveDelegate(
 KeepAliveDelegate::~KeepAliveDelegate() {}
 
 void KeepAliveDelegate::SetTimersForTest(
-    std::unique_ptr<base::Timer> injected_ping_timer,
-    std::unique_ptr<base::Timer> injected_liveness_timer) {
+    std::unique_ptr<base::RetainingOneShotTimer> injected_ping_timer,
+    std::unique_ptr<base::RetainingOneShotTimer> injected_liveness_timer) {
   ping_timer_ = std::move(injected_ping_timer);
   liveness_timer_ = std::move(injected_liveness_timer);
 }
@@ -55,10 +56,10 @@ void KeepAliveDelegate::Start() {
 
   // Use injected mock timers, if provided.
   if (!ping_timer_) {
-    ping_timer_.reset(new base::Timer(true, false));
+    ping_timer_.reset(new base::RetainingOneShotTimer());
   }
   if (!liveness_timer_) {
-    liveness_timer_.reset(new base::Timer(true, false));
+    liveness_timer_.reset(new base::RetainingOneShotTimer());
   }
 
   ping_timer_->Start(
@@ -85,12 +86,34 @@ void KeepAliveDelegate::SendKeepAliveMessage(const CastMessage& message,
                                              CastMessageType message_type) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DVLOG(2) << "Sending " << CastMessageTypeToString(message_type);
-  // TODO(https://crbug.com/656607): Add proper annotation.
+
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("cast_keep_alive_delegate", R"(
+        semantics {
+          sender: "Cast Socket Keep Alive Delegate"
+          description:
+            "A ping/pong message sent periodically to a Cast device to keep "
+            "the connection alive."
+          trigger:
+            "Periodically while a connection to a Cast device is established."
+          data:
+            "A protobuf message representing a ping/pong message. No user data."
+          destination: OTHER
+          destination_other:
+            "Data will be sent to a Cast device in local network."
+        }
+        policy {
+          cookies_allowed: NO
+          setting:
+            "This request cannot be disabled, but it would not be sent if user "
+            "does not connect to a Cast device."
+          policy_exception_justification: "Not implemented."
+        })");
   socket_->transport()->SendMessage(
       message,
       base::Bind(&KeepAliveDelegate::SendKeepAliveMessageComplete,
                  base::Unretained(this), message_type),
-      NO_TRAFFIC_ANNOTATION_BUG_656607);
+      traffic_annotation);
 }
 
 void KeepAliveDelegate::SendKeepAliveMessageComplete(

@@ -4,8 +4,9 @@
 
 #include "components/pdf/renderer/pepper_pdf_host.h"
 
+#include <memory>
+
 #include "base/lazy_instance.h"
-#include "base/memory/ptr_util.h"
 #include "components/pdf/renderer/pdf_accessibility_tree.h"
 #include "content/public/common/referrer.h"
 #include "content/public/renderer/pepper_plugin_instance.h"
@@ -22,7 +23,11 @@
 #include "ppapi/shared_impl/scoped_pp_resource.h"
 #include "ppapi/thunk/enter.h"
 #include "ppapi/thunk/ppb_image_data_api.h"
-#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/public/web/web_document.h"
+#include "third_party/blink/public/web/web_local_frame.h"
+#include "third_party/blink/public/web/web_plugin_container.h"
 
 namespace pdf {
 
@@ -82,6 +87,12 @@ int32_t PepperPDFHost::OnResourceMessageReceived(
     PPAPI_DISPATCH_HOST_RESOURCE_CALL_0(PpapiHostMsg_PDF_Print, OnHostMsgPrint)
     PPAPI_DISPATCH_HOST_RESOURCE_CALL_0(PpapiHostMsg_PDF_SaveAs,
                                         OnHostMsgSaveAs)
+    PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_PDF_ShowAlertDialog,
+                                      OnHostMsgShowAlertDialog)
+    PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_PDF_ShowConfirmDialog,
+                                      OnHostMsgShowConfirmDialog)
+    PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_PDF_ShowPromptDialog,
+                                      OnHostMsgShowPromptDialog)
     PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_PDF_SetSelectedText,
                                       OnHostMsgSetSelectedText)
     PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_PDF_SetLinkUnderCursor,
@@ -99,8 +110,6 @@ int32_t PepperPDFHost::OnResourceMessageReceived(
         OnHostMsgSetAccessibilityPageInfo)
     PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_PDF_SelectionChanged,
                                       OnHostMsgSelectionChanged)
-    PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_PDF_DidScroll,
-                                      OnHostMsgDidScroll)
   PPAPI_END_MESSAGE_MAP()
   return PP_ERROR_FAILED;
 }
@@ -158,6 +167,45 @@ int32_t PepperPDFHost::OnHostMsgHasUnsupportedFeature(
 int32_t PepperPDFHost::OnHostMsgPrint(
     ppapi::host::HostMessageContext* context) {
   return InvokePrintingForInstance(pp_instance()) ? PP_OK : PP_ERROR_FAILED;
+}
+
+int32_t PepperPDFHost::OnHostMsgShowAlertDialog(
+    ppapi::host::HostMessageContext* context,
+    const std::string& message) {
+  blink::WebLocalFrame* frame = GetWebLocalFrame();
+  if (!frame)
+    return PP_ERROR_FAILED;
+
+  frame->Alert(blink::WebString::FromUTF8(message));
+  context->reply_msg = PpapiPluginMsg_PDF_ShowAlertDialogReply();
+  return PP_OK;
+}
+
+int32_t PepperPDFHost::OnHostMsgShowConfirmDialog(
+    ppapi::host::HostMessageContext* context,
+    const std::string& message) {
+  blink::WebLocalFrame* frame = GetWebLocalFrame();
+  if (!frame)
+    return PP_ERROR_FAILED;
+
+  bool bool_result = frame->Confirm(blink::WebString::FromUTF8(message));
+  context->reply_msg = PpapiPluginMsg_PDF_ShowConfirmDialogReply(bool_result);
+  return PP_OK;
+}
+
+int32_t PepperPDFHost::OnHostMsgShowPromptDialog(
+    ppapi::host::HostMessageContext* context,
+    const std::string& message,
+    const std::string& default_answer) {
+  blink::WebLocalFrame* frame = GetWebLocalFrame();
+  if (!frame)
+    return PP_ERROR_FAILED;
+
+  blink::WebString result =
+      frame->Prompt(blink::WebString::FromUTF8(message),
+                    blink::WebString::FromUTF8(default_answer));
+  context->reply_msg = PpapiPluginMsg_PDF_ShowPromptDialogReply(result.Utf8());
+  return PP_OK;
 }
 
 int32_t PepperPDFHost::OnHostMsgSaveAs(
@@ -251,20 +299,10 @@ int32_t PepperPDFHost::OnHostMsgSelectionChanged(
   return PP_OK;
 }
 
-int32_t PepperPDFHost::OnHostMsgDidScroll(
-    ppapi::host::HostMessageContext* context) {
-  mojom::PdfService* service = GetRemotePdfService();
-  if (!service)
-    return PP_ERROR_FAILED;
-
-  service->DidScroll();
-  return PP_OK;
-}
-
 void PepperPDFHost::CreatePdfAccessibilityTreeIfNeeded() {
   if (!pdf_accessibility_tree_) {
     pdf_accessibility_tree_ =
-        base::MakeUnique<PdfAccessibilityTree>(host_, pp_instance());
+        std::make_unique<PdfAccessibilityTree>(host_, pp_instance());
   }
 }
 
@@ -284,6 +322,18 @@ mojom::PdfService* PepperPDFHost::GetRemotePdfService() {
         &remote_pdf_service_);
   }
   return remote_pdf_service_.get();
+}
+
+blink::WebLocalFrame* PepperPDFHost::GetWebLocalFrame() {
+  if (!host_->GetPluginInstance(pp_instance()))
+    return nullptr;
+
+  blink::WebPluginContainer* container =
+      host_->GetContainerForInstance(pp_instance());
+  if (!container)
+    return nullptr;
+
+  return container->GetDocument().GetFrame();
 }
 
 void PepperPDFHost::SetCaretPosition(const gfx::PointF& position) {

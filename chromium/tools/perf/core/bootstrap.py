@@ -114,8 +114,8 @@ def ListAllDepsPaths(deps_file):
   deps_includes = {}
 
   chrome_root = os.path.dirname(__file__)
-  while os.path.basename(chrome_root) not in ['src', 'chromium']:
-    chrome_root = os.path.abspath(os.path.join(chrome_root, os.pardir))
+  while os.path.basename(chrome_root) != 'src':
+    chrome_root = os.path.abspath(os.path.join(chrome_root, '..'))
 
   exec open(deps_file).read()  # pylint: disable=exec-used
 

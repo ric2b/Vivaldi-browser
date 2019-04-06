@@ -6,12 +6,12 @@
 
 #include "base/feature_list.h"
 #include "content/browser/network_service_client.h"
-#include "content/network/network_service_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/common/content_features.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
+#include "services/network/network_service.h"
+#include "services/network/public/cpp/features.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace content {
@@ -19,7 +19,7 @@ namespace content {
 namespace {
 
 network::mojom::NetworkServicePtr* g_network_service_ptr = nullptr;
-NetworkServiceImpl* g_network_service;
+network::NetworkService* g_network_service;
 
 void CreateNetworkServiceOnIO(network::mojom::NetworkServiceRequest request) {
   if (g_network_service) {
@@ -29,7 +29,7 @@ void CreateNetworkServiceOnIO(network::mojom::NetworkServiceRequest request) {
     return;
   }
 
-  g_network_service = new NetworkServiceImpl(
+  g_network_service = new network::NetworkService(
       nullptr, std::move(request), GetContentClient()->browser()->GetNetLog());
 }
 
@@ -43,7 +43,7 @@ network::mojom::NetworkService* GetNetworkService() {
   static NetworkServiceClient* g_client;
   if (!g_network_service_ptr->is_bound() ||
       g_network_service_ptr->encountered_error()) {
-    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
+    if (base::FeatureList::IsEnabled(network::features::kNetworkService)) {
       ServiceManagerConnection::GetForProcess()->GetConnector()->BindInterface(
           mojom::kNetworkServiceName, g_network_service_ptr);
     } else {
@@ -58,15 +58,18 @@ network::mojom::NetworkService* GetNetworkService() {
     delete g_client;  // In case we're recreating the network service.
     g_client = new NetworkServiceClient(mojo::MakeRequest(&client_ptr));
     (*g_network_service_ptr)->SetClient(std::move(client_ptr));
+
+    GetContentClient()->browser()->OnNetworkServiceCreated(
+        g_network_service_ptr->get());
   }
   return g_network_service_ptr->get();
 }
 
-NetworkService* GetNetworkServiceImpl() {
+network::NetworkService* GetNetworkServiceImpl() {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
-  DCHECK(!base::FeatureList::IsEnabled(features::kNetworkService));
+  DCHECK(!base::FeatureList::IsEnabled(network::features::kNetworkService));
   if (!g_network_service) {
-    g_network_service = new NetworkServiceImpl(
+    g_network_service = new network::NetworkService(
         nullptr, nullptr, GetContentClient()->browser()->GetNetLog());
   }
 
@@ -75,7 +78,6 @@ NetworkService* GetNetworkServiceImpl() {
 
 void FlushNetworkServiceInstanceForTesting() {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  DCHECK(base::FeatureList::IsEnabled(features::kNetworkService));
 
   if (g_network_service_ptr)
     g_network_service_ptr->FlushForTesting();

@@ -12,9 +12,14 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/content_switches.h"
+#include "extensions/buildflags/buildflags.h"
 
 #if defined(OS_MACOSX)
 #include "base/mac/mac_util.h"
+#endif
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/common/switches.h"
 #endif
 
 namespace {
@@ -47,6 +52,20 @@ bool IsBrowserProcess() {
   return process_type.empty();
 }
 
+// True if the command line corresponds to an extension renderer process.
+bool IsExtensionRenderer(const base::CommandLine& command_line) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  return command_line.HasSwitch(extensions::switches::kExtensionProcess);
+#else
+  return false;
+#endif
+}
+
+bool ShouldEnableProfilerForNextRendererProcess() {
+  // Enable for every N-th renderer process, where N = 5.
+  return base::RandInt(0, 4) == 0;
+}
+
 }  // namespace
 
 StackSamplingConfiguration::StackSamplingConfiguration()
@@ -56,15 +75,14 @@ StackSamplingConfiguration::StackSamplingConfiguration()
 base::StackSamplingProfiler::SamplingParams
 StackSamplingConfiguration::GetSamplingParamsForCurrentProcess() const {
   base::StackSamplingProfiler::SamplingParams params;
-  params.bursts = 1;
   params.initial_delay = base::TimeDelta::FromMilliseconds(0);
   params.sampling_interval = base::TimeDelta::FromMilliseconds(0);
-  params.samples_per_burst = 0;
+  params.samples_per_profile = 0;
 
   if (IsProfilerEnabledForCurrentProcess()) {
     const base::TimeDelta duration = base::TimeDelta::FromSeconds(30);
     params.sampling_interval = base::TimeDelta::FromMilliseconds(100);
-    params.samples_per_burst = duration / params.sampling_interval;
+    params.samples_per_profile = duration / params.sampling_interval;
   }
 
   return params;
@@ -72,14 +90,8 @@ StackSamplingConfiguration::GetSamplingParamsForCurrentProcess() const {
 
 bool StackSamplingConfiguration::IsProfilerEnabledForCurrentProcess() const {
   if (IsBrowserProcess()) {
-    switch (configuration_) {
-      case PROFILE_BROWSER_PROCESS:
-      case PROFILE_BROWSER_AND_GPU_PROCESS:
-      case PROFILE_CONTROL:
-        return true;
-      default:
-        return false;
-    }
+    return configuration_ == PROFILE_ENABLED ||
+           configuration_ == PROFILE_CONTROL;
   }
 
   DCHECK_EQ(PROFILE_FROM_COMMAND_LINE, configuration_);
@@ -109,16 +121,8 @@ bool StackSamplingConfiguration::GetSyntheticFieldTrial(
       *group_name = "Control";
       break;
 
-    case PROFILE_BROWSER_PROCESS:
-      *group_name = "BrowserProcess";
-      break;
-
-    case PROFILE_GPU_PROCESS:
-      *group_name = "GpuProcess";
-      break;
-
-    case PROFILE_BROWSER_AND_GPU_PROCESS:
-      *group_name = "BrowserAndGpuProcess";
+    case PROFILE_ENABLED:
+      *group_name = "Enabled";
       break;
 
     case PROFILE_FROM_COMMAND_LINE:
@@ -134,11 +138,18 @@ void StackSamplingConfiguration::AppendCommandLineSwitchForChildProcess(
     base::CommandLine* command_line) const {
   DCHECK(IsBrowserProcess());
 
-  bool enable = configuration_ == PROFILE_GPU_PROCESS ||
-                configuration_ == PROFILE_BROWSER_AND_GPU_PROCESS ||
-                configuration_ == PROFILE_CONTROL;
-  if (enable && process_type == switches::kGpuProcess)
+  bool enable =
+      configuration_ == PROFILE_ENABLED || configuration_ == PROFILE_CONTROL;
+  if (!enable)
+    return;
+  if (process_type == switches::kGpuProcess ||
+      (process_type == switches::kRendererProcess &&
+       // Do not start the profiler for extension processes since profiling the
+       // compositor thread in them is not useful.
+       !IsExtensionRenderer(*command_line) &&
+       ShouldEnableProfilerForNextRendererProcess())) {
     command_line->AppendSwitch(switches::kStartStackProfiler);
+  }
 }
 
 // static
@@ -157,7 +168,7 @@ StackSamplingConfiguration::ChooseConfiguration(
 
   int chosen = base::RandInt(0, total_weight - 1);  // Max is inclusive.
   int cumulative_weight = 0;
-  for (const Variation& variation : variations) {
+  for (const auto& variation : variations) {
     if (chosen >= cumulative_weight &&
         chosen < cumulative_weight + variation.weight) {
       return variation.config;
@@ -178,39 +189,16 @@ StackSamplingConfiguration::GenerateConfiguration() {
     return PROFILE_DISABLED;
 
   switch (chrome::GetChannel()) {
-    // Enable the profiler in the ultimate production configuration for
-    // development/waterfall builds.
+    // Enable the profiler unconditionally for development/waterfall builds.
     case version_info::Channel::UNKNOWN:
-      return PROFILE_BROWSER_AND_GPU_PROCESS;
+      return PROFILE_ENABLED;
 
-#if defined(OS_WIN) && defined(ARCH_CPU_X86_64)
+#if (defined(OS_WIN) && defined(ARCH_CPU_X86_64)) || defined(OS_MACOSX)
     case version_info::Channel::CANARY:
-      return ChooseConfiguration({{PROFILE_BROWSER_PROCESS, 0},
-                                  {PROFILE_GPU_PROCESS, 0},
-                                  {PROFILE_BROWSER_AND_GPU_PROCESS, 80},
-                                  {PROFILE_CONTROL, 10},
-                                  {PROFILE_DISABLED, 10}});
-
     case version_info::Channel::DEV:
-      return ChooseConfiguration({{PROFILE_BROWSER_PROCESS, 0},
-                                  {PROFILE_GPU_PROCESS, 0},
-                                  {PROFILE_BROWSER_AND_GPU_PROCESS, 80},
+      return ChooseConfiguration({{PROFILE_ENABLED, 80},
                                   {PROFILE_CONTROL, 10},
                                   {PROFILE_DISABLED, 10}});
-#elif defined(OS_MACOSX)
-    case version_info::Channel::CANARY:
-      return ChooseConfiguration({{PROFILE_BROWSER_PROCESS, 0},
-                                  {PROFILE_GPU_PROCESS, 0},
-                                  {PROFILE_BROWSER_AND_GPU_PROCESS, 80},
-                                  {PROFILE_CONTROL, 10},
-                                  {PROFILE_DISABLED, 10}});
-
-    case version_info::Channel::DEV:
-      return ChooseConfiguration({{PROFILE_BROWSER_PROCESS, 0},
-                                  {PROFILE_GPU_PROCESS, 0},
-                                  {PROFILE_BROWSER_AND_GPU_PROCESS, 50},
-                                  {PROFILE_CONTROL, 0},
-                                  {PROFILE_DISABLED, 50}});
 #endif
 
     default:

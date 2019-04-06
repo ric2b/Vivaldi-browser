@@ -5,10 +5,12 @@
 #ifndef BASE_MESSAGE_LOOP_MESSAGE_PUMP_LIBEVENT_H_
 #define BASE_MESSAGE_LOOP_MESSAGE_PUMP_LIBEVENT_H_
 
+#include <memory>
+
 #include "base/compiler_specific.h"
-#include "base/location.h"
 #include "base/macros.h"
 #include "base/message_loop/message_pump.h"
+#include "base/message_loop/watchable_io_message_pump_posix.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 
@@ -20,93 +22,55 @@ namespace base {
 
 // Class to monitor sockets and issue callbacks when sockets are ready for I/O
 // TODO(dkegel): add support for background file IO somehow
-class BASE_EXPORT MessagePumpLibevent : public MessagePump {
+class BASE_EXPORT MessagePumpLibevent : public MessagePump,
+                                        public WatchableIOMessagePumpPosix {
  public:
-  // Used with WatchFileDescriptor to asynchronously monitor the I/O readiness
-  // of a file descriptor.
-  class Watcher {
+  class FdWatchController : public FdWatchControllerInterface {
    public:
-    // Called from MessageLoop::Run when an FD can be read from/written to
-    // without blocking
-    virtual void OnFileCanReadWithoutBlocking(int fd) = 0;
-    virtual void OnFileCanWriteWithoutBlocking(int fd) = 0;
+    explicit FdWatchController(const Location& from_here);
 
-   protected:
-    virtual ~Watcher() = default;
-  };
+    // Implicitly calls StopWatchingFileDescriptor.
+    ~FdWatchController() override;
 
-  // Object returned by WatchFileDescriptor to manage further watching.
-  class FileDescriptorWatcher {
-   public:
-    explicit FileDescriptorWatcher(const Location& from_here);
-    ~FileDescriptorWatcher();  // Implicitly calls StopWatchingFileDescriptor.
-
-    // NOTE: These methods aren't called StartWatching()/StopWatching() to
-    // avoid confusion with the win32 ObjectWatcher class.
-
-    // Stop watching the FD, always safe to call.  No-op if there's nothing
-    // to do.
-    bool StopWatchingFileDescriptor();
-
-    const Location& created_from_location() { return created_from_location_; }
+    // FdWatchControllerInterface:
+    bool StopWatchingFileDescriptor() override;
 
    private:
     friend class MessagePumpLibevent;
     friend class MessagePumpLibeventTest;
 
-    // Called by MessagePumpLibevent, ownership of |e| is transferred to this
-    // object.
-    void Init(event* e);
+    // Called by MessagePumpLibevent.
+    void Init(std::unique_ptr<event> e);
 
-    // Used by MessagePumpLibevent to take ownership of event_.
-    event* ReleaseEvent();
+    // Used by MessagePumpLibevent to take ownership of |event_|.
+    std::unique_ptr<event> ReleaseEvent();
 
     void set_pump(MessagePumpLibevent* pump) { pump_ = pump; }
     MessagePumpLibevent* pump() const { return pump_; }
 
-    void set_watcher(Watcher* watcher) { watcher_ = watcher; }
+    void set_watcher(FdWatcher* watcher) { watcher_ = watcher; }
 
     void OnFileCanReadWithoutBlocking(int fd, MessagePumpLibevent* pump);
     void OnFileCanWriteWithoutBlocking(int fd, MessagePumpLibevent* pump);
 
-    event* event_;
-    MessagePumpLibevent* pump_;
-    Watcher* watcher_;
+    std::unique_ptr<event> event_;
+    MessagePumpLibevent* pump_ = nullptr;
+    FdWatcher* watcher_ = nullptr;
     // If this pointer is non-NULL, the pointee is set to true in the
     // destructor.
-    bool* was_destroyed_;
+    bool* was_destroyed_ = nullptr;
 
-    const Location created_from_location_;
-
-    DISALLOW_COPY_AND_ASSIGN(FileDescriptorWatcher);
-  };
-
-  enum Mode {
-    WATCH_READ = 1 << 0,
-    WATCH_WRITE = 1 << 1,
-    WATCH_READ_WRITE = WATCH_READ | WATCH_WRITE
+    DISALLOW_COPY_AND_ASSIGN(FdWatchController);
   };
 
   MessagePumpLibevent();
   ~MessagePumpLibevent() override;
 
-  // Have the current thread's message loop watch for a a situation in which
-  // reading/writing to the FD can be performed without blocking.
-  // Callers must provide a preallocated FileDescriptorWatcher object which
-  // can later be used to manage the lifetime of this event.
-  // If a FileDescriptorWatcher is passed in which is already attached to
-  // an event, then the effect is cumulative i.e. after the call |controller|
-  // will watch both the previous event and the new one.
-  // If an error occurs while calling this method in a cumulative fashion, the
-  // event previously attached to |controller| is aborted.
-  // Returns true on success.
-  // Must be called on the same thread the message_pump is running on.
-  // TODO(dkegel): switch to edge-triggered readiness notification
   bool WatchFileDescriptor(int fd,
                            bool persistent,
                            int mode,
-                           FileDescriptorWatcher* controller,
-                           Watcher* delegate);
+                           FdWatchController* controller,
+                           FdWatcher* delegate);
 
   // MessagePump methods:
   void Run(Delegate* delegate) override;

@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "chrome/browser/vr/elements/ui_element.h"
+#include "chrome/browser/vr/vr_ui_export.h"
 #include "ui/gfx/transform.h"
 
 namespace vr {
@@ -14,7 +15,7 @@ namespace vr {
 // This class is the root of all viewport aware elements. It calcuates the
 // yaw rotation which all elements need to apply to be visible in current
 // viewport.
-class ViewportAwareRoot : public UiElement {
+class VR_UI_EXPORT ViewportAwareRoot : public UiElement {
  public:
   static const float kViewportRotationTriggerDegrees;
 
@@ -30,8 +31,7 @@ class ViewportAwareRoot : public UiElement {
   virtual bool AdjustRotationForHeadPose(const gfx::Vector3dF& look_at);
 
  private:
-  bool OnBeginFrame(const base::TimeTicks& time,
-                    const gfx::Transform& head_pose) override;
+  bool OnBeginFrame(const gfx::Transform& head_pose) override;
 
   float viewport_aware_total_rotation_ = 0.f;
   bool children_visible_ = false;

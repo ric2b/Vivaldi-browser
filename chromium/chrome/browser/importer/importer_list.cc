@@ -230,7 +230,7 @@ void ImporterList::DetectSourceProfiles(
                  weak_ptr_factory_.GetWeakPtr(), profiles_loaded_callback));
 }
 
- importer::SourceProfile ImporterList::GetSourceProfileAt(
+ const importer::SourceProfile& ImporterList::GetSourceProfileAt(
     size_t index) const {
   DCHECK_LT(index, count());
   return source_profiles_[index];

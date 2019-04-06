@@ -15,6 +15,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task_scheduler/post_task.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread.h"
@@ -761,8 +762,8 @@ TEST_F(AssociatedInterfaceTest, AssociatedPtrFlushForTesting) {
   ptr0.set_connection_error_handler(base::Bind(&Fail));
 
   bool ptr0_callback_run = false;
-  ptr0->Echo(123, ExpectValueSetFlagAndRunClosure(
-                      123, &ptr0_callback_run, base::Bind(&base::DoNothing)));
+  ptr0->Echo(123, ExpectValueSetFlagAndRunClosure(123, &ptr0_callback_run,
+                                                  base::DoNothing()));
   ptr0.FlushForTesting();
   EXPECT_TRUE(ptr0_callback_run);
 }
@@ -803,8 +804,8 @@ TEST_F(AssociatedInterfaceTest, AssociatedBindingFlushForTesting) {
   ptr0.Bind(std::move(ptr_info));
 
   bool ptr0_callback_run = false;
-  ptr0->Echo(123, ExpectValueSetFlagAndRunClosure(
-                      123, &ptr0_callback_run, base::Bind(&base::DoNothing)));
+  ptr0->Echo(123, ExpectValueSetFlagAndRunClosure(123, &ptr0_callback_run,
+                                                  base::DoNothing()));
   // Because the flush is sent from the binding, it only guarantees that the
   // request has been received, not the response. The second flush waits for the
   // response to be received.
@@ -1182,6 +1183,32 @@ TEST_F(AssociatedInterfaceTest, AssociateWithDisconnectedPipe) {
   IntegerSenderAssociatedPtr sender;
   AssociateWithDisconnectedPipe(MakeRequest(&sender).PassHandle());
   sender->Send(42);
+}
+
+TEST_F(AssociatedInterfaceTest, AsyncErrorHandlersWhenClosingMasterInterface) {
+  // Ensures that associated interface error handlers are not invoked
+  // synchronously when the master interface pipe is closed. Regression test for
+  // https://crbug.com/864731.
+
+  IntegerSenderConnectionPtr connection_ptr;
+  IntegerSenderConnectionImpl connection(MakeRequest(&connection_ptr));
+
+  base::RunLoop loop;
+  bool error_handler_invoked = false;
+  IntegerSenderAssociatedPtr sender0;
+  connection_ptr->GetSender(MakeRequest(&sender0));
+  sender0.set_connection_error_handler(base::BindLambdaForTesting([&] {
+    error_handler_invoked = true;
+    loop.Quit();
+  }));
+
+  // This should not trigger the error handler synchronously...
+  connection_ptr.reset();
+  EXPECT_FALSE(error_handler_invoked);
+
+  // ...but it should be triggered once we spin the scheduler.
+  loop.Run();
+  EXPECT_TRUE(error_handler_invoked);
 }
 
 }  // namespace

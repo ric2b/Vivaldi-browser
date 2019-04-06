@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
@@ -19,11 +18,12 @@
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/histogram_tester.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/reporter_runner_win.h"
+#include "chrome/browser/safe_browsing/chrome_cleaner/srt_field_trial_win.h"
 #include "components/chrome_cleaner/public/constants/constants.h"
 #include "components/component_updater/mock_component_updater_service.h"
 #include "components/variations/variations_params_manager.h"
@@ -73,7 +73,7 @@ class SwReporterInstallerTest : public ::testing::Test {
   }
 
   void CreateFeatureWithTag(const std::string& tag) {
-    std::map<std::string, std::string> params{{"tag", tag}};
+    std::map<std::string, std::string> params{{"reporter_omaha_tag", tag}};
     CreateFeatureWithParams(params);
   }
 
@@ -84,9 +84,10 @@ class SwReporterInstallerTest : public ::testing::Test {
     // create a FieldTrial for this group and associate the params with the
     // feature. For the test just re-use the feature name as the trial name.
     variations_ = std::make_unique<variations::testing::VariationParamsManager>(
-        /*trial_name=*/kComponentTagFeatureName, params,
+        "SwReporterInstallerTestTrialName", params,
         /*associated_features=*/
-        std::set<std::string>{kComponentTagFeatureName});
+        std::set<std::string>{
+            safe_browsing::kChromeCleanupDistributionFeature.name});
   }
 
   void ExpectAttributesWithTag(const SwReporterInstallerPolicy& policy,
@@ -687,18 +688,21 @@ class SwReporterOnDemandFetcherTest : public ::testing::Test,
     EXPECT_CALL(mock_cus_, RemoveObserver(_)).Times(AtLeast(1));
   }
 
-  void CreateOnDemandFetcherAndVerifyExpecations(bool can_be_updated) {
+  void CreateOnDemandFetcherAndVerifyExpectations(bool can_be_updated) {
     component_can_be_updated_ = can_be_updated;
 
-    fetcher_ = base::MakeUnique<SwReporterOnDemandFetcher>(
+    fetcher_ = std::make_unique<SwReporterOnDemandFetcher>(
         &mock_cus_,
         base::BindOnce(&SwReporterOnDemandFetcherTest::SetErrorCallbackCalled,
                        base::Unretained(this)));
   }
 
   // OnDemandUpdater implementation:
-  void OnDemandUpdate(const std::string& crx_id, Callback callback) override {
+  void OnDemandUpdate(const std::string& crx_id,
+                      Priority priority,
+                      Callback callback) override {
     ASSERT_EQ(kSwReporterComponentId, crx_id);
+    ASSERT_EQ(Priority::FOREGROUND, priority);
     on_demand_update_called_ = true;
 
     // |OnDemandUpdate| is called immediately on |SwReporterOnDemandFetcher|
@@ -735,7 +739,7 @@ class SwReporterOnDemandFetcherTest : public ::testing::Test,
   void FireComponentNotUpdatedEvents() {
     fetcher_->OnEvent(Events::COMPONENT_CHECKING_FOR_UPDATES,
                       kSwReporterComponentId);
-    fetcher_->OnEvent(Events::COMPONENT_NOT_UPDATED, kSwReporterComponentId);
+    fetcher_->OnEvent(Events::COMPONENT_UPDATE_ERROR, kSwReporterComponentId);
 
     EXPECT_TRUE(error_callback_called_);
   }
@@ -750,13 +754,13 @@ class SwReporterOnDemandFetcherTest : public ::testing::Test,
 };
 
 TEST_F(SwReporterOnDemandFetcherTest, TestUpdateSuccess) {
-  CreateOnDemandFetcherAndVerifyExpecations(true);
+  CreateOnDemandFetcherAndVerifyExpectations(true);
 
   EXPECT_TRUE(on_demand_update_called_);
 }
 
 TEST_F(SwReporterOnDemandFetcherTest, TestUpdateFailure) {
-  CreateOnDemandFetcherAndVerifyExpecations(false);
+  CreateOnDemandFetcherAndVerifyExpectations(false);
 
   EXPECT_TRUE(on_demand_update_called_);
 }

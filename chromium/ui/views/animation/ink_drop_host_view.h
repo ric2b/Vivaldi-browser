@@ -45,6 +45,12 @@ class VIEWS_EXPORT InkDropHostView : public View, public InkDropHost {
   std::unique_ptr<InkDropRipple> CreateInkDropRipple() const override;
   std::unique_ptr<InkDropHighlight> CreateInkDropHighlight() const override;
 
+  // Subclasses can override to return a mask for the ink drop. By default,
+  // returns nullptr (i.e no mask).
+  // TODO(bruthig): InkDropMasks do not currently work on Windows. See
+  // https://crbug.com/713359.
+  virtual std::unique_ptr<views::InkDropMask> CreateInkDropMask() const;
+
   // Toggle to enable/disable an InkDrop on this View.  Descendants can override
   // CreateInkDropHighlight() and CreateInkDropRipple() to change the look/feel
   // of the InkDrop.
@@ -58,6 +64,17 @@ class VIEWS_EXPORT InkDropHostView : public View, public InkDropHost {
   }
   float ink_drop_visible_opacity() const { return ink_drop_visible_opacity_; }
 
+  void set_ink_drop_corner_radii(int small_radius, int large_radius) {
+    ink_drop_small_corner_radius_ = small_radius;
+    ink_drop_large_corner_radius_ = large_radius;
+  }
+  int ink_drop_small_corner_radius() const {
+    return ink_drop_small_corner_radius_;
+  }
+  int ink_drop_large_corner_radius() const {
+    return ink_drop_large_corner_radius_;
+  }
+
   // Animates |ink_drop_| to the desired |ink_drop_state|. Caches |event| as the
   // last_ripple_triggering_event().
   //
@@ -68,9 +85,6 @@ class VIEWS_EXPORT InkDropHostView : public View, public InkDropHost {
   void AnimateInkDrop(InkDropState state, const ui::LocatedEvent* event);
 
  protected:
-  static constexpr int kInkDropSmallCornerRadius = 2;
-  static constexpr int kInkDropLargeCornerRadius = 4;
-
   // Size used for the default SquareInkDropRipple.
   static constexpr int kDefaultInkDropSize = 24;
 
@@ -95,6 +109,8 @@ class VIEWS_EXPORT InkDropHostView : public View, public InkDropHost {
   gfx::Point GetInkDropCenterBasedOnLastEvent() const;
 
   // View:
+  void ViewHierarchyChanged(
+      const ViewHierarchyChangedDetails& details) override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
   void VisibilityChanged(View* starting_from, bool is_visible) override;
   void OnFocus() override;
@@ -104,12 +120,6 @@ class VIEWS_EXPORT InkDropHostView : public View, public InkDropHost {
   // Overrideable methods to allow views to provide minor tweaks to the default
   // ink drop.
   virtual SkColor GetInkDropBaseColor() const;
-
-  // Subclasses can override to return a mask for the ink drop. By default,
-  // returns nullptr (i.e no mask).
-  // TODO(bruthig): InkDropMasks do not currently work on Windows. See
-  // crbug.com/713359.
-  virtual std::unique_ptr<views::InkDropMask> CreateInkDropMask() const;
 
   // Called after a new InkDrop instance is created.
   virtual void OnInkDropCreated() {}
@@ -127,6 +137,10 @@ class VIEWS_EXPORT InkDropHostView : public View, public InkDropHost {
   void InstallInkDropMask(ui::Layer* ink_drop_layer);
 
   void ResetInkDropMask();
+
+  // Updates the ink drop mask layer size to |new_size|. It does nothing if
+  // |ink_drop_mask_| is null.
+  void UpdateInkDropMaskLayerSize(const gfx::Size& new_size);
 
   // Returns an InkDropImpl configured to work well with a
   // flood-fill ink drop ripple.
@@ -155,6 +169,10 @@ class VIEWS_EXPORT InkDropHostView : public View, public InkDropHost {
   std::unique_ptr<InkDropGestureHandler> gesture_handler_;
 
   float ink_drop_visible_opacity_;
+
+  // Radii used for the SquareInkDropRipple.
+  int ink_drop_small_corner_radius_;
+  int ink_drop_large_corner_radius_;
 
   // Determines whether the view was already painting to layer before adding ink
   // drop layer.

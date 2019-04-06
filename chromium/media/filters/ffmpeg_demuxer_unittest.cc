@@ -13,7 +13,6 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -33,7 +32,7 @@
 #include "media/filters/ffmpeg_demuxer.h"
 #include "media/filters/file_data_source.h"
 #include "media/formats/mp4/avc.h"
-#include "media/media_features.h"
+#include "media/media_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::testing::AnyNumber;
@@ -77,42 +76,6 @@ MATCHER_P(SkippingUnsupportedStream, stream_type, "") {
                std::string(stream_type) + " track");
 }
 
-namespace {
-void OnStreamStatusChanged(base::WaitableEvent* event,
-                           DemuxerStream* stream,
-                           bool enabled,
-                           base::TimeDelta) {
-  event->Signal();
-}
-
-void CheckStreamStatusNotifications(
-    MediaResource* media_resource,
-    FFmpegDemuxerStream* stream,
-    base::test::ScopedTaskEnvironment* scoped_task_environment) {
-  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
-                            base::WaitableEvent::InitialState::NOT_SIGNALED);
-
-  ASSERT_TRUE(stream->IsEnabled());
-  media_resource->SetStreamStatusChangeCB(
-      base::Bind(&OnStreamStatusChanged, base::Unretained(&event)));
-
-  stream->SetEnabled(false, base::TimeDelta());
-  scoped_task_environment->RunUntilIdle();
-  ASSERT_TRUE(event.IsSignaled());
-
-  event.Reset();
-  stream->SetEnabled(true, base::TimeDelta());
-  scoped_task_environment->RunUntilIdle();
-  ASSERT_TRUE(event.IsSignaled());
-}
-
-void OnReadDone_ExpectEos(DemuxerStream::Status status,
-                          const scoped_refptr<DecoderBuffer>& buffer) {
-  EXPECT_EQ(status, DemuxerStream::kOk);
-  EXPECT_TRUE(buffer->end_of_stream());
-}
-}
-
 const uint8_t kEncryptedMediaInitData[] = {
     0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
     0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35,
@@ -120,9 +83,9 @@ const uint8_t kEncryptedMediaInitData[] = {
 
 static void EosOnReadDone(bool* got_eos_buffer,
                           DemuxerStream::Status status,
-                          const scoped_refptr<DecoderBuffer>& buffer) {
+                          scoped_refptr<DecoderBuffer> buffer) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
+      FROM_HERE, base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
 
   EXPECT_EQ(status, DemuxerStream::kOk);
   if (buffer->end_of_stream()) {
@@ -142,7 +105,7 @@ class FFmpegDemuxerTest : public testing::Test {
  protected:
   FFmpegDemuxerTest() = default;
 
-  virtual ~FFmpegDemuxerTest() { Shutdown(); }
+  ~FFmpegDemuxerTest() override { Shutdown(); }
 
   void Shutdown() {
     if (demuxer_)
@@ -173,34 +136,27 @@ class FFmpegDemuxerTest : public testing::Test {
 
   MOCK_METHOD1(CheckPoint, void(int v));
 
-  void InitializeDemuxerInternal(bool enable_text,
-                                 media::PipelineStatus expected_pipeline_status,
+  void InitializeDemuxerInternal(media::PipelineStatus expected_pipeline_status,
                                  base::Time timeline_offset) {
     if (expected_pipeline_status == PIPELINE_OK)
       EXPECT_CALL(host_, SetDuration(_)).Times(AnyNumber());
     WaitableMessageLoopEvent event;
-    demuxer_->Initialize(&host_, event.GetPipelineStatusCB(), enable_text);
+    demuxer_->Initialize(&host_, event.GetPipelineStatusCB());
     demuxer_->timeline_offset_ = timeline_offset;
     event.RunAndWaitForStatus(expected_pipeline_status);
   }
 
   void InitializeDemuxer() {
-    InitializeDemuxerInternal(/*enable_text=*/false, PIPELINE_OK, base::Time());
-  }
-
-  void InitializeDemuxerWithText() {
-    InitializeDemuxerInternal(/*enable_text=*/true, PIPELINE_OK, base::Time());
+    InitializeDemuxerInternal(PIPELINE_OK, base::Time());
   }
 
   void InitializeDemuxerWithTimelineOffset(base::Time timeline_offset) {
-    InitializeDemuxerInternal(/*enable_text=*/false, PIPELINE_OK,
-                              timeline_offset);
+    InitializeDemuxerInternal(PIPELINE_OK, timeline_offset);
   }
 
   void InitializeDemuxerAndExpectPipelineStatus(
       media::PipelineStatus expected_pipeline_status) {
-    InitializeDemuxerInternal(/*enable_text=*/false, expected_pipeline_status,
-                              base::Time());
+    InitializeDemuxerInternal(expected_pipeline_status, base::Time());
   }
 
   MOCK_METHOD2(OnReadDoneCalled, void(int, int64_t));
@@ -230,7 +186,7 @@ class FFmpegDemuxerTest : public testing::Test {
   void OnReadDone(const base::Location& location,
                   const ReadExpectation& read_expectation,
                   DemuxerStream::Status status,
-                  const scoped_refptr<DecoderBuffer>& buffer) {
+                  scoped_refptr<DecoderBuffer> buffer) {
     std::string location_str = location.ToString();
     location_str += "\n";
     SCOPED_TRACE(location_str);
@@ -246,7 +202,7 @@ class FFmpegDemuxerTest : public testing::Test {
     }
     OnReadDoneCalled(read_expectation.size, read_expectation.timestamp_us);
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
+        FROM_HERE, base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
   }
 
   DemuxerStream::ReadCB NewReadCB(
@@ -341,8 +297,9 @@ class FFmpegDemuxerTest : public testing::Test {
 
     CreateDataSource(name);
 
-    Demuxer::EncryptedMediaInitDataCB encrypted_media_init_data_cb = base::Bind(
-        &FFmpegDemuxerTest::OnEncryptedMediaInitData, base::Unretained(this));
+    Demuxer::EncryptedMediaInitDataCB encrypted_media_init_data_cb =
+        base::BindRepeating(&FFmpegDemuxerTest::OnEncryptedMediaInitData,
+                            base::Unretained(this));
 
     Demuxer::MediaTracksUpdatedCB tracks_updated_cb = base::Bind(
         &FFmpegDemuxerTest::OnMediaTracksUpdated, base::Unretained(this));
@@ -356,7 +313,7 @@ class FFmpegDemuxerTest : public testing::Test {
     CHECK(!data_source_);
 
     base::FilePath file_path;
-    EXPECT_TRUE(PathService::Get(base::DIR_SOURCE_ROOT, &file_path));
+    EXPECT_TRUE(base::PathService::Get(base::DIR_SOURCE_ROOT, &file_path));
 
     file_path = file_path.Append(FILE_PATH_LITERAL("media"))
         .Append(FILE_PATH_LITERAL("test"))
@@ -374,7 +331,7 @@ TEST_F(FFmpegDemuxerTest, Initialize_OpenFails) {
   // Simulate avformat_open_input() failing.
   CreateDemuxer("ten_byte_file");
   WaitableMessageLoopEvent event;
-  demuxer_->Initialize(&host_, event.GetPipelineStatusCB(), true);
+  demuxer_->Initialize(&host_, event.GetPipelineStatusCB());
   event.RunAndWaitForStatus(DEMUXER_ERROR_COULD_NOT_OPEN);
 }
 
@@ -382,7 +339,7 @@ TEST_F(FFmpegDemuxerTest, Initialize_NoStreams) {
   // Open a file with no streams whatsoever.
   CreateDemuxer("no_streams.webm");
   WaitableMessageLoopEvent event;
-  demuxer_->Initialize(&host_, event.GetPipelineStatusCB(), true);
+  demuxer_->Initialize(&host_, event.GetPipelineStatusCB());
   event.RunAndWaitForStatus(DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
 }
 
@@ -390,7 +347,7 @@ TEST_F(FFmpegDemuxerTest, Initialize_NoAudioVideo) {
   // Open a file containing streams but none of which are audio/video streams.
   CreateDemuxer("no_audio_video.webm");
   WaitableMessageLoopEvent event;
-  demuxer_->Initialize(&host_, event.GetPipelineStatusCB(), true);
+  demuxer_->Initialize(&host_, event.GetPipelineStatusCB());
   event.RunAndWaitForStatus(DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
 }
 
@@ -475,35 +432,6 @@ TEST_F(FFmpegDemuxerTest, Initialize_Multitrack) {
 }
 #endif
 
-TEST_F(FFmpegDemuxerTest, Initialize_MultitrackText) {
-  // Open a file containing the following streams:
-  //   Stream #0: Video (VP8)
-  //   Stream #1: Audio (Vorbis)
-  //   Stream #2: Text (WebVTT)
-
-  CreateDemuxer("bear-vp8-webvtt.webm");
-  DemuxerStream* text_stream = NULL;
-  EXPECT_CALL(host_, AddTextStream(_, _))
-      .WillOnce(SaveArg<0>(&text_stream));
-  InitializeDemuxerWithText();
-  ASSERT_TRUE(text_stream);
-  EXPECT_EQ(DemuxerStream::TEXT, text_stream->type());
-
-  // Video stream should be VP8.
-  DemuxerStream* stream = GetStream(DemuxerStream::VIDEO);
-  ASSERT_TRUE(stream);
-  EXPECT_EQ(DemuxerStream::VIDEO, stream->type());
-  EXPECT_EQ(kCodecVP8, stream->video_decoder_config().codec());
-
-  // Audio stream should be Vorbis.
-  stream = GetStream(DemuxerStream::AUDIO);
-  ASSERT_TRUE(stream);
-  EXPECT_EQ(DemuxerStream::AUDIO, stream->type());
-  EXPECT_EQ(kCodecVorbis, stream->audio_decoder_config().codec());
-
-  EXPECT_EQ(3u, demuxer_->GetAllStreams().size());
-}
-
 TEST_F(FFmpegDemuxerTest, Initialize_Encrypted) {
   EXPECT_CALL(*this,
               OnEncryptedMediaInitData(
@@ -515,6 +443,15 @@ TEST_F(FFmpegDemuxerTest, Initialize_Encrypted) {
 
   CreateDemuxer("bear-320x240-av_enc-av.webm");
   InitializeDemuxer();
+}
+
+TEST_F(FFmpegDemuxerTest, Initialize_NoConfigChangeSupport) {
+  // Will create one audio, one video, and one text stream.
+  CreateDemuxer("bear-vp8-webvtt.webm");
+  InitializeDemuxer();
+
+  for (auto* stream : demuxer_->GetAllStreams())
+    EXPECT_FALSE(stream->SupportsConfigChanges());
 }
 
 TEST_F(FFmpegDemuxerTest, AbortPendingReads) {
@@ -582,23 +519,6 @@ TEST_F(FFmpegDemuxerTest, Read_Video) {
   scoped_task_environment_.RunUntilIdle();
 
   EXPECT_EQ(148778, demuxer_->GetMemoryUsage());
-}
-
-TEST_F(FFmpegDemuxerTest, Read_Text) {
-  // We test that on a successful text packet read.
-  CreateDemuxer("bear-vp8-webvtt.webm");
-  DemuxerStream* text_stream = NULL;
-  EXPECT_CALL(host_, AddTextStream(_, _))
-      .WillOnce(SaveArg<0>(&text_stream));
-  InitializeDemuxerWithText();
-  ASSERT_TRUE(text_stream);
-  EXPECT_EQ(DemuxerStream::TEXT, text_stream->type());
-
-  text_stream->Read(NewReadCB(FROM_HERE, 31, 0, true));
-  base::RunLoop().Run();
-
-  text_stream->Read(NewReadCB(FROM_HERE, 19, 500000, true));
-  base::RunLoop().Run();
 }
 
 TEST_F(FFmpegDemuxerTest, SeekInitialized_NoVideoStartTime) {
@@ -724,12 +644,9 @@ TEST_F(FFmpegDemuxerTest, Read_InvalidNegativeTimestamp) {
   ReadUntilEndOfStream(GetStream(DemuxerStream::AUDIO));
 }
 
-// TODO(dalecurtis): Test is disabled since FFmpeg does not currently guarantee
-// the order of demuxed packets in OGG containers.  Re-enable and fix key frame
-// expectations once we decide to either workaround it or attempt a fix
-// upstream.  See http://crbug.com/387996.
-TEST_F(FFmpegDemuxerTest,
-       DISABLED_Read_AudioNegativeStartTimeAndOggDiscard_Bear) {
+// Android has no Theora support, so these tests doesn't work.
+#if !defined(OS_ANDROID)
+TEST_F(FFmpegDemuxerTest, Read_AudioNegativeStartTimeAndOggDiscard_Bear) {
   // Many ogg files have negative starting timestamps, so ensure demuxing and
   // seeking work correctly with a negative start time.
   CreateDemuxer("bear.ogv");
@@ -739,8 +656,12 @@ TEST_F(FFmpegDemuxerTest,
   DemuxerStream* video = GetStream(DemuxerStream::VIDEO);
   DemuxerStream* audio = GetStream(DemuxerStream::AUDIO);
 
-  // Run the test twice with a seek in between.
-  for (int i = 0; i < 2; ++i) {
+  // Run the test once (should be twice..., see note) with a seek in between.
+  //
+  // TODO(dalecurtis): We only run the test once since FFmpeg does not currently
+  // guarantee the order of demuxed packets in OGG containers. See
+  // http://crbug.com/387996.
+  for (int i = 0; i < 1; ++i) {
     audio->Read(
         NewReadCBWithCheckedDiscard(FROM_HERE, 40, 0, kInfiniteDuration, true));
     base::RunLoop().Run();
@@ -759,10 +680,10 @@ TEST_F(FFmpegDemuxerTest,
     video->Read(NewReadCB(FROM_HERE, 5751, 0, true));
     base::RunLoop().Run();
 
-    video->Read(NewReadCB(FROM_HERE, 846, 33367, true));
+    video->Read(NewReadCB(FROM_HERE, 846, 33367, false));
     base::RunLoop().Run();
 
-    video->Read(NewReadCB(FROM_HERE, 1255, 66733, true));
+    video->Read(NewReadCB(FROM_HERE, 1255, 66733, false));
     base::RunLoop().Run();
 
     // Seek back to the beginning and repeat the test.
@@ -775,9 +696,6 @@ TEST_F(FFmpegDemuxerTest,
 // Same test above, but using sync2.ogv which has video stream muxed before the
 // audio stream, so seeking based only on start time will fail since ffmpeg is
 // essentially just seeking based on file position.
-//
-// Android has no Theora support, so this test doesn't work.
-#if !defined(OS_ANDROID)
 TEST_F(FFmpegDemuxerTest, Read_AudioNegativeStartTimeAndOggDiscard_Sync) {
   // Many ogg files have negative starting timestamps, so ensure demuxing and
   // seeking work correctly with a negative start time.
@@ -866,7 +784,7 @@ TEST_F(FFmpegDemuxerTest, Read_AudioNegativeStartTimeAndOpusDiscard_Sync) {
   }
 }
 
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS) && !defined(USE_SYSTEM_PROPRIETARY_CODECS)
 // Similar to the test above, but using an opus clip plus h264 b-frames to
 // ensure we don't apply chained ogg workarounds to other content.
 TEST_F(FFmpegDemuxerTest,
@@ -981,64 +899,11 @@ TEST_F(FFmpegDemuxerTest, Read_DiscardDisabledVideoStream) {
   EXPECT_LT(bytes_read_with_video_disabled, bytes_read_with_video_enabled);
 }
 
-// WebM text track discarding doesn't work in ffmpeg. http://crbug.com/681886.
-TEST_F(FFmpegDemuxerTest, DISABLED_Read_DiscardDisabledTextStream) {
-  // This test case reads the same video frame twice, first with the text track
-  // enabled, then with the text track disabled. When the text track is
-  // disabled, FFmpegDemuxer sets the AVDISCARD_ALL flag on the corresponding
-  // stream, which allows FFmpeg to choose the initial reading position closer
-  // to the requested video frame (i.e. closer to seek_target), since it doesn't
-  // need to consider key frames for the text stream. This results in less data
-  // being read compared to the case with enabled text track.
-  const base::TimeDelta seek_target = base::TimeDelta::FromMilliseconds(805);
-
-  CreateDemuxer("bear-vp8-webvtt.webm");
-  EXPECT_CALL(host_, AddTextStream(_, _));
-  InitializeDemuxerWithText();
-  Seek(seek_target);
-  GetStream(DemuxerStream::VIDEO)
-      ->Read(NewReadCB(FROM_HERE, 5425, 801000, true));
-  base::RunLoop().Run();
-  auto bytes_read_with_text_enabled = data_source_->bytes_read_for_testing();
-
-  Shutdown();
-
-  CreateDemuxer("bear-vp8-webvtt.webm");
-  InitializeDemuxer();
-  Seek(seek_target);
-  GetStream(DemuxerStream::VIDEO)
-      ->Read(NewReadCB(FROM_HERE, 5425, 801000, true));
-  base::RunLoop().Run();
-  auto bytes_read_with_text_disabled = data_source_->bytes_read_for_testing();
-
-  EXPECT_LT(bytes_read_with_text_disabled, bytes_read_with_text_enabled);
-}
-
 TEST_F(FFmpegDemuxerTest, Read_EndOfStream) {
   // Verify that end of stream buffers are created.
   CreateDemuxer("bear-320x240.webm");
   InitializeDemuxer();
   ReadUntilEndOfStream(GetStream(DemuxerStream::AUDIO));
-}
-
-TEST_F(FFmpegDemuxerTest, Read_EndOfStreamText) {
-  // Verify that end of stream buffers are created.
-  CreateDemuxer("bear-vp8-webvtt.webm");
-  DemuxerStream* text_stream = NULL;
-  EXPECT_CALL(host_, AddTextStream(_, _))
-      .WillOnce(SaveArg<0>(&text_stream));
-  InitializeDemuxerWithText();
-  ASSERT_TRUE(text_stream);
-  EXPECT_EQ(DemuxerStream::TEXT, text_stream->type());
-
-  bool got_eos_buffer = false;
-  const int kMaxBuffers = 10;
-  for (int i = 0; !got_eos_buffer && i < kMaxBuffers; i++) {
-    text_stream->Read(base::Bind(&EosOnReadDone, &got_eos_buffer));
-    base::RunLoop().Run();
-  }
-
-  EXPECT_TRUE(got_eos_buffer);
 }
 
 TEST_F(FFmpegDemuxerTest, Read_EndOfStream_NoDuration) {
@@ -1141,58 +1006,6 @@ TEST_F(FFmpegDemuxerTest, CancelledSeek) {
   event.RunAndWaitForStatus(PIPELINE_OK);
 }
 
-TEST_F(FFmpegDemuxerTest, SeekText) {
-  // We're testing that the demuxer frees all queued packets when it receives
-  // a Seek().
-  CreateDemuxer("bear-vp8-webvtt.webm");
-  DemuxerStream* text_stream = NULL;
-  EXPECT_CALL(host_, AddTextStream(_, _))
-      .WillOnce(SaveArg<0>(&text_stream));
-  InitializeDemuxerWithText();
-  ASSERT_TRUE(text_stream);
-  EXPECT_EQ(DemuxerStream::TEXT, text_stream->type());
-
-  // Get our streams.
-  DemuxerStream* video = GetStream(DemuxerStream::VIDEO);
-  DemuxerStream* audio = GetStream(DemuxerStream::AUDIO);
-  ASSERT_TRUE(video);
-  ASSERT_TRUE(audio);
-
-  // Read a text packet and release it.
-  text_stream->Read(NewReadCB(FROM_HERE, 31, 0, true));
-  base::RunLoop().Run();
-
-  // Issue a simple forward seek, which should discard queued packets.
-  WaitableMessageLoopEvent event;
-  demuxer_->Seek(base::TimeDelta::FromMicroseconds(1000000),
-                 event.GetPipelineStatusCB());
-  event.RunAndWaitForStatus(PIPELINE_OK);
-
-  // Audio read #1.
-  audio->Read(NewReadCB(FROM_HERE, 145, 803000, true));
-  base::RunLoop().Run();
-
-  // Audio read #2.
-  audio->Read(NewReadCB(FROM_HERE, 148, 826000, true));
-  base::RunLoop().Run();
-
-  // Video read #1.
-  video->Read(NewReadCB(FROM_HERE, 5425, 801000, true));
-  base::RunLoop().Run();
-
-  // Video read #2.
-  video->Read(NewReadCB(FROM_HERE, 1906, 834000, false));
-  base::RunLoop().Run();
-
-  // Text read #1.
-  text_stream->Read(NewReadCB(FROM_HERE, 19, 1000000, true));
-  base::RunLoop().Run();
-
-  // Text read #2.
-  text_stream->Read(NewReadCB(FROM_HERE, 19, 1500000, true));
-  base::RunLoop().Run();
-}
-
 TEST_F(FFmpegDemuxerTest, Stop) {
   // Tests that calling Read() on a stopped demuxer stream immediately deletes
   // the callback.
@@ -1257,7 +1070,6 @@ TEST_F(FFmpegDemuxerTest, SeekWithCuesBeforeFirstCluster) {
   base::RunLoop().Run();
 }
 
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 // Ensure ID3v1 tag reading is disabled.  id3_test.mp3 has an ID3v1 tag with the
 // field "title" set to "sample for id3 test".
 TEST_F(FFmpegDemuxerTest, NoID3TagData) {
@@ -1265,9 +1077,7 @@ TEST_F(FFmpegDemuxerTest, NoID3TagData) {
   InitializeDemuxer();
   EXPECT_FALSE(av_dict_get(format_context()->metadata, "title", NULL, 0));
 }
-#endif
 
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 // Ensure MP3 files with large image/video based ID3 tags demux okay.  FFmpeg
 // will hand us a video stream to the data which will likely be in a format we
 // don't accept as video; e.g. PNG.
@@ -1287,7 +1097,6 @@ TEST_F(FFmpegDemuxerTest, Mp3WithVideoStreamID3TagData) {
   EXPECT_FALSE(GetStream(DemuxerStream::VIDEO));
   EXPECT_TRUE(GetStream(DemuxerStream::AUDIO));
 }
-#endif
 
 // Ensure a video with an unsupported audio track still results in the video
 // stream being demuxed. Because we disable the speex parser for ogg, the audio
@@ -1330,6 +1139,7 @@ TEST_F(FFmpegDemuxerTest, MP4_ZeroStszEntry) {
   InitializeDemuxer();
   ReadUntilEndOfStream(GetStream(DemuxerStream::AUDIO));
 }
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
 class Mp3SeekFFmpegDemuxerTest
     : public FFmpegDemuxerTest,
@@ -1371,14 +1181,15 @@ INSTANTIATE_TEST_CASE_P(, Mp3SeekFFmpegDemuxerTest,
                                           "bear-audio-10s-VBR-has-TOC.mp3",
                                           "bear-audio-10s-VBR-no-TOC.mp3"));
 
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 static void ValidateAnnexB(DemuxerStream* stream,
                            DemuxerStream::Status status,
-                           const scoped_refptr<DecoderBuffer>& buffer) {
+                           scoped_refptr<DecoderBuffer> buffer) {
   EXPECT_EQ(status, DemuxerStream::kOk);
 
   if (buffer->end_of_stream()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
+        FROM_HERE, base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
     return;
   }
 
@@ -1395,7 +1206,7 @@ static void ValidateAnnexB(DemuxerStream* stream,
   if (!is_valid) {
     LOG(ERROR) << "Buffer contains invalid Annex B data.";
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
+        FROM_HERE, base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
     return;
   }
 
@@ -1737,7 +1548,6 @@ TEST_F(FFmpegDemuxerTest, Read_Flac) {
                    44100, kSampleFormatS32);
 }
 
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 TEST_F(FFmpegDemuxerTest, Read_Flac_Mp4) {
   CreateDemuxer("bear-flac.mp4");
   InitializeDemuxer();
@@ -1759,7 +1569,6 @@ TEST_F(FFmpegDemuxerTest, Read_Flac_192kHz_Mp4) {
   VerifyFlacStream(GetStream(DemuxerStream::AUDIO), 32, CHANNEL_LAYOUT_STEREO,
                    192000, kSampleFormatS32);
 }
-#endif  // USE_PROPRIETARY_CODECS
 
 // Verify that FFmpeg demuxer falls back to choosing disabled streams for
 // seeking if there's no suitable enabled stream found.
@@ -1797,6 +1606,57 @@ TEST_F(FFmpegDemuxerTest, Seek_FallbackToDisabledAudioStream) {
   EXPECT_EQ(astream, preferred_seeking_stream(base::TimeDelta()));
 }
 
+namespace {
+void QuitLoop(base::Closure quit_closure,
+              DemuxerStream::Type type,
+              const std::vector<DemuxerStream*>& streams) {
+  quit_closure.Run();
+}
+
+void DisableAndEnableDemuxerTracks(
+    FFmpegDemuxer* demuxer,
+    base::test::ScopedTaskEnvironment* scoped_task_environment) {
+  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                            base::WaitableEvent::InitialState::NOT_SIGNALED);
+  std::vector<MediaTrack::Id> audio_tracks;
+  std::vector<MediaTrack::Id> video_tracks;
+
+  base::RunLoop disable_video;
+  demuxer->OnSelectedVideoTrackChanged(
+      video_tracks, base::TimeDelta(),
+      base::BindOnce(QuitLoop, base::Passed(disable_video.QuitClosure())));
+  disable_video.Run();
+
+  base::RunLoop disable_audio;
+  demuxer->OnEnabledAudioTracksChanged(
+      audio_tracks, base::TimeDelta(),
+      base::BindOnce(QuitLoop, base::Passed(disable_audio.QuitClosure())));
+  disable_audio.Run();
+
+  base::RunLoop enable_video;
+  video_tracks.push_back(MediaTrack::Id("1"));
+  demuxer->OnSelectedVideoTrackChanged(
+      video_tracks, base::TimeDelta(),
+      base::BindOnce(QuitLoop, base::Passed(enable_video.QuitClosure())));
+  enable_video.Run();
+
+  base::RunLoop enable_audio;
+  audio_tracks.push_back(MediaTrack::Id("2"));
+  demuxer->OnEnabledAudioTracksChanged(
+      audio_tracks, base::TimeDelta(),
+      base::BindOnce(QuitLoop, base::Passed(enable_audio.QuitClosure())));
+  enable_audio.Run();
+
+  scoped_task_environment->RunUntilIdle();
+}
+
+void OnReadDoneExpectEos(DemuxerStream::Status status,
+                         const scoped_refptr<DecoderBuffer> buffer) {
+  EXPECT_EQ(status, DemuxerStream::kOk);
+  EXPECT_TRUE(buffer->end_of_stream());
+}
+}  // namespace
+
 TEST_F(FFmpegDemuxerTest, StreamStatusNotifications) {
   CreateDemuxer("bear-320x240.webm");
   InitializeDemuxer();
@@ -1808,23 +1668,19 @@ TEST_F(FFmpegDemuxerTest, StreamStatusNotifications) {
   EXPECT_NE(nullptr, video_stream);
 
   // Verify stream status notifications delivery without pending read first.
-  CheckStreamStatusNotifications(demuxer_.get(), audio_stream,
-                                 &scoped_task_environment_);
-  CheckStreamStatusNotifications(demuxer_.get(), video_stream,
-                                 &scoped_task_environment_);
+  DisableAndEnableDemuxerTracks(demuxer_.get(), &scoped_task_environment_);
 
   // Verify that stream notifications are delivered properly when stream status
   // changes with a pending read. Call FlushBuffers before reading, to ensure
   // there is no buffers ready to be returned by the Read right away, thus
   // ensuring that status changes occur while an async read is pending.
+
   audio_stream->FlushBuffers();
-  audio_stream->Read(base::Bind(&media::OnReadDone_ExpectEos));
-  CheckStreamStatusNotifications(demuxer_.get(), audio_stream,
-                                 &scoped_task_environment_);
   video_stream->FlushBuffers();
-  video_stream->Read(base::Bind(&media::OnReadDone_ExpectEos));
-  CheckStreamStatusNotifications(demuxer_.get(), video_stream,
-                                 &scoped_task_environment_);
+  audio_stream->Read(base::Bind(&OnReadDoneExpectEos));
+  video_stream->Read(base::Bind(&OnReadDoneExpectEos));
+
+  DisableAndEnableDemuxerTracks(demuxer_.get(), &scoped_task_environment_);
 }
 
 TEST_F(FFmpegDemuxerTest, MultitrackMemoryUsage) {

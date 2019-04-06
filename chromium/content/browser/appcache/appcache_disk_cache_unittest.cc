@@ -6,7 +6,6 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/test/scoped_task_environment.h"
@@ -71,9 +70,8 @@ TEST_F(AppCacheDiskCacheTest, DisablePriorToInitCompletion) {
 
   EXPECT_EQ(nullptr, entry);
   EXPECT_EQ(4u, completion_results_.size());
-  for (std::vector<int>::const_iterator iter = completion_results_.begin();
-       iter < completion_results_.end(); ++iter) {
-    EXPECT_EQ(net::ERR_ABORTED, *iter);
+  for (const auto& result : completion_results_) {
+    EXPECT_EQ(net::ERR_ABORTED, result);
   }
 
   // Ensure the directory can be deleted at this point.

@@ -7,6 +7,7 @@
 #include "base/sys_byteorder.h"
 #include "build/build_config.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
+
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/host/dispatch_host_message.h"
 #include "ppapi/host/host_message_context.h"
@@ -15,10 +16,10 @@
 #include "ppapi/proxy/serialized_structs.h"
 
 #if defined(OS_LINUX) || defined(OS_OPENBSD)
-#include "content/public/child/child_process_sandbox_support_linux.h"
+#include "components/services/font/public/cpp/font_loader.h"
 #include "content/public/common/common_sandbox_support_linux.h"
 #elif defined(OS_WIN)
-#include "third_party/skia/include/ports/SkFontMgr.h"
+#include "third_party/skia/include/core/SkFontMgr.h"
 #endif
 
 PepperFlashFontFileHost::PepperFlashFontFileHost(
@@ -28,13 +29,21 @@ PepperFlashFontFileHost::PepperFlashFontFileHost(
     const ppapi::proxy::SerializedFontDescription& description,
     PP_PrivateFontCharset charset)
     : ResourceHost(host->GetPpapiHost(), instance, resource) {
-#if defined(OS_LINUX) || defined(OS_OPENBSD)
-  fd_.reset(content::MatchFontWithFallback(
+#if defined(OS_LINUX)
+  // The global SkFontConfigInterface is configured and initialized with a
+  // SkFontconfigInterface compatible font_service::FontLoader in
+  // RendererBlinkPlatformImpl (called from RenderThreadImpl::Init) at startup
+  // of the mimehandler process, which is a renderer type process. We can reuse
+  // it here to call a plugin specific font matching method out of process here.
+  // TODO(drott): Find a way to pass this through instead of casting.
+  font_service::FontLoader* font_loader_casted =
+      reinterpret_cast<font_service::FontLoader*>(
+          SkFontConfigInterface::RefGlobal().get());
+  font_loader_casted->MatchFontWithFallback(
       description.face,
       description.weight >= PP_BROWSERFONT_TRUSTED_WEIGHT_BOLD,
-      description.italic,
-      charset,
-      PP_BROWSERFONT_TRUSTED_FAMILY_DEFAULT));
+      description.italic, charset, PP_BROWSERFONT_TRUSTED_FAMILY_DEFAULT,
+      &font_file_);
 #elif defined(OS_WIN)
   int weight = description.weight;
   if (weight == FW_DONTCARE)
@@ -43,9 +52,10 @@ PepperFlashFontFileHost::PepperFlashFontFileHost(
                     description.italic ? SkFontStyle::kItalic_Slant
                                        : SkFontStyle::kUpright_Slant);
   sk_sp<SkFontMgr> font_mgr(SkFontMgr::RefDefault());
+
   typeface_ = sk_sp<SkTypeface>(
       font_mgr->matchFamilyStyle(description.face.c_str(), style));
-#endif  // defined(OS_LINUX) || defined(OS_OPENBSD)
+#endif
 }
 
 PepperFlashFontFileHost::~PepperFlashFontFileHost() {}
@@ -64,11 +74,12 @@ bool PepperFlashFontFileHost::GetFontData(uint32_t table,
                                           void* buffer,
                                           size_t* length) {
   bool result = false;
-#if defined(OS_LINUX) || defined(OS_OPENBSD)
-  int fd = fd_.get();
-  if (fd != -1)
-    result = content::GetFontTable(fd, table, 0 /* offset */,
-                 reinterpret_cast<uint8_t*>(buffer), length);
+#if defined(OS_LINUX)
+  if (font_file_.IsValid()) {
+    result = content::GetFontTable(font_file_.GetPlatformFile(), table,
+                                   0 /* offset */,
+                                   reinterpret_cast<uint8_t*>(buffer), length);
+  }
 #elif defined(OS_WIN)
   if (typeface_) {
     table = base::ByteSwap(table);

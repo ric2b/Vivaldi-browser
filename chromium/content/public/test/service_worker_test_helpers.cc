@@ -76,9 +76,9 @@ class StoppedObserver : public base::RefCountedThreadSafe<StoppedObserver> {
 void FoundReadyRegistration(
     ServiceWorkerContextWrapper* context_wrapper,
     base::OnceClosure completion_callback,
-    ServiceWorkerStatusCode service_worker_status,
+    blink::ServiceWorkerStatusCode service_worker_status,
     scoped_refptr<ServiceWorkerRegistration> service_worker_registration) {
-  DCHECK_EQ(SERVICE_WORKER_OK, service_worker_status);
+  DCHECK_EQ(blink::ServiceWorkerStatusCode::kOk, service_worker_status);
   int64_t version_id =
       service_worker_registration->active_version()->version_id();
   scoped_refptr<StoppedObserver> observer(new StoppedObserver(
@@ -95,14 +95,14 @@ void StopServiceWorkerForPattern(ServiceWorkerContext* context,
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(&StopServiceWorkerForPattern, context, pattern,
-                       base::Passed(&completion_callback_ui)));
+                       std::move(completion_callback_ui)));
     return;
   }
   auto* context_wrapper = static_cast<ServiceWorkerContextWrapper*>(context);
   context_wrapper->FindReadyRegistrationForPattern(
-      pattern,
-      base::Bind(&FoundReadyRegistration, base::RetainedRef(context_wrapper),
-                 base::Passed(&completion_callback_ui)));
+      pattern, base::BindOnce(&FoundReadyRegistration,
+                              base::RetainedRef(context_wrapper),
+                              std::move(completion_callback_ui)));
 }
 
 }  // namespace content

@@ -6,7 +6,6 @@
 #include <utility>
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/common/extensions/manifest_tests/chrome_manifest_test.h"
 #include "components/version_info/version_info.h"
@@ -33,12 +32,11 @@ TEST_F(ExtensionManifestBackgroundTest, BackgroundPermission) {
 
 TEST_F(ExtensionManifestBackgroundTest, BackgroundScripts) {
   std::string error;
-  std::unique_ptr<base::DictionaryValue> manifest =
-      LoadManifest("background_scripts.json", &error);
-  ASSERT_TRUE(manifest.get());
+  base::Value manifest = LoadManifest("background_scripts.json", &error);
+  ASSERT_TRUE(manifest.is_dict());
 
   scoped_refptr<Extension> extension(
-      LoadAndExpectSuccess(ManifestData(manifest.get(), "")));
+      LoadAndExpectSuccess(ManifestData(&manifest, "")));
   ASSERT_TRUE(extension.get());
   const std::vector<std::string>& background_scripts =
       BackgroundInfo::GetBackgroundScripts(extension.get());
@@ -51,8 +49,8 @@ TEST_F(ExtensionManifestBackgroundTest, BackgroundScripts) {
       std::string("/") + kGeneratedBackgroundPageFilename,
       BackgroundInfo::GetBackgroundURL(extension.get()).path());
 
-  manifest->SetString("background_page", "monkey.html");
-  LoadAndExpectError(ManifestData(manifest.get(), ""),
+  manifest.SetPath({"background", "page"}, base::Value("monkey.html"));
+  LoadAndExpectError(ManifestData(&manifest, ""),
                      errors::kInvalidBackgroundCombination);
 }
 
@@ -63,20 +61,6 @@ TEST_F(ExtensionManifestBackgroundTest, BackgroundPage) {
   EXPECT_EQ("/foo.html",
             BackgroundInfo::GetBackgroundURL(extension.get()).path());
   EXPECT_TRUE(BackgroundInfo::AllowJSAccess(extension.get()));
-
-  std::string error;
-  std::unique_ptr<base::DictionaryValue> manifest(
-      LoadManifest("background_page_legacy.json", &error));
-  ASSERT_TRUE(manifest.get());
-  extension = LoadAndExpectSuccess(ManifestData(manifest.get(), ""));
-  ASSERT_TRUE(extension.get());
-  EXPECT_EQ("/foo.html",
-            BackgroundInfo::GetBackgroundURL(extension.get()).path());
-
-  manifest->SetInteger(keys::kManifestVersion, 2);
-  LoadAndExpectWarning(
-      ManifestData(manifest.get(), ""),
-      "'background_page' requires manifest version of 1 or lower.");
 }
 
 TEST_F(ExtensionManifestBackgroundTest, BackgroundAllowNoJsAccess) {
@@ -94,20 +78,19 @@ TEST_F(ExtensionManifestBackgroundTest, BackgroundPageWebRequest) {
   ScopedCurrentChannel current_channel(version_info::Channel::DEV);
 
   std::string error;
-  std::unique_ptr<base::DictionaryValue> manifest(
-      LoadManifest("background_page.json", &error));
-  ASSERT_TRUE(manifest.get());
-  manifest->SetBoolean(keys::kBackgroundPersistent, false);
-  manifest->SetInteger(keys::kManifestVersion, 2);
+  base::Value manifest = LoadManifest("background_page.json", &error);
+  ASSERT_FALSE(manifest.is_none());
+  manifest.SetPath({"background", "persistent"}, base::Value(false));
+  manifest.SetKey(keys::kManifestVersion, base::Value(2));
   scoped_refptr<Extension> extension(
-      LoadAndExpectSuccess(ManifestData(manifest.get(), "")));
+      LoadAndExpectSuccess(ManifestData(&manifest, "")));
   ASSERT_TRUE(extension.get());
   EXPECT_TRUE(BackgroundInfo::HasLazyBackgroundPage(extension.get()));
 
-  auto permissions = base::MakeUnique<base::ListValue>();
-  permissions->AppendString("webRequest");
-  manifest->Set(keys::kPermissions, std::move(permissions));
-  LoadAndExpectError(ManifestData(manifest.get(), ""),
+  base::Value permissions(base::Value::Type::LIST);
+  permissions.GetList().push_back(base::Value("webRequest"));
+  manifest.SetKey(keys::kPermissions, std::move(permissions));
+  LoadAndExpectError(ManifestData(&manifest, ""),
                      errors::kWebRequestConflictsWithLazyBackground);
 }
 
@@ -142,6 +125,26 @@ TEST_F(ExtensionManifestBackgroundTest, BackgroundPagePersistentInvalidKey) {
   EXPECT_EQ(1U, warnings.size());
   EXPECT_EQ(errors::kBackgroundPersistentInvalidForPlatformApps,
             warnings[0].message);
+}
+
+// Tests channel restriction on "background.service_worker_script" key.
+TEST_F(ExtensionManifestBackgroundTest, ServiceWorkerBasedBackgroundKey) {
+  // TODO(lazyboy): Add exhaustive tests here, e.g.
+  //   - specifying a non-existent file.
+  //   - specifying multiple files.
+  //   - specifying invalid type (non-string) values.
+  {
+    ScopedCurrentChannel beta(version_info::Channel::BETA);
+    scoped_refptr<Extension> extension = LoadAndExpectWarning(
+        "service_worker_based_background.json",
+        "'background.service_worker_script' requires trunk "
+        "channel or newer, but this is the beta channel.");
+  }
+  {
+    ScopedCurrentChannel beta(version_info::Channel::UNKNOWN);
+    scoped_refptr<Extension> extension =
+        LoadAndExpectSuccess("service_worker_based_background.json");
+  }
 }
 
 }  // namespace extensions

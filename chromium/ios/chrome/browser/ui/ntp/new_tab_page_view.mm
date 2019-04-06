@@ -16,6 +16,7 @@
 
 @implementation NewTabPageView
 @synthesize contentView = _contentView;
+@synthesize contentCollectionView = _contentCollectionView;
 @synthesize tabBar = tabBar_;
 @synthesize safeAreaInsetForToolbar = _safeAreaInsetForToolbar;
 
@@ -68,7 +69,9 @@
 - (void)layoutSubviews {
   [super layoutSubviews];
 
-  self.tabBar.hidden = !self.tabBar.items.count;
+  // TODO(crbug.com/807330) Completely remove tabbar once
+  // IsUIRefreshPhase1Enabled is defaulted on.
+  self.tabBar.hidden = !self.tabBar.items.count || IsUIRefreshPhase1Enabled();
   if (self.tabBar.hidden) {
     self.contentView.frame = self.bounds;
   } else {
@@ -76,9 +79,13 @@
     self.tabBar.frame = CGRectMake(CGRectGetMinX(self.bounds),
                                    CGRectGetMaxY(self.bounds) - barSize.height,
                                    barSize.width, barSize.height);
+    CGRect previousContentFrame = self.contentView.frame;
     self.contentView.frame = CGRectMake(
         CGRectGetMinX(self.bounds), CGRectGetMinY(self.bounds),
         CGRectGetWidth(self.bounds), CGRectGetMinY(self.tabBar.frame));
+    if (!CGRectEqualToRect(previousContentFrame, self.contentView.frame)) {
+      [self.contentCollectionView.collectionViewLayout invalidateLayout];
+    }
   }
 
   // When using a new_tab_page_view in autolayout -setFrame is never called,

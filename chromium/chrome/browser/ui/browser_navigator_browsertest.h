@@ -32,7 +32,8 @@ class BrowserNavigatorTest : public InProcessBrowserTest,
   Browser* CreateEmptyBrowserForType(Browser::Type type, Profile* profile);
   Browser* CreateEmptyBrowserForApp(Profile* profile);
 
-  content::WebContents* CreateWebContents(bool initialize_renderer);
+  std::unique_ptr<content::WebContents> CreateWebContents(
+      bool initialize_renderer);
 
   void RunSuppressTest(WindowOpenDisposition disposition);
   void RunUseNonIncognitoWindowTest(const GURL& url);
@@ -50,7 +51,8 @@ class BrowserNavigatorTest : public InProcessBrowserTest,
 
   Browser* NavigateHelper(const GURL& url,
                           Browser* browser,
-                          WindowOpenDisposition disposition);
+                          WindowOpenDisposition disposition,
+                          bool wait_for_navigation);
 
   size_t created_tab_contents_count_;
 };

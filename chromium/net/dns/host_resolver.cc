@@ -120,16 +120,17 @@ std::unique_ptr<base::Value> HostResolver::GetDnsConfigAsValue() const {
   return nullptr;
 }
 
-void HostResolver::InitializePersistence(
-    const PersistCallback& persist_callback,
-    std::unique_ptr<const base::Value> old_data) {}
-
 void HostResolver::SetNoIPv6OnWifi(bool no_ipv6_on_wifi) {
   NOTREACHED();
 }
 
 bool HostResolver::GetNoIPv6OnWifi() {
   return false;
+}
+
+const std::vector<DnsConfig::DnsOverHttpsServerConfig>*
+HostResolver::GetDnsOverHttpsServersForTesting() const {
+  return nullptr;
 }
 
 // static

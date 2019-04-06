@@ -67,7 +67,8 @@ MATCHER_P(HasValidDelay, value, "") {
 // Used to terminate a loop from a different thread than the loop belongs to.
 // |task_runner| should be a SingleThreadTaskRunner.
 ACTION_P(QuitLoop, task_runner) {
-  task_runner->PostTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
+  task_runner->PostTask(FROM_HERE,
+                        base::RunLoop::QuitCurrentWhenIdleClosureDeprecated());
 }
 
 // This audio source implementation should be used for manual tests only since
@@ -93,7 +94,7 @@ class ReadFromFileAudioSource : public AudioOutputStream::AudioSourceCallback {
     // Get complete file path to output file in directory containing
     // media_unittests.exe.
     base::FilePath file_name;
-    EXPECT_TRUE(PathService::Get(base::DIR_EXE, &file_name));
+    EXPECT_TRUE(base::PathService::Get(base::DIR_EXE, &file_name));
     file_name = file_name.AppendASCII(kDeltaTimeMsFileName);
 
     EXPECT_TRUE(!text_file_);
@@ -171,8 +172,7 @@ class AudioOutputStreamWrapper {
  public:
   explicit AudioOutputStreamWrapper(AudioManager* audio_manager)
       : audio_man_(audio_manager),
-        format_(AudioParameters::AUDIO_PCM_LOW_LATENCY),
-        bits_per_sample_(kBitsPerSample) {
+        format_(AudioParameters::AUDIO_PCM_LOW_LATENCY) {
     AudioParameters preferred_params;
     EXPECT_TRUE(SUCCEEDED(CoreAudioUtil::GetPreferredAudioParameters(
         AudioDeviceDescription::kDefaultDeviceId, true, &preferred_params)));
@@ -205,7 +205,6 @@ class AudioOutputStreamWrapper {
 
   AudioParameters::Format format() const { return format_; }
   int channels() const { return ChannelLayoutToChannelCount(channel_layout_); }
-  int bits_per_sample() const { return bits_per_sample_; }
   int sample_rate() const { return sample_rate_; }
   int samples_per_packet() const { return samples_per_packet_; }
 
@@ -213,7 +212,7 @@ class AudioOutputStreamWrapper {
   AudioOutputStream* CreateOutputStream() {
     AudioOutputStream* aos = audio_man_->MakeAudioOutputStream(
         AudioParameters(format_, channel_layout_, sample_rate_,
-                        bits_per_sample_, samples_per_packet_),
+                        samples_per_packet_),
         std::string(), AudioManager::LogCallback());
     EXPECT_TRUE(aos);
     return aos;
@@ -222,7 +221,6 @@ class AudioOutputStreamWrapper {
   AudioManager* audio_man_;
   AudioParameters::Format format_;
   ChannelLayout channel_layout_;
-  int bits_per_sample_;
   int sample_rate_;
   int samples_per_packet_;
 };
@@ -385,7 +383,7 @@ TEST_F(WASAPIAudioOutputStreamTest, ValidPacketSize) {
 
   aos->Start(&source);
   message_loop_.task_runner()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
+      FROM_HERE, base::RunLoop::QuitCurrentWhenIdleClosureDeprecated(),
       TestTimeouts::action_timeout());
   base::RunLoop().Run();
   aos->Stop();
@@ -422,7 +420,6 @@ TEST_F(WASAPIAudioOutputStreamTest, DISABLED_ReadFromStereoFile) {
 
   DVLOG(0) << "File name      : " << file_name.c_str();
   DVLOG(0) << "Sample rate    : " << aosw.sample_rate();
-  DVLOG(0) << "Bits per sample: " << aosw.bits_per_sample();
   DVLOG(0) << "#channels      : " << aosw.channels();
   DVLOG(0) << "File size      : " << file_source.file_size();
   DVLOG(0) << "#file segments : " << kNumFileSegments;
@@ -576,7 +573,7 @@ TEST_F(WASAPIAudioOutputStreamTest,
 
   aos->Start(&source);
   message_loop_.task_runner()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
+      FROM_HERE, base::RunLoop::QuitCurrentWhenIdleClosureDeprecated(),
       TestTimeouts::action_timeout());
   base::RunLoop().Run();
   aos->Stop();
@@ -610,7 +607,7 @@ TEST_F(WASAPIAudioOutputStreamTest,
 
   aos->Start(&source);
   message_loop_.task_runner()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
+      FROM_HERE, base::RunLoop::QuitCurrentWhenIdleClosureDeprecated(),
       TestTimeouts::action_timeout());
   base::RunLoop().Run();
   aos->Stop();

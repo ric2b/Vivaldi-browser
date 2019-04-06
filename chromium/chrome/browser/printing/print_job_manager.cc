@@ -22,11 +22,11 @@ PrintQueriesQueue::~PrintQueriesQueue() {
   queued_queries_.clear();
 }
 
-void PrintQueriesQueue::QueuePrinterQuery(PrinterQuery* job) {
+void PrintQueriesQueue::QueuePrinterQuery(PrinterQuery* query) {
   base::AutoLock lock(lock_);
-  DCHECK(job);
-  queued_queries_.push_back(base::WrapRefCounted(job));
-  DCHECK(job->is_valid());
+  DCHECK(query);
+  queued_queries_.push_back(base::WrapRefCounted(query));
+  DCHECK(query->is_valid());
 }
 
 scoped_refptr<PrinterQuery> PrintQueriesQueue::PopPrinterQuery(
@@ -61,7 +61,8 @@ void PrintQueriesQueue::Shutdown() {
   // corresponding PrintJob, so any pending preview requests are not covered
   // by PrintJobManager::StopJobs and should be stopped explicitly.
   for (auto& query : queries_to_stop) {
-    query->PostTask(FROM_HERE, base::Bind(&PrinterQuery::StopWorker, query));
+    query->PostTask(FROM_HERE,
+                    base::BindOnce(&PrinterQuery::StopWorker, query));
   }
 }
 
@@ -78,6 +79,12 @@ scoped_refptr<PrintQueriesQueue> PrintJobManager::queue() {
   if (!queue_)
     queue_ = base::MakeRefCounted<PrintQueriesQueue>();
   return queue_;
+}
+
+void PrintJobManager::SetQueueForTest(scoped_refptr<PrintQueriesQueue> queue) {
+  if (queue_)
+    queue_->Shutdown();
+  queue_ = queue;
 }
 
 void PrintJobManager::Shutdown() {
